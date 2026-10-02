@@ -1,0 +1,4 @@
+/* Portal Dynamic Fields: wrapper of a field hidden by a rule */
+.sdf-hidden {
+    display: none !important;
+}
