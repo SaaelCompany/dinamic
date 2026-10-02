@@ -112,9 +112,14 @@ mvn jira:run      # или atlas-run
   и при перерисовке DOM (портал — одностраничное приложение, за ним следит `MutationObserver`).
 * Скрытие — класс `sdf-hidden` (`display:none !important`) на обёртке поля; при скрытии чекбоксы снимаются
   программным кликом, списки и текстовые поля очищаются с генерацией событий, чтобы состояние формы совпало с DOM.
-* Для отладки в консоли браузера: `localStorage.setItem('sdf.debug','true')`, затем
+* Узнать id полей и опций прямо на форме портала: откройте форму создания запроса, в консоли браузера
+  (F12 → Console) выполните `console.table(SaaelDynamicFields.listFields())` — будет таблица
+  `fieldId / label / type / options` (для чекбоксов и списков — `id опции = название`). Если объект
+  `SaaelDynamicFields` не определён, скрипт плагина на страницу не попал (проверьте, что плагин включён
+  целиком, и обновите страницу с очисткой кэша).
+* Для отладки: `localStorage.setItem('sdf.debug','true')` (лог в консоли при каждом показе/скрытии), затем
   `SaaelDynamicFields.getConfig()`, `SaaelDynamicFields.readValues('customfield_10100')`,
-  `SaaelDynamicFields.containersOf('customfield_10101')`.
+  `SaaelDynamicFields.containersOf('customfield_10101')`, `SaaelDynamicFields.evaluate()`.
 
 ## Ограничения
 

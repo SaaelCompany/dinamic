@@ -84,6 +84,10 @@
         return String(value == null ? '' : value).replace(/\s+/g, ' ').replace(/^ | $/g, '').toLowerCase();
     }
 
+    function tidy(value) {
+        return String(value == null ? '' : value).replace(/\s+/g, ' ').replace(/^ | $/g, '');
+    }
+
     function toArray(list) {
         return Array.prototype.slice.call(list || []);
     }
@@ -510,6 +514,53 @@
         });
     }
 
+    /**
+     * Inventory of the fields currently rendered on the page: id, label, control type and options.
+     * Meant to be run from the browser console by the administrator to collect ids for the rules:
+     *   console.table(SaaelDynamicFields.listFields())
+     */
+    function listFields() {
+        var byId = {};
+        var order = [];
+        toArray(document.querySelectorAll('input,select,textarea')).forEach(function (control) {
+            if (isAuxiliaryControl(control) || control.type === 'submit' || control.type === 'button') {
+                return;
+            }
+            var fieldId = fieldOf(control);
+            if (!fieldId || /^(atl_token|os_|jira\.|sd-)/.test(fieldId)) {
+                return;
+            }
+            var entry = byId[fieldId];
+            if (!entry) {
+                var container = containerOf(control, fieldId);
+                var label = container && container.querySelector('label, legend');
+                entry = byId[fieldId] = {
+                    fieldId: fieldId,
+                    label: label ? tidy(label.textContent).replace(/\s*\((необязательно|optional)\)$/i, '') : '',
+                    type: control.tagName === 'SELECT' ? (control.multiple ? 'multiselect' : 'select')
+                        : (control.type || control.tagName.toLowerCase()),
+                    options: []
+                };
+                order.push(fieldId);
+            }
+            var type = (control.type || '').toLowerCase();
+            if (type === 'checkbox' || type === 'radio') {
+                entry.options.push(control.value + ' = ' + tidy(labelOf(control)));
+            } else if (control.tagName === 'SELECT') {
+                toArray(control.options).forEach(function (option) {
+                    if (!VALUE_PLACEHOLDERS[option.value]) {
+                        entry.options.push(option.value + ' = ' + tidy(option.text));
+                    }
+                });
+            }
+        });
+        return order.map(function (fieldId) {
+            var entry = byId[fieldId];
+            entry.options = entry.options.join(' | ');
+            return entry;
+        });
+    }
+
     window.SaaelDynamicFields = {
         reload: start,
         evaluate: evaluate,
@@ -517,7 +568,8 @@
             return config;
         },
         readValues: readValues,
-        containersOf: containersOf
+        containersOf: containersOf,
+        listFields: listFields
     };
 
     if (document.readyState === 'loading') {
