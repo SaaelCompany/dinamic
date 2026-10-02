@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "clearOnHide": true,
+  "rules": [
+    {
+      "id": "medical-staff",
+      "description": "Чекбокс «Медицинский сотрудник» открывает выбор специальностей",
+      "when": {
+        "fieldId": "customfield_10100",
+        "values": ["Медицинский сотрудник"]
+      },
+      "show": ["customfield_10101"]
+    },
+    {
+      "id": "main-specialty",
+      "description": "Чекбокс «Основная специальность» открывает поля основной специальности",
+      "when": {
+        "fieldId": "customfield_10101",
+        "values": ["Основная специальность"]
+      },
+      "show": ["customfield_10102", "customfield_10103", "customfield_10104"]
+    },
+    {
+      "id": "additional-specialty",
+      "description": "Чекбокс «Дополнительная специальность» открывает поля дополнительной специальности",
+      "when": {
+        "fieldId": "customfield_10101",
+        "values": ["Дополнительная специальность"]
+      },
+      "show": ["customfield_10105", "customfield_10106"]
+    },
+    {
+      "id": "has-certificates",
+      "description": "Третий уровень: если отмечен чекбокс «Есть сертификаты» — показать поле для их перечисления",
+      "when": {
+        "fieldId": "customfield_10104",
+        "values": []
+      },
+      "show": ["customfield_10107"]
+    }
+  ]
+}

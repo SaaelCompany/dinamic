@@ -1,0 +1,73 @@
+<html>
+<head>
+    <title>$i18n.getText("ru.saael.dynamicfields.admin.title")</title>
+    <meta name="decorator" content="atl.admin">
+    <meta name="admin.active.section" content="admin_plugins_menu/dynamic-fields-section">
+    <meta name="admin.active.tab" content="dynamic-fields-admin-link">
+</head>
+<body>
+<header class="aui-page-header">
+    <div class="aui-page-header-inner">
+        <div class="aui-page-header-main">
+            <h1>$i18n.getText("ru.saael.dynamicfields.admin.title")</h1>
+        </div>
+    </div>
+</header>
+
+<div class="aui-page-panel">
+    <div class="aui-page-panel-inner">
+        <section class="aui-page-panel-content">
+            <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.intro")</p>
+
+            <div id="sdf-messages"></div>
+
+            <form id="sdf-form" class="aui" data-context-path="$contextPath" onsubmit="return false;">
+                <div class="field-group sdf-editor-group">
+                    <label for="sdf-rules">$i18n.getText("ru.saael.dynamicfields.admin.rules.label")</label>
+                    <textarea id="sdf-rules" class="textarea sdf-editor" name="rules" rows="28"
+                              spellcheck="false" autocomplete="off">$rulesJsonHtml</textarea>
+                    <div class="description">
+                        $i18n.getText("ru.saael.dynamicfields.admin.rules.description")
+                        <span id="sdf-rules-count" class="aui-lozenge aui-lozenge-subtle">$rulesCountText</span>
+                    </div>
+                </div>
+                <div class="buttons-container">
+                    <div class="buttons">
+                        <button id="sdf-save" class="aui-button aui-button-primary" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
+                        <button id="sdf-validate" class="aui-button" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.validate")</button>
+                        <button id="sdf-format" class="aui-button aui-button-subtle" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.format")</button>
+                        <button id="sdf-example" class="aui-button aui-button-subtle" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
+                        <button id="sdf-reload" class="aui-button aui-button-subtle" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.reload")</button>
+                    </div>
+                </div>
+            </form>
+
+            <h3>$i18n.getText("ru.saael.dynamicfields.admin.help.title")</h3>
+            <ul class="sdf-help">
+                <li>$i18n.getText("ru.saael.dynamicfields.admin.help.fieldid")</li>
+                <li>$i18n.getText("ru.saael.dynamicfields.admin.help.values")</li>
+                <li>$i18n.getText("ru.saael.dynamicfields.admin.help.scope")</li>
+                <li>$i18n.getText("ru.saael.dynamicfields.admin.help.clear")</li>
+                <li><strong>$i18n.getText("ru.saael.dynamicfields.admin.help.required")</strong></li>
+            </ul>
+            <pre class="sdf-schema">{
+  "version": 1,
+  "clearOnHide": true,
+  "containerSelectors": [],
+  "rules": [
+    {
+      "id": "unique-rule-id",
+      "description": "optional",
+      "portalId": 1,
+      "requestTypeIds": [10, 11],
+      "when": { "fieldId": "customfield_10100", "values": ["Option label or id"], "negate": false },
+      "show": ["customfield_10101", "customfield_10102"],
+      "clearOnHide": true
+    }
+  ]
+}</pre>
+        </section>
+    </div>
+</div>
+</body>
+</html>
