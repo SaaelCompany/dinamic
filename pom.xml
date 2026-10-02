@@ -178,6 +178,27 @@
                     </instructions>
                 </configuration>
             </plugin>
+            <!--
+                Generates META-INF/plugin-components/* (index of @Named components, @ComponentImport and
+                @ExportAsService). Without it Jira creates none of the plugin beans and the servlet / REST
+                modules fail to instantiate (HTTP 404 on /plugins/servlet/dynamic-fields/admin).
+            -->
+            <plugin>
+                <groupId>com.atlassian.plugin</groupId>
+                <artifactId>atlassian-spring-scanner-maven-plugin</artifactId>
+                <version>${atlassian.spring.scanner.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>atlassian-spring-scanner</goal>
+                        </goals>
+                        <phase>process-classes</phase>
+                    </execution>
+                </executions>
+                <configuration>
+                    <verbose>false</verbose>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
