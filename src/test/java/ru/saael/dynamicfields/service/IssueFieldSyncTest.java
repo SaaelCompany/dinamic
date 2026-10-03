@@ -27,9 +27,7 @@ public class IssueFieldSyncTest {
     }
 
     @Test
-    public void markerDoesNotMatchALongerId() {
-        String field1 = IssueFieldSync.marker("field1");
-        assertFalse(field1.startsWith(IssueFieldSync.markerPrefix("field10")));
-        assertFalse(IssueFieldSync.marker("field10").startsWith(IssueFieldSync.markerPrefix("field1")));
+    public void sameQuestionIdInAnotherBlockIsADifferentField() {
+        assertFalse(IssueFieldSync.marker("main", "field1").equals(IssueFieldSync.marker("block1", "field1")));
     }
 }

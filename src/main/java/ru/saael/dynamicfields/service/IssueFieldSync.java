@@ -91,7 +91,7 @@ public class IssueFieldSync {
                         continue;
                     }
                     try {
-                        bind(field, type, searcher, reserved);
+                        bind(block.getId(), field, type, searcher, reserved);
                     } catch (GenericEntityException e) {
                         errors.add("Cannot create the Jira field for \"" + display(field) + "\": " + e.getMessage());
                     } catch (RuntimeException e) {
@@ -126,7 +126,7 @@ public class IssueFieldSync {
                 if (field == null) {
                     continue;
                 }
-                CustomField customField = locate(field);
+                CustomField customField = locate(block.getId(), field);
                 if (customField == null) {
                     continue;
                 }
@@ -165,9 +165,9 @@ public class IssueFieldSync {
         }
     }
 
-    private void bind(FormField field, CustomFieldType type, CustomFieldSearcher searcher, Set<String> reserved)
+    private void bind(String blockId, FormField field, CustomFieldType type, CustomFieldSearcher searcher, Set<String> reserved)
             throws GenericEntityException {
-        CustomField current = locate(field);
+        CustomField current = locate(blockId, field);
         Set<String> taken = new HashSet<String>(reserved);
         List<CustomField> existing = customFieldManager.getCustomFieldObjects();
         for (int i = 0; i < existing.size(); i++) {
@@ -182,7 +182,7 @@ public class IssueFieldSync {
         }
         String name = fieldName(field.getLabel(), field.getId(), taken);
         reserved.add(name.toLowerCase());
-        String description = marker(field.getId());
+        String description = marker(blockId, field.getId());
         if (current == null) {
             List<JiraContextNode> contexts = Collections.singletonList(GlobalIssueContext.getInstance());
             List<IssueType> issueTypes = new ArrayList<IssueType>();
@@ -196,22 +196,21 @@ public class IssueFieldSync {
         field.setJiraFieldId(current.getId());
     }
 
-    private CustomField locate(FormField field) {
+    private CustomField locate(String blockId, FormField field) {
+        String expected = marker(blockId, field.getId());
         if (field.getJiraFieldId() != null && field.getJiraFieldId().trim().length() > 0) {
             CustomField byId = customFieldManager.getCustomFieldObject(field.getJiraFieldId().trim());
-            if (byId != null) {
+            if (byId != null && expected.equals(byId.getDescription())) {
                 return byId;
             }
         }
         if (field.getId() == null) {
             return null;
         }
-        String prefix = markerPrefix(field.getId());
         List<CustomField> all = customFieldManager.getCustomFieldObjects();
         for (int i = 0; i < all.size(); i++) {
             CustomField candidate = all.get(i);
-            String description = candidate == null ? null : candidate.getDescription();
-            if (description != null && description.startsWith(prefix)) {
+            if (candidate != null && expected.equals(candidate.getDescription())) {
                 return candidate;
             }
         }
@@ -261,12 +260,10 @@ public class IssueFieldSync {
         return field.getId();
     }
 
-    static String marker(String fieldId) {
-        return markerPrefix(fieldId) + "portal";
-    }
-
-    static String markerPrefix(String fieldId) {
-        return "sdf:" + fieldId + " ";
+    static String marker(String blockId, String fieldId) {
+        String block = blockId == null || blockId.trim().isEmpty() ? "block" : blockId.trim();
+        String field = fieldId == null ? "" : fieldId.trim();
+        return "sdf:" + block + ":" + field;
     }
 
     /**
