@@ -59,6 +59,41 @@ public class FieldCatalogSyncTest {
     }
 
     @Test
+    public void newerFieldStaysEmptyWhenOlderQuestionsWereNotSavedYet() {
+        FormBlock first = block("main", null, "Категория");
+        FormBlock second = block("block1", null, "Телефон");
+        RulesConfig config = new RulesConfig();
+        config.getBlocks().add(first);
+        config.getBlocks().add(second);
+
+        FieldCatalogSync.align(config, Arrays.asList(
+                new OwnedField("customfield_10139", "Анкета сотрудника"),
+                new OwnedField("customfield_10138", "Динамические поля")));
+
+        FormBlock created = find(config, "customfield_10139");
+        FormBlock older = find(config, "customfield_10138");
+        assertTrue(created.getFields().isEmpty());
+        assertEquals("f10139", created.getId());
+        assertEquals("main", older.getId());
+        assertEquals(2, older.getFields().size());
+        assertEquals("Категория", older.getFields().get(0).getLabel());
+        assertEquals("Телефон", older.getFields().get(1).getLabel());
+    }
+
+    @Test
+    public void deletedFieldDoesNotDonateItsQuestions() {
+        RulesConfig config = new RulesConfig();
+        config.getBlocks().add(block("main", "customfield_10138", "Категория"));
+        config.getBlocks().add(block("old", "customfield_10001", "Секрет"));
+
+        FieldCatalogSync.align(config, Collections.singletonList(new OwnedField("customfield_10138", "Динамические поля")));
+
+        assertEquals(1, config.getBlocks().size());
+        assertEquals(1, config.getBlocks().get(0).getFields().size());
+        assertEquals("Категория", config.getBlocks().get(0).getFields().get(0).getLabel());
+    }
+
+    @Test
     public void extraOldBlockIsMergedWhenOnlyOneFieldRemains() {
         FormBlock first = block("main", null, "Категория");
         FormBlock second = block("block1", null, "Телефон");
@@ -81,6 +116,15 @@ public class FieldCatalogSyncTest {
         assertEquals(3, block.getFields().size());
         assertEquals("block1_field1", block.getFields().get(1).getId());
         assertEquals("block1_field1", block.getFields().get(2).getWhen().getFieldId());
+    }
+
+    private static FormBlock find(RulesConfig config, String customFieldId) {
+        for (int i = 0; i < config.getBlocks().size(); i++) {
+            if (customFieldId.equals(config.getBlocks().get(i).getCustomFieldId())) {
+                return config.getBlocks().get(i);
+            }
+        }
+        throw new AssertionError(customFieldId);
     }
 
     private static FormBlock block(String id, String customFieldId, String question) {

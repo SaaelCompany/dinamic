@@ -56,19 +56,17 @@ public final class FieldCatalogSync {
             if (index >= 0) {
                 used[index] = true;
                 block = source.get(index);
-            } else {
+            } else if (isOldest(field, live)) {
                 index = findOrphan(source, used);
                 if (index >= 0) {
                     used[index] = true;
                     block = source.get(index);
                     block.setCustomFieldId(fieldId);
                 } else {
-                    block = new FormBlock();
-                    block.setId(freshId(fieldId, aligned));
-                    block.setCustomFieldId(fieldId);
-                    block.setTitle("");
-                    block.setFields(new ArrayList<FormField>());
+                    block = emptyBlock(fieldId, aligned);
                 }
+            } else {
+                block = emptyBlock(fieldId, aligned);
             }
             block.setCustomFieldName(field.getName());
             if (isBlank(block.getId())) {
@@ -79,14 +77,79 @@ public final class FieldCatalogSync {
             }
             aligned.add(block);
         }
-        if (!aligned.isEmpty()) {
+        FormBlock home = oldestBlock(aligned, live);
+        if (home != null) {
             for (int i = 0; i < source.size(); i++) {
-                if (!used[i] && source.get(i) != null) {
-                    absorb(aligned.get(0), source.get(i));
+                if (used[i] || source.get(i) == null || !isBlank(source.get(i).getCustomFieldId())) {
+                    continue;
                 }
+                absorb(home, source.get(i));
             }
         }
         config.setBlocks(aligned);
+    }
+
+    private static FormBlock emptyBlock(String fieldId, List<FormBlock> aligned) {
+        FormBlock block = new FormBlock();
+        block.setId(freshId(fieldId, aligned));
+        block.setCustomFieldId(fieldId);
+        block.setTitle("");
+        block.setFields(new ArrayList<FormField>());
+        return block;
+    }
+
+    /**
+     * Questions saved before a field was chosen stay on the oldest plugin field.
+     * A field created later always starts empty.
+     */
+    private static boolean isOldest(OwnedField field, List<OwnedField> live) {
+        long id = numericId(field.getId());
+        for (int i = 0; i < live.size(); i++) {
+            OwnedField other = live.get(i);
+            if (other == null || isBlank(other.getId()) || other == field) {
+                continue;
+            }
+            if (numericId(other.getId()) < id) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static FormBlock oldestBlock(List<FormBlock> aligned, List<OwnedField> live) {
+        OwnedField oldest = null;
+        for (int i = 0; i < live.size(); i++) {
+            OwnedField field = live.get(i);
+            if (field == null || isBlank(field.getId())) {
+                continue;
+            }
+            if (oldest == null || numericId(field.getId()) < numericId(oldest.getId())) {
+                oldest = field;
+            }
+        }
+        if (oldest == null) {
+            return null;
+        }
+        String id = oldest.getId().trim();
+        for (int i = 0; i < aligned.size(); i++) {
+            FormBlock block = aligned.get(i);
+            if (block != null && id.equals(trim(block.getCustomFieldId()))) {
+                return block;
+            }
+        }
+        return null;
+    }
+
+    private static long numericId(String customFieldId) {
+        String raw = customFieldId == null ? "" : customFieldId.trim();
+        if (raw.startsWith("customfield_")) {
+            raw = raw.substring("customfield_".length());
+        }
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private static int find(List<FormBlock> source, boolean[] used, String customFieldId) {
