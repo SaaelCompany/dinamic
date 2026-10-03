@@ -48,17 +48,21 @@ public class RulesServiceImpl implements RulesService {
 
     @Override
     public RulesConfig getConfig() {
+        RulesConfig config;
         String json = readStored();
         if (json == null || json.trim().isEmpty()) {
-            return new RulesConfig();
+            config = new RulesConfig();
+        } else {
+            try {
+                config = parse(json);
+            } catch (InvalidRulesException e) {
+                // Should never happen: only validated documents are stored. Fail safe -> no rules.
+                log.warn("Stored dynamic field rules are corrupted, ignoring them: {}", e.getMessage());
+                config = new RulesConfig();
+            }
         }
-        try {
-            return parse(json);
-        } catch (InvalidRulesException e) {
-            // Should never happen: only validated documents are stored. Fail safe -> no rules.
-            log.warn("Stored dynamic field rules are corrupted, ignoring them: {}", e.getMessage());
-            return new RulesConfig();
-        }
+        portalFormFields.align(config);
+        return config;
     }
 
     @Override
@@ -95,7 +99,7 @@ public class RulesServiceImpl implements RulesService {
     @Override
     public String saveConfigJson(String json) throws InvalidRulesException {
         RulesConfig config = parse(json);
-        portalFormFields.ensure();
+        portalFormFields.align(config);
         issueFieldSync.ensureFields(config);
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);

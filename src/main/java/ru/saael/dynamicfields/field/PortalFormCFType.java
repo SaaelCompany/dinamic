@@ -40,12 +40,12 @@ public class PortalFormCFType extends GenericTextCFType {
     @Override
     public Map<String, Object> getVelocityParameters(Issue issue, CustomField field, FieldLayoutItem layout) {
         Map<String, Object> params = super.getVelocityParameters(issue, field, layout);
-        params.put("sdfRows", rows(issue));
+        params.put("sdfRows", rows(issue, field));
         return params;
     }
 
-    private static List<AnswerRow> rows(Issue issue) {
-        if (issue == null || issue.getKey() == null) {
+    private static List<AnswerRow> rows(Issue issue, CustomField field) {
+        if (issue == null || issue.getKey() == null || field == null) {
             return Collections.emptyList();
         }
         AnswersService service = AnswersServiceImpl.installed();
@@ -53,7 +53,7 @@ public class PortalFormCFType extends GenericTextCFType {
             return Collections.emptyList();
         }
         try {
-            return service.storedRows(issue.getKey());
+            return service.storedRows(issue.getKey(), field.getId());
         } catch (RuntimeException e) {
             return Collections.emptyList();
         }

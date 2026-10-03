@@ -7,6 +7,8 @@ public class AnswerRow {
 
     /** Block title at submit time. Empty for answers saved before blocks existed. */
     private String group;
+    /** Custom field that owns the question, for example {@code customfield_10138}. */
+    private String owner;
     private String fieldId;
     private String label;
     private String value;
@@ -25,6 +27,14 @@ public class AnswerRow {
 
     public void setGroup(String group) {
         this.group = group;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
     }
 
     public String getFieldId() {

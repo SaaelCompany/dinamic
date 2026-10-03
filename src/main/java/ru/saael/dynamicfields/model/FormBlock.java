@@ -15,6 +15,10 @@ import java.util.List;
 public class FormBlock {
 
     private String id;
+    /** Jira custom field that owns this block, for example {@code customfield_10138}. */
+    private String customFieldId = "";
+    /** Current name of that custom field. Refreshed from Jira, not edited here. */
+    private String customFieldName = "";
     private String title = "";
     private boolean clearOnHide = true;
     /** The request types that show this block. Empty means the block is not shown. */
@@ -35,6 +39,22 @@ public class FormBlock {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getCustomFieldId() {
+        return customFieldId;
+    }
+
+    public void setCustomFieldId(String customFieldId) {
+        this.customFieldId = customFieldId == null ? "" : customFieldId;
+    }
+
+    public String getCustomFieldName() {
+        return customFieldName;
+    }
+
+    public void setCustomFieldName(String customFieldName) {
+        this.customFieldName = customFieldName == null ? "" : customFieldName;
     }
 
     public String getTitle() {

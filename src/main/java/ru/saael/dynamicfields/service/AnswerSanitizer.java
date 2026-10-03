@@ -81,6 +81,9 @@ public final class AnswerSanitizer {
                 }
                 AnswerRow row = new AnswerRow(field.getLabel(), text.toString());
                 row.setFieldId(field.getId());
+                if (block.getCustomFieldId() != null && block.getCustomFieldId().trim().length() > 0) {
+                    row.setOwner(block.getCustomFieldId().trim());
+                }
                 if (!group.isEmpty()) {
                     row.setGroup(group);
                 }

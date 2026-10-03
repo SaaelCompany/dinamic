@@ -24,9 +24,6 @@
                 <div class="aui-toolbar2 sdf-toolbar">
                     <div class="aui-toolbar2-inner">
                         <div class="aui-toolbar2-primary">
-                            <div class="aui-buttons">
-                                <button id="sdf-add-block" class="aui-button" type="button" data-role="add-block">$i18n.getText("ru.saael.dynamicfields.admin.builder.addBlock")</button>
-                            </div>
                         </div>
                         <div class="aui-toolbar2-secondary">
                             <span id="sdf-block-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.blocks.count") $blockCount</span>
@@ -42,7 +39,6 @@
                     <div class="sdf-builder">
                         <div id="sdf-empty" class="aui-message sdf-empty">
                             <p>$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>
-                            <button id="sdf-example-empty" class="aui-button" type="button" data-role="example">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
                         </div>
                         <div id="sdf-blocks"></div>
                     </div>

@@ -21,8 +21,8 @@
         <context>servicedesk.portal.requestcreate</context>
     </web-resource>
 
-    <customfield-type key="portal-form" name="Dynamic fields" class="ru.saael.dynamicfields.field.PortalFormCFType">
-        <description>Questions from the customer portal, shown in the issue details</description>
+    <customfield-type key="portal-form" name="Dynamic fields" i18n-name-key="ru.saael.dynamicfields.field.type" class="ru.saael.dynamicfields.field.PortalFormCFType">
+        <description key="ru.saael.dynamicfields.field.type.description">Questions configured for this field</description>
         <resource type="velocity" name="view" location="templates/field/view.vm"/>
         <resource type="velocity" name="edit" location="templates/field/edit.vm"/>
         <resource type="velocity" name="xml" location="templates/field/xml.vm"/>

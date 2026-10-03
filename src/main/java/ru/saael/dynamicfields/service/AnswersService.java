@@ -17,6 +17,9 @@ public interface AnswersService {
     /** Rows for the issue details field. Empty when the issue has no portal answers. */
     List<AnswerRow> storedRows(String issueKey);
 
+    /** Rows that belong to one plugin custom field. */
+    List<AnswerRow> storedRows(String issueKey, String customFieldId);
+
     /**
      * @param blocks block id → field id → values; {@code null} means the body used the legacy flat {@code values} map
      * @param legacyValues flat field id → values from plugin 2.0, used only when {@code blocks} is null

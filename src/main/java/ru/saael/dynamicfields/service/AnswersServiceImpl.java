@@ -106,7 +106,7 @@ public class AnswersServiceImpl implements AnswersService {
             throw new IllegalStateException("Cannot store portal answers", e);
         }
         publishProperty(issue, document, form);
-        portalFormFields.write(issue, rows);
+        portalFormFields.writeOwned(issue, form, rows);
         issueFieldSync.writeAnswers(issue, form, document.getValues(), adminAccess.currentUser());
         log.info("Stored {} portal answer(s) on {}", rows.size(), issue.getKey());
     }
@@ -125,6 +125,48 @@ public class AnswersServiceImpl implements AnswersService {
         } catch (AnswerRejectedException e) {
             return java.util.Collections.emptyList();
         }
+    }
+
+    @Override
+    public List<AnswerRow> storedRows(String issueKey, String customFieldId) {
+        List<AnswerRow> rows = storedRows(issueKey);
+        if (customFieldId == null || customFieldId.trim().isEmpty()) {
+            return rows;
+        }
+        String owner = customFieldId.trim();
+        java.util.Set<String> questionIds = questionIds(owner);
+        List<AnswerRow> owned = new java.util.ArrayList<AnswerRow>();
+        for (int i = 0; i < rows.size(); i++) {
+            AnswerRow row = rows.get(i);
+            if (row == null) {
+                continue;
+            }
+            if (owner.equals(row.getOwner())
+                    || ((row.getOwner() == null || row.getOwner().trim().isEmpty()) && questionIds.contains(row.getFieldId()))) {
+                owned.add(row);
+            }
+        }
+        return owned;
+    }
+
+    private java.util.Set<String> questionIds(String customFieldId) {
+        java.util.Set<String> ids = new java.util.HashSet<String>();
+        RulesConfig config = rulesService.getConfig();
+        if (config.getBlocks() == null) {
+            return ids;
+        }
+        for (int b = 0; b < config.getBlocks().size(); b++) {
+            ru.saael.dynamicfields.model.FormBlock block = config.getBlocks().get(b);
+            if (block == null || block.getFields() == null || !customFieldId.equals(block.getCustomFieldId())) {
+                continue;
+            }
+            for (int i = 0; i < block.getFields().size(); i++) {
+                if (block.getFields().get(i) != null && block.getFields().get(i).getId() != null) {
+                    ids.add(block.getFields().get(i).getId());
+                }
+            }
+        }
+        return ids;
     }
 
     /**

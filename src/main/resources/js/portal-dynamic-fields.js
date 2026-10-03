@@ -563,7 +563,6 @@
 
     function renderInsideField(host, blocks) {
         hideFieldChrome(host);
-        removeOutside(host);
         var keep = {};
         var i;
         for (i = 0; i < blocks.length; i++) {
@@ -602,9 +601,10 @@
         return out.join(', ');
     }
 
-    function answerSummary() {
+    function answerSummary(root) {
         var lines = [];
-        var sections = document.querySelectorAll('.sdf-portal-block');
+        var scope = root && root.querySelectorAll ? root : document;
+        var sections = scope.querySelectorAll('.sdf-portal-block');
         var s;
         for (s = 0; s < sections.length; s++) {
             if (hasClass(sections[s], 'sdf-hidden')) {
@@ -631,15 +631,72 @@
     }
 
     function syncFieldValue() {
-        var areas = document.querySelectorAll('.sdf-cf-value');
-        if (!areas.length) {
-            return;
-        }
-        var text = answerSummary();
+        var hosts = document.querySelectorAll('.sdf-cf-form');
         var i;
-        for (i = 0; i < areas.length; i++) {
-            if (typeof areas[i].value === 'string') {
-                areas[i].value = text;
+        for (i = 0; i < hosts.length; i++) {
+            var area = hosts[i].parentNode ? hosts[i].parentNode.querySelector('.sdf-cf-value') : null;
+            if (area && typeof area.value === 'string') {
+                area.value = answerSummary(hosts[i]);
+            }
+        }
+    }
+
+    function blocksFor(owner) {
+        var all = visibleBlocks();
+        var out = [];
+        var i;
+        for (i = 0; i < all.length; i++) {
+            if (owner && all[i].customFieldId === owner) {
+                out.push(all[i]);
+            }
+        }
+        return out;
+    }
+
+    function collectHosts() {
+        var blocks = blocksOf(config);
+        var i;
+        for (i = 0; i < blocks.length; i++) {
+            var owner = blocks[i].customFieldId;
+            if (!owner || !/^customfield_\d+$/.test(owner)) {
+                continue;
+            }
+            if (document.querySelector('.sdf-cf-form[data-sdf-owner="' + owner + '"]')) {
+                continue;
+            }
+            var named = document.querySelector('[name="' + owner + '"]');
+            if (!named) {
+                continue;
+            }
+            addClass(named, 'sdf-cf-value');
+            named.style.display = 'none';
+            var slot = document.createElement('div');
+            slot.className = 'sdf-cf-form';
+            slot.setAttribute('data-sdf-owner', owner);
+            if (named.nextSibling) {
+                named.parentNode.insertBefore(slot, named.nextSibling);
+            } else {
+                named.parentNode.appendChild(slot);
+            }
+        }
+        return document.querySelectorAll('.sdf-cf-form');
+    }
+
+    function removeLoose() {
+        var nodes = document.querySelectorAll('.sdf-portal-block');
+        var i;
+        for (i = nodes.length - 1; i >= 0; i--) {
+            var parent = nodes[i].parentNode;
+            var inside = false;
+            while (parent) {
+                if (hasClass(parent, 'sdf-cf-form')) {
+                    inside = true;
+                    break;
+                }
+                parent = parent.parentNode;
+            }
+            if (!inside && nodes[i].parentNode) {
+                nodes[i].parentNode.removeChild(nodes[i]);
             }
         }
     }
@@ -648,70 +705,13 @@
         if (!isCreatePage()) {
             return;
         }
-        var blocks = visibleBlocks();
-        var host = findHost();
-        if (host) {
-            renderInsideField(host, blocks);
-            return;
-        }
-        var formEl = document.querySelector('form.cp-request-form');
-        if (!formEl) {
-            return;
-        }
-        var keep = {};
+        var hosts = collectHosts();
         var i;
-        for (i = 0; i < blocks.length; i++) {
-            keep[blocks[i].id] = true;
+        for (i = 0; i < hosts.length; i++) {
+            renderInsideField(hosts[i], blocksFor(hosts[i].getAttribute('data-sdf-owner')));
         }
-        var stale = formEl.querySelectorAll('.sdf-portal-block');
-        for (i = stale.length - 1; i >= 0; i--) {
-            if (!keep[stale[i].getAttribute('data-sdf-block')] && stale[i].parentNode) {
-                stale[i].parentNode.removeChild(stale[i]);
-            }
-        }
-        if (!blocks.length) {
-            return;
-        }
-        wireForm(formEl);
-        var groups = [];
-        for (i = 0; i < blocks.length; i++) {
-            var block = blocks[i];
-            var node = formEl.querySelector('[data-sdf-block="' + block.id + '"]');
-            if (!node) {
-                node = buildSection(block);
-            }
-            var anchor = anchorFor(formEl, block);
-            var found = null;
-            var g;
-            for (g = 0; g < groups.length; g++) {
-                if (groups[g].anchor === anchor) {
-                    found = groups[g];
-                }
-            }
-            if (!found) {
-                found = {anchor: anchor, nodes: []};
-                groups.push(found);
-            }
-            found.nodes.push(node);
-        }
-        for (i = 0; i < groups.length; i++) {
-            var nodes = groups[i].nodes;
-            var before = groups[i].anchor;
-            if (alreadyPlaced(formEl, nodes, before)) {
-                continue;
-            }
-            var n;
-            for (n = 0; n < nodes.length; n++) {
-                if (before && before.parentNode === formEl) {
-                    formEl.insertBefore(nodes[n], before);
-                } else {
-                    formEl.appendChild(nodes[n]);
-                }
-            }
-        }
-            applyAnchors(formEl);
-            debug('form arranged', blocks.length);
-        }
+        removeLoose();
+    }
 
         function fieldGroupOf(node, formEl) {
             var current = node;
@@ -815,6 +815,19 @@
             var sections = formEl.querySelectorAll('.sdf-portal-block');
             var i;
             for (i = 0; i < sections.length; i++) {
+                var parent = sections[i].parentNode;
+                var inside = false;
+                while (parent) {
+                    if (hasClass(parent, 'sdf-cf-form')) {
+                        inside = true;
+                        break;
+                    }
+                    parent = parent.parentNode;
+                }
+                if (inside) {
+                    removeClass(sections[i], 'sdf-hidden');
+                    continue;
+                }
                 var block = findBlock(sections[i].getAttribute('data-sdf-block'));
                 if (block && anchorMatches(formEl, block)) {
                     removeClass(sections[i], 'sdf-hidden');
@@ -1285,7 +1298,7 @@
         if (!config) {
             return;
         }
-        if (isCreatePage() && visibleBlocks().length) {
+        if (isCreatePage() && blocksOf(config).length) {
             ensureForm();
             removeAnswers();
         } else {
@@ -1340,7 +1353,7 @@
                 onTick();
             } else {
                 flushPending();
-                if (isCreatePage() && config && visibleBlocks().length) {
+                if (isCreatePage() && config && blocksOf(config).length) {
                     ensureForm();
                 }
             }

@@ -84,6 +84,8 @@
         function normalizeBlock(src) {
             return {
                 id: src.id ? String(src.id) : '',
+                customFieldId: src.customFieldId ? String(src.customFieldId) : '',
+                customFieldName: src.customFieldName ? String(src.customFieldName) : '',
                 title: src.title == null ? '' : String(src.title),
                 clearOnHide: src.clearOnHide !== false,
                 requestTypeIds: [],
@@ -337,6 +339,8 @@
         function exportBlock(block, keepBlank) {
             return {
                 id: block.id,
+                customFieldId: block.customFieldId || '',
+                customFieldName: block.customFieldName || '',
                 title: keepBlank ? (block.title || '') : trim(block.title || ''),
                 clearOnHide: block.clearOnHide !== false,
                 requestTypeIds: block.requestTypeIds || [],
@@ -417,16 +421,12 @@
             var empty = document.getElementById('sdf-empty');
             empty.style.display = visible.length ? 'none' : 'block';
             var note = empty.querySelector('p');
-            var exampleBtn = document.getElementById('sdf-example-empty');
             if (!config.blocks.length) {
                 note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.empty');
-                exampleBtn.style.display = '';
             } else if (!Number(selectedType)) {
                 note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassignedHint');
-                exampleBtn.style.display = 'none';
             } else {
                 note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeEmpty');
-                exampleBtn.style.display = 'none';
             }
             document.getElementById('sdf-block-count').textContent =
                 AJS.I18n.getText('ru.saael.dynamicfields.admin.blocks.count') + ' ' + visible.length;
@@ -446,13 +446,9 @@
             var card = el('section', 'sdf-block-card');
             card.setAttribute('data-block-index', String(blockIndex));
             var bar = el('div', 'sdf-block-bar');
+            bar.appendChild(el('h3', 'sdf-block-name', block.customFieldName || block.customFieldId || block.title || ''));
             var actions = el('div', 'aui-buttons');
             actions.appendChild(button('add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false));
-            var order = visibleBlockIndexes();
-            var pos = indexOfNumber(order, blockIndex);
-            actions.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), pos <= 0));
-            actions.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), pos < 0 || pos === order.length - 1));
-            actions.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
             bar.appendChild(actions);
             card.appendChild(bar);
             card.appendChild(renderScope(block));
