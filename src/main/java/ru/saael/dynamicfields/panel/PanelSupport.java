@@ -50,7 +50,9 @@ final class PanelSupport {
             if (row == null) {
                 continue;
             }
-            escaped.add(new AnswerRow(escape(row.getLabel()), escape(row.getValue())));
+            AnswerRow copy = new AnswerRow(escape(row.getLabel()), escape(row.getValue()));
+            copy.setGroup(escape(row.getGroup()));
+            escaped.add(copy);
         }
         return escaped;
     }

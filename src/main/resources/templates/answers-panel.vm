@@ -1,5 +1,10 @@
 <div class="sdf-answers" style="padding: 0 10px 8px;">
+#set ($lastGroup = "")
 #foreach ($row in $sdfRows)
+    #if ($row.group && $row.group != $lastGroup)
+        <div style="font-weight: 600; margin: 10px 0 6px;">$row.group</div>
+        #set ($lastGroup = $row.group)
+    #end
     <div style="margin: 0 0 8px;">
         <div style="color: #6b778c; font-size: 12px;">$row.label</div>
         <div style="white-space: pre-wrap;">$row.value</div>

@@ -1,6 +1,7 @@
 package ru.saael.dynamicfields.service;
 
 import ru.saael.dynamicfields.model.Condition;
+import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
@@ -12,8 +13,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Structural validation of a portal form. A field may depend only on a field listed above it,
- * which makes cycles impossible.
+ * Structural validation of portal blocks. A field may depend only on a field listed above it
+ * in the same block, which makes cycles impossible. Field ids are unique inside one block.
  */
 public final class RulesValidator {
 
@@ -34,11 +35,43 @@ public final class RulesValidator {
             errors.add("Unsupported \"version\": " + config.getVersion()
                     + " (expected " + RulesConfig.CURRENT_VERSION + ")");
         }
+        Set<String> blockIds = new HashSet<String>();
+        List<FormBlock> blocks = config.getBlocks() == null ? new ArrayList<FormBlock>() : config.getBlocks();
+        for (int b = 0; b < blocks.size(); b++) {
+            FormBlock block = blocks.get(b);
+            String blockName = blockName(block, b);
+            if (block == null) {
+                errors.add(blockName + ": block is empty");
+                continue;
+            }
+            if (isBlank(block.getId())) {
+                errors.add(blockName + ": \"id\" is required");
+            } else if (!FIELD_ID.matcher(block.getId()).matches()) {
+                errors.add(blockName + ": \"id\" has invalid format: \"" + block.getId() + "\"");
+            } else if (!blockIds.add(block.getId())) {
+                errors.add(blockName + ": duplicate id \"" + block.getId() + "\"");
+            }
+            validateFields(block.getFields(), errors);
+            List<Long> typeIds = block.getRequestTypeIds();
+            if (typeIds == null) {
+                continue;
+            }
+            for (Long requestTypeId : typeIds) {
+                if (requestTypeId == null || requestTypeId <= 0) {
+                    errors.add(blockName + ": \"requestTypeIds\" must contain positive numbers only");
+                    break;
+                }
+            }
+        }
+        return errors;
+    }
+
+    private static void validateFields(List<FormField> fields, List<String> errors) {
         Set<String> ids = new HashSet<String>();
         List<String> earlier = new ArrayList<String>();
-        List<FormField> fields = config.getFields();
-        for (int i = 0; i < fields.size(); i++) {
-            FormField field = fields.get(i);
+        List<FormField> list = fields == null ? new ArrayList<FormField>() : fields;
+        for (int i = 0; i < list.size(); i++) {
+            FormField field = list.get(i);
             String label = fieldLabel(field, i);
             if (field == null) {
                 errors.add(label + ": field is empty");
@@ -84,13 +117,16 @@ public final class RulesValidator {
                 earlier.add(field.getId());
             }
         }
-        for (Long requestTypeId : config.getRequestTypeIds()) {
-            if (requestTypeId == null || requestTypeId <= 0) {
-                errors.add("\"requestTypeIds\" must contain positive numbers only");
-                break;
-            }
+    }
+
+    private static String blockName(FormBlock block, int index) {
+        if (block != null && !isBlank(block.getTitle())) {
+            return "Block \"" + block.getTitle() + "\"";
         }
-        return errors;
+        if (block != null && !isBlank(block.getId())) {
+            return "Block \"" + block.getId() + "\"";
+        }
+        return "Block #" + (index + 1);
     }
 
     private static String fieldLabel(FormField field, int index) {

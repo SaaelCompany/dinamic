@@ -3,6 +3,7 @@ package ru.saael.dynamicfields.service;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 import ru.saael.dynamicfields.model.Condition;
+import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
@@ -34,8 +35,16 @@ public class RulesValidatorTest {
     }
 
     private static RulesConfig config(FormField... fields) {
+        return config("main", "Дополнительно", fields);
+    }
+
+    private static RulesConfig config(String blockId, String title, FormField... fields) {
+        FormBlock block = new FormBlock();
+        block.setId(blockId);
+        block.setTitle(title);
+        block.setFields(Arrays.asList(fields));
         RulesConfig config = new RulesConfig();
-        config.setFields(Arrays.asList(fields));
+        config.setBlocks(Collections.singletonList(block));
         return config;
     }
 
@@ -67,7 +76,47 @@ public class RulesValidatorTest {
         assertTrue(in != null);
         RulesConfig config = new ObjectMapper().readValue(in, RulesConfig.class);
         assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config));
-        assertEquals(7, config.getFields().size());
+        assertEquals(1, config.getBlocks().size());
+        assertEquals(7, config.getBlocks().get(0).getFields().size());
+    }
+
+    @Test
+    public void version2DocumentBecomesOneBlock() throws Exception {
+        String legacy = "{\"version\":2,\"title\":\"Дополнительно\",\"clearOnHide\":true,\"requestTypeIds\":[],"
+                + "\"fields\":[{\"id\":\"category\",\"label\":\"Категория\",\"type\":\"text\"}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        String current = ConfigNormalizer.toCurrent(legacy, mapper);
+        RulesConfig config = mapper.readValue(current, RulesConfig.class);
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config));
+        assertEquals(3, config.getVersion());
+        assertEquals("main", config.getBlocks().get(0).getId());
+        assertEquals("Дополнительно", config.getBlocks().get(0).getTitle());
+        assertEquals(1, config.getBlocks().get(0).getFields().size());
+    }
+
+    @Test
+    public void version1IsNotMigrated() throws Exception {
+        try {
+            ConfigNormalizer.toCurrent("{\"version\":1,\"rules\":[]}", new ObjectMapper());
+            assertTrue("version 1 must be rejected", false);
+        } catch (InvalidRulesException e) {
+            assertTrue(e.getErrors().get(0), e.getErrors().get(0).contains("version"));
+        }
+    }
+
+    @Test
+    public void sameFieldIdInAnotherBlockIsAllowed() {
+        RulesConfig first = config("main", "One", field("note", "Note", FormField.TEXT));
+        FormBlock second = new FormBlock();
+        second.setId("extra");
+        second.setTitle("Two");
+        second.setFields(Collections.singletonList(field("note", "Other note", FormField.TEXT)));
+        List<FormBlock> blocks = new java.util.ArrayList<FormBlock>();
+        blocks.add(first.getBlocks().get(0));
+        blocks.add(second);
+        RulesConfig config = new RulesConfig();
+        config.setBlocks(blocks);
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config));
     }
 
     @Test

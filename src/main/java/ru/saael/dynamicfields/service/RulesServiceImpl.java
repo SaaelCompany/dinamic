@@ -90,7 +90,7 @@ public class RulesServiceImpl implements RulesService {
         RulesConfig config = parse(json);
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);
-        log.info("Portal form updated: {} field(s)", config.getFields().size());
+        log.info("Portal form updated: {} block(s), {} field(s)", config.getBlocks().size(), config.fieldCount());
         return normalised;
     }
 
@@ -101,7 +101,9 @@ public class RulesServiceImpl implements RulesService {
         }
         RulesConfig config;
         try {
-            config = mapper.readValue(json, RulesConfig.class);
+            config = mapper.readValue(ConfigNormalizer.toCurrent(json, mapper), RulesConfig.class);
+        } catch (InvalidRulesException e) {
+            throw e;
         } catch (IOException e) {
             throw new InvalidRulesException(Collections.singletonList("Invalid JSON: " + e.getMessage()));
         }

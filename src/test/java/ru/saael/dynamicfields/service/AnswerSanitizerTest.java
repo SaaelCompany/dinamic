@@ -2,6 +2,7 @@ package ru.saael.dynamicfields.service;
 
 import org.junit.Test;
 import ru.saael.dynamicfields.model.AnswerRow;
+import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
@@ -28,8 +29,12 @@ public class AnswerSanitizerTest {
         note.setLabel("Комментарий");
         note.setType(FormField.TEXTAREA);
 
+        FormBlock block = new FormBlock();
+        block.setId("main");
+        block.setTitle("Дополнительно");
+        block.setFields(Arrays.asList(category, note));
         RulesConfig config = new RulesConfig();
-        config.setFields(Arrays.asList(category, note));
+        config.setBlocks(Collections.singletonList(block));
         return config;
     }
 
@@ -40,7 +45,7 @@ public class AnswerSanitizerTest {
         raw.put("category", Arrays.asList("Нет такого", "Медицинский сотрудник", "Медицинский сотрудник"));
         raw.put("note", Arrays.asList("  первый  ", "второй"));
 
-        Map<String, List<String>> clean = AnswerSanitizer.sanitize(form(), raw);
+        Map<String, List<String>> clean = AnswerSanitizer.sanitize(form(), null, raw).get("main");
         assertFalse(clean.containsKey("missing"));
         assertEquals(Collections.singletonList("Медицинский сотрудник"), clean.get("category"));
         assertEquals(Collections.singletonList("первый"), clean.get("note"));
@@ -56,11 +61,14 @@ public class AnswerSanitizerTest {
         raw.put("note", Collections.singletonList(longText.toString()));
         raw.put("category", Arrays.asList("Административный персонал", "Медицинский сотрудник"));
 
-        Map<String, List<String>> clean = AnswerSanitizer.sanitize(form(), raw);
+        Map<String, List<String>> clean = AnswerSanitizer.sanitize(form(), null, raw).get("main");
         assertEquals(AnswerSanitizer.MAX_TEXT, clean.get("note").get(0).length());
 
-        List<AnswerRow> rows = AnswerSanitizer.rows(form(), clean);
+        Map<String, Map<String, List<String>>> blocks = new LinkedHashMap<String, Map<String, List<String>>>();
+        blocks.put("main", clean);
+        List<AnswerRow> rows = AnswerSanitizer.rows(form(), blocks);
         assertEquals(2, rows.size());
+        assertEquals("Дополнительно", rows.get(0).getGroup());
         assertEquals("Категория", rows.get(0).getLabel());
         assertEquals("Административный персонал, Медицинский сотрудник", rows.get(0).getValue());
         assertEquals("Комментарий", rows.get(1).getLabel());

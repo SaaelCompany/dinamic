@@ -187,7 +187,7 @@
         }
     }
 
-    function buildField(field) {
+    function buildField(field, blockId) {
         var wrap = document.createElement('div');
         wrap.className = 'sdf-field';
         wrap.setAttribute('data-sdf-field', field.id);
@@ -208,7 +208,7 @@
                 // Not a successful control of the Jira request form, so the portal does not submit it.
                 input.setAttribute('form', 'sdf-unattached');
                 if (field.type === 'radio') {
-                    input.setAttribute('name', 'sdf-' + field.id);
+                    input.setAttribute('name', 'sdf-' + (blockId || 'main') + '-' + field.id);
                 }
                 line.appendChild(input);
                 line.appendChild(document.createTextNode(' ' + options[i]));
@@ -245,27 +245,87 @@
         return wrap;
     }
 
-    function buildForm(cfg) {
-        var block = document.createElement('div');
-        block.id = 'sdf-portal-form';
-        block.className = 'sdf-block';
-        if (cfg.title && trim(cfg.title)) {
-            var title = document.createElement('h3');
-            title.className = 'sdf-title';
-            title.appendChild(document.createTextNode(cfg.title));
-            block.appendChild(title);
-        }
-        var visible = visibility(cfg.fields, {});
-        for (var i = 0; i < cfg.fields.length; i++) {
-            var node = buildField(cfg.fields[i]);
-            var show = !!visible[cfg.fields[i].id];
-            node.setAttribute('data-sdf-shown', show ? '1' : '0');
-            if (!show) {
-                addClass(node, 'sdf-hidden');
+    function buildForm(blocks) {
+        var root = document.createElement('div');
+        root.id = 'sdf-portal-form';
+        root.className = 'sdf-portal';
+        for (var b = 0; b < blocks.length; b++) {
+            var cfg = blocks[b];
+            var section = document.createElement('div');
+            section.className = 'sdf-block';
+            section.setAttribute('data-sdf-block', cfg.id || ('block' + b));
+            if (cfg.title && trim(cfg.title)) {
+                var title = document.createElement('h3');
+                title.className = 'sdf-title';
+                title.appendChild(document.createTextNode(trim(cfg.title)));
+                section.appendChild(title);
             }
-            block.appendChild(node);
+            var visible = visibility(cfg.fields, {});
+            for (var i = 0; i < cfg.fields.length; i++) {
+                var node = buildField(cfg.fields[i], cfg.id);
+                var show = !!visible[cfg.fields[i].id];
+                node.setAttribute('data-sdf-shown', show ? '1' : '0');
+                if (!show) {
+                    addClass(node, 'sdf-hidden');
+                }
+                section.appendChild(node);
+            }
+            root.appendChild(section);
         }
-        return block;
+        return root;
+    }
+
+    function blocksOf(cfg) {
+        if (!cfg) {
+            return [];
+        }
+        if (cfg.blocks && cfg.blocks.length) {
+            return cfg.blocks;
+        }
+        if (cfg.fields && cfg.fields.length) {
+            return [{
+                id: 'main',
+                title: cfg.title || '',
+                clearOnHide: cfg.clearOnHide !== false,
+                requestTypeIds: cfg.requestTypeIds || [],
+                fields: cfg.fields
+            }];
+        }
+        return [];
+    }
+
+    function visibleBlocks() {
+        var all = blocksOf(config);
+        var out = [];
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].fields && all[i].fields.length && requestTypeMatches(all[i])) {
+                out.push(all[i]);
+            }
+        }
+        return out;
+    }
+
+    function findBlock(id) {
+        var all = blocksOf(config);
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].id === id) {
+                return all[i];
+            }
+        }
+        return null;
+    }
+
+    function repaint(root) {
+        if (!root || !root.querySelectorAll) {
+            return;
+        }
+        var sections = root.querySelectorAll('[data-sdf-block]');
+        for (var i = 0; i < sections.length; i++) {
+            var block = findBlock(sections[i].getAttribute('data-sdf-block'));
+            if (block) {
+                applyVisibility(sections[i], block);
+            }
+        }
     }
 
     function isCreatePage() {
@@ -313,7 +373,8 @@
     }
 
     function ensureForm() {
-        if (!config || !config.fields || !config.fields.length || !isCreatePage() || !requestTypeMatches(config)) {
+        var blocks = visibleBlocks();
+        if (!blocks.length || !isCreatePage()) {
             return;
         }
         var formEl = document.querySelector('form.cp-request-form');
@@ -327,15 +388,15 @@
         if (existing && existing.parentNode) {
             existing.parentNode.removeChild(existing);
         }
-        var block = buildForm(config);
+        var block = buildForm(blocks);
         insertBeforeSubmit(formEl, block);
         block.addEventListener('change', function () {
-            applyVisibility(block, config);
+            repaint(block);
         });
         block.addEventListener('input', function () {
-            applyVisibility(block, config);
+            repaint(block);
         });
-        debug('form inserted', config.fields.length);
+        debug('form inserted', blocks.length);
     }
 
     function removeForm() {
@@ -399,12 +460,35 @@
         while (host.firstChild) {
             host.removeChild(host.firstChild);
         }
+        var distinct = [];
+        var g;
+        for (g = 0; g < rows.length; g++) {
+            var groupName = rows[g].group || '';
+            if (groupName && (distinct.length === 0 || distinct[distinct.length - 1] !== groupName)) {
+                distinct.push(groupName);
+            }
+        }
+        var blocks = blocksOf(config);
+        var heading = fallbackHeading();
+        if (distinct.length === 1) {
+            heading = distinct[0];
+        } else if (!distinct.length && blocks.length === 1 && trim(blocks[0].title)) {
+            heading = trim(blocks[0].title);
+        }
         var title = document.createElement('h3');
         title.className = 'sdf-title';
-        var heading = (config && trim(config.title)) ? trim(config.title) : fallbackHeading();
         title.appendChild(document.createTextNode(heading));
         host.appendChild(title);
+        var lastGroup = distinct.length === 1 ? distinct[0] : '';
         for (var i = 0; i < rows.length; i++) {
+            var group = rows[i].group || '';
+            if (distinct.length > 1 && group && group !== lastGroup) {
+                var sub = document.createElement('div');
+                sub.className = 'sdf-answer-group';
+                sub.appendChild(document.createTextNode(group));
+                host.appendChild(sub);
+                lastGroup = group;
+            }
             var label = document.createElement('div');
             label.className = 'sdf-answer-label';
             label.appendChild(document.createTextNode(rows[i].label || ''));
@@ -509,15 +593,31 @@
         return false;
     }
 
+    function hasAnyBlocks(blocks) {
+        if (!blocks) {
+            return false;
+        }
+        for (var id in blocks) {
+            if (blocks.hasOwnProperty(id) && hasAny(blocks[id])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function remember() {
-        var block = document.getElementById('sdf-portal-form');
-        if (!block) {
+        var root = document.getElementById('sdf-portal-form');
+        if (!root) {
             return;
         }
-        applyVisibility(block, config);
-        var values = readValues(block, true);
-        writePending({t: Date.now(), values: values, sent: null});
-        debug('remember', values);
+        repaint(root);
+        var blocks = {};
+        var sections = root.querySelectorAll('[data-sdf-block]');
+        for (var i = 0; i < sections.length; i++) {
+            blocks[sections[i].getAttribute('data-sdf-block')] = readValues(sections[i], true);
+        }
+        writePending({t: Date.now(), blocks: blocks, sent: null});
+        debug('remember', blocks);
     }
 
     function stripNames(block) {
@@ -542,7 +642,16 @@
             clearPending();
             return;
         }
-        if (!hasAny(pending.values)) {
+        var payload;
+        if (pending.blocks) {
+            if (!hasAnyBlocks(pending.blocks)) {
+                clearPending();
+                return;
+            }
+            payload = {blocks: pending.blocks};
+        } else if (pending.values && hasAny(pending.values)) {
+            payload = {values: pending.values};
+        } else {
             clearPending();
             return;
         }
@@ -552,7 +661,7 @@
         pending.sent = issueKey;
         writePending(pending);
         debug('put answers', issueKey);
-        putJson(rest('/answers/' + encodeURIComponent(issueKey)), JSON.stringify({values: pending.values}), function (status, text) {
+        putJson(rest('/answers/' + encodeURIComponent(issueKey)), JSON.stringify(payload), function (status, text) {
             debug('put status', status, text);
             if (status >= 200 && status < 300) {
                 clearPending();
@@ -726,7 +835,7 @@
         if (!config) {
             return;
         }
-        if (isCreatePage() && requestTypeMatches(config)) {
+        if (isCreatePage() && visibleBlocks().length) {
             ensureForm();
             removeAnswers();
         } else {
@@ -780,7 +889,7 @@
                 onTick();
             } else {
                 flushPending();
-                if (isCreatePage() && config && !document.getElementById('sdf-portal-form')) {
+                if (isCreatePage() && config && visibleBlocks().length && !document.getElementById('sdf-portal-form')) {
                     ensureForm();
                 }
             }
@@ -793,7 +902,7 @@
                     config = null;
                 }
             }
-            debug('config', status, config && config.fields ? config.fields.length : 0);
+            debug('config', status, blocksOf(config).length);
             onTick();
         });
         window.SaaelDynamicFields = {
@@ -802,8 +911,16 @@
                 return config;
             },
             readValues: function () {
-                var block = document.getElementById('sdf-portal-form');
-                return readValues(block, true);
+                var root = document.getElementById('sdf-portal-form');
+                var blocks = {};
+                if (!root || !root.querySelectorAll) {
+                    return blocks;
+                }
+                var sections = root.querySelectorAll('[data-sdf-block]');
+                for (var i = 0; i < sections.length; i++) {
+                    blocks[sections[i].getAttribute('data-sdf-block')] = readValues(sections[i], true);
+                }
+                return blocks;
             },
             reload: function () {
                 config = null;

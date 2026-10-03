@@ -39,6 +39,11 @@
     margin: 2px 0;
 }
 
+.sdf-answer-group {
+    font-weight: 600;
+    margin: 12px 0 6px;
+}
+
 .sdf-answer-value {
     margin: 0 0 8px;
     white-space: pre-wrap;

@@ -61,14 +61,20 @@ public class AnswersResource {
     @Path("/{issueKey}")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response put(@PathParam("issueKey") String issueKey, String body) {
-        Map<String, List<String>> values;
+        Map<String, Map<String, List<String>>> blocks = null;
+        Map<String, List<String>> values = null;
         try {
-            values = parseValues(body);
+            JsonNode root = body == null || body.trim().isEmpty() ? null : MAPPER.readTree(body);
+            if (root != null && root.get("blocks") != null && root.get("blocks").isObject()) {
+                blocks = parseBlocks(root.get("blocks"));
+            } else {
+                values = parseValues(root == null ? null : root.get("values"));
+            }
         } catch (IOException e) {
             return error(400, "Invalid JSON");
         }
         try {
-            answersService.save(issueKey, values);
+            answersService.save(issueKey, blocks, values);
             return Response.ok(MAPPER.writeValueAsString(answersService.read(issueKey))).build();
         } catch (AnswerRejectedException e) {
             return error(e.getStatus(), e.getMessage());
@@ -77,13 +83,23 @@ public class AnswersResource {
         }
     }
 
-    private static Map<String, List<String>> parseValues(String body) throws IOException {
-        Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
-        if (body == null || body.trim().isEmpty()) {
-            return values;
+    private static Map<String, Map<String, List<String>>> parseBlocks(JsonNode node) {
+        Map<String, Map<String, List<String>>> blocks = new LinkedHashMap<String, Map<String, List<String>>>();
+        if (node == null || !node.isObject()) {
+            return blocks;
         }
-        JsonNode root = MAPPER.readTree(body);
-        JsonNode node = root.get("values");
+        Iterator<Map.Entry<String, JsonNode>> entries = node.getFields();
+        while (entries.hasNext()) {
+            Map.Entry<String, JsonNode> entry = entries.next();
+            if (entry.getValue() != null && entry.getValue().isObject()) {
+                blocks.put(entry.getKey(), parseValues(entry.getValue()));
+            }
+        }
+        return blocks;
+    }
+
+    private static Map<String, List<String>> parseValues(JsonNode node) {
+        Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
         if (node == null || !node.isObject()) {
             return values;
         }

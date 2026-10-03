@@ -16,8 +16,18 @@ import java.util.Map;
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public class AnswerDocument {
 
+    /** block id → field id → values. Empty when the document was saved by an older plugin. */
+    private Map<String, Map<String, List<String>>> blocks = new LinkedHashMap<String, Map<String, List<String>>>();
     private Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
     private List<AnswerRow> rows = new ArrayList<AnswerRow>();
+
+    public Map<String, Map<String, List<String>>> getBlocks() {
+        return blocks;
+    }
+
+    public void setBlocks(Map<String, Map<String, List<String>>> blocks) {
+        this.blocks = blocks == null ? new LinkedHashMap<String, Map<String, List<String>>>() : blocks;
+    }
 
     public Map<String, List<String>> getValues() {
         return values;

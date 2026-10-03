@@ -21,6 +21,7 @@ import ru.saael.dynamicfields.model.RulesConfig;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -74,13 +75,15 @@ public class AnswersServiceImpl implements AnswersService {
     }
 
     @Override
-    public void save(String issueKey, Map<String, List<String>> values) throws AnswerRejectedException {
+    public void save(String issueKey, Map<String, Map<String, List<String>>> blocks, Map<String, List<String>> legacyValues)
+            throws AnswerRejectedException {
         Issue issue = requireWritable(issueKey);
         RulesConfig form = rulesService.getConfig();
-        Map<String, List<String>> clean = AnswerSanitizer.sanitize(form, values);
+        Map<String, Map<String, List<String>>> clean = AnswerSanitizer.sanitize(form, blocks, legacyValues);
         List<AnswerRow> rows = AnswerSanitizer.rows(form, clean);
         AnswerDocument document = new AnswerDocument();
-        document.setValues(clean);
+        document.setBlocks(clean);
+        document.setValues(flatten(clean));
         document.setRows(rows);
         try {
             settings().put(KEY_PREFIX + issue.getKey(), mapper.writeValueAsString(document));
@@ -149,6 +152,20 @@ public class AnswersServiceImpl implements AnswersService {
 
     private boolean isAdmin(ApplicationUser user) {
         return globalPermissionManager.hasPermission(GlobalPermissionKey.ADMINISTER, user);
+    }
+
+    private static Map<String, List<String>> flatten(Map<String, Map<String, List<String>>> blocks) {
+        Map<String, List<String>> flat = new LinkedHashMap<String, List<String>>();
+        if (blocks == null) {
+            return flat;
+        }
+        for (Map<String, List<String>> fields : blocks.values()) {
+            if (fields == null) {
+                continue;
+            }
+            flat.putAll(fields);
+        }
+        return flat;
     }
 
     private AnswerDocument load(String issueKey) {

@@ -64,7 +64,8 @@ public class AdminServlet extends HttpServlet {
         context.put("contextPath", request.getContextPath());
         context.put("i18n", i18n);
         context.put("rulesJsonHtml", escapeHtml(rulesService.getConfigJson()));
-        context.put("fieldCount", rulesService.getConfig().getFields().size());
+        context.put("fieldCount", rulesService.getConfig().fieldCount());
+        context.put("blockCount", rulesService.getConfig().getBlocks().size());
 
         pageBuilderService.assembler().resources().requireWebResource(ADMIN_RESOURCES);
         response.setContentType("text/html;charset=utf-8");
