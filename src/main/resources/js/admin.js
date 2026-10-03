@@ -1043,12 +1043,14 @@
                     maxY = point.y + 72;
                 }
             }
-            canvas.style.width = maxX + 'px';
-            canvas.style.height = (maxY + 12) + 'px';
-            canvas.appendChild(edgeSvg(block, laid, pos, maxX, maxY + 12));
+            var board = el('div', 'sdf-board');
+            board.style.width = maxX + 'px';
+            board.style.height = (maxY + 12) + 'px';
+            board.appendChild(edgeSvg(block, laid, pos, maxX, maxY + 12));
             for (i = 0; i < laid.length; i++) {
-                canvas.appendChild(nodeButton(block, blockIndex, laid[i], pos[i]));
+                board.appendChild(nodeButton(block, blockIndex, laid[i], pos[i]));
             }
+            canvas.appendChild(board);
             wrap.appendChild(canvas);
             return wrap;
         }
