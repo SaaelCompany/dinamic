@@ -873,7 +873,151 @@
         }
     }
 
+    function ourFieldIds() {
+        var ids = {};
+        var blocks = blocksOf(config);
+        var i;
+        for (i = 0; i < blocks.length; i++) {
+            if (blocks[i].customFieldId) {
+                ids[blocks[i].customFieldId] = blocks[i];
+            }
+        }
+        return ids;
+    }
+
+    function rowsForOwner(rows, owner, block) {
+        var mine = [];
+        var known = {};
+        var fields = block && block.fields ? block.fields : [];
+        var i;
+        for (i = 0; i < fields.length; i++) {
+            if (fields[i] && fields[i].id) {
+                known[fields[i].id] = true;
+            }
+        }
+        for (i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            if (!row) {
+                continue;
+            }
+            if (row.owner === owner || (!row.owner && known[row.fieldId])) {
+                mine.push(row);
+            }
+        }
+        return mine;
+    }
+
+    function detailSignature(groups) {
+        var parts = [];
+        var i;
+        var j;
+        for (i = 0; i < groups.length; i++) {
+            parts.push(groups[i].owner);
+            for (j = 0; j < groups[i].rows.length; j++) {
+                parts.push(groups[i].rows[j].label || '');
+                parts.push(groups[i].rows[j].value || '');
+            }
+        }
+        return parts.join('\n');
+    }
+
+    function buildDetailRow(owner, row) {
+        var dl = document.createElement('dl');
+        dl.className = 'sdf-detail-row';
+        dl.setAttribute('data-sdf-owner', owner);
+        if (trim(row.label)) {
+            var dt = document.createElement('dt');
+            dt.appendChild(document.createTextNode(trim(row.label)));
+            dl.appendChild(dt);
+        }
+        var dd = document.createElement('dd');
+        dd.appendChild(document.createTextNode(row.value || ''));
+        dl.appendChild(dd);
+        return dl;
+    }
+
+    /**
+     * The portal prints the whole answer as one line under the field name.
+     * Replace that line with one label and value per question, like the other details.
+     */
+    function renderDetails(rows) {
+        var panel = document.querySelector('.activity-item.request-fields');
+        if (!panel || !rows || !rows.length) {
+            return false;
+        }
+        var fields = ourFieldIds();
+        var groups = [];
+        var seen = {};
+        var i;
+        for (i = 0; i < rows.length; i++) {
+            var owner = rows[i] && rows[i].owner;
+            if (!owner || seen[owner] || !panel.querySelector('dl[data-test-id="' + owner + '"]')) {
+                continue;
+            }
+            seen[owner] = true;
+            var mine = rowsForOwner(rows, owner, fields[owner]);
+            if (mine.length) {
+                groups.push({owner: owner, rows: mine});
+            }
+        }
+        if (!groups.length) {
+            var ids = [];
+            for (owner in fields) {
+                if (fields.hasOwnProperty(owner)) {
+                    ids.push(owner);
+                }
+            }
+            for (i = 0; i < ids.length; i++) {
+                if (!panel.querySelector('dl[data-test-id="' + ids[i] + '"]')) {
+                    continue;
+                }
+                mine = rowsForOwner(rows, ids[i], fields[ids[i]]);
+                if (mine.length) {
+                    groups.push({owner: ids[i], rows: mine});
+                }
+            }
+        }
+        if (!groups.length) {
+            return false;
+        }
+        var signature = detailSignature(groups);
+        if (panel.getAttribute('data-sdf-details') === signature && panel.querySelector('.sdf-detail-row')) {
+            return true;
+        }
+        var stale = panel.querySelectorAll('.sdf-detail-row');
+        for (i = stale.length - 1; i >= 0; i--) {
+            if (stale[i].parentNode) {
+                stale[i].parentNode.removeChild(stale[i]);
+            }
+        }
+        for (i = 0; i < groups.length; i++) {
+            var source = panel.querySelector('dl[data-test-id="' + groups[i].owner + '"]');
+            if (!source || !source.parentNode) {
+                continue;
+            }
+            var after = source;
+            var j;
+            for (j = 0; j < groups[i].rows.length; j++) {
+                var node = buildDetailRow(groups[i].owner, groups[i].rows[j]);
+                if (after.nextSibling) {
+                    after.parentNode.insertBefore(node, after.nextSibling);
+                } else {
+                    after.parentNode.appendChild(node);
+                }
+                after = node;
+            }
+            source.style.display = 'none';
+            source.setAttribute('data-sdf-replaced', '1');
+        }
+        panel.setAttribute('data-sdf-details', signature);
+        return !!panel.querySelector('.sdf-detail-row');
+    }
+
     function renderAnswers(rows) {
+        if (renderDetails(rows)) {
+            removeAnswers();
+            return;
+        }
         var existing = document.getElementById('sdf-portal-answers');
         if (!rows || !rows.length) {
             if (existing && existing.parentNode) {
@@ -1355,6 +1499,11 @@
                 flushPending();
                 if (isCreatePage() && config && blocksOf(config).length) {
                     ensureForm();
+                } else if (!isCreatePage()) {
+                    var key = issueKeyFromPath();
+                    if (key && answersState[key] && answersState[key].rows) {
+                        renderAnswers(answersState[key].rows);
+                    }
                 }
             }
         }, 700);

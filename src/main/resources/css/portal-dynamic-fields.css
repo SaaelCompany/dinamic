@@ -69,6 +69,22 @@
     white-space: pre-wrap;
 }
 
+.activity-item.request-fields > dl.sdf-detail-row {
+    margin: 0 0 16px;
+}
+
+.activity-item.request-fields > dl.sdf-detail-row > dt {
+    color: #707070;
+    font-weight: normal;
+    margin: 0;
+}
+
+.activity-item.request-fields > dl.sdf-detail-row > dd {
+    margin: 0;
+    color: #172b4d;
+    white-space: pre-wrap;
+}
+
 form.aui .field-group.sdf-field input.text,
 form.aui .field-group.sdf-field select.select,
 form.aui .field-group.sdf-field textarea.textarea,
