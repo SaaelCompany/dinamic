@@ -330,7 +330,7 @@
     function requestTypeMatches(cfg) {
         var ids = (cfg && cfg.requestTypeIds) || [];
         if (!ids.length) {
-            return true;
+            return false;
         }
         var match = location.pathname.match(/\/create\/(\d+)/);
         if (!match) {

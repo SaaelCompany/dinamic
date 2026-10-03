@@ -30,6 +30,9 @@
     .sdf-type-list { margin: 4px 0 8px 18px; max-height: 220px; overflow: auto; }
     .sdf-type-manual { display: flex; gap: 8px; margin-top: 8px; }
     .sdf-place { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .sdf-type-nav { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; padding: 12px; background: #deebff; border: 1px solid #b3d4ff; border-radius: 4px; }
+    .sdf-type-nav select { min-width: 280px; max-width: 100%; }
+    .sdf-type-nav .description { margin: 0; flex: 1 1 240px; }
     .sdf-block-empty { margin: 0 0 8px; color: #6b778c; }
     .sdf-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 4px; padding: 12px; margin: 0 0 10px; }
     .sdf-card-head, .sdf-option-row, .sdf-when { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -82,6 +85,7 @@
                     <button id="sdf-save" class="aui-button aui-button-primary" type="button" data-role="save">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
                 </div>
 
+                <div id="sdf-type-nav" class="sdf-type-nav"></div>
                 <div class="sdf-layout">
                     <div class="sdf-builder">
                         <div id="sdf-empty" class="sdf-empty">

@@ -16,6 +16,8 @@
         var textarea = document.getElementById('sdf-rules');
         var config = parseInitial(textarea.value);
         var requestTypes = null;
+        var selectedType = 0;
+        var typePicked = false;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
@@ -71,7 +73,6 @@
                 clearOnHide: src.clearOnHide !== false,
                 requestTypeIds: [],
                 _rawTypeIds: src.requestTypeIds || [],
-                _scope: (src.requestTypeIds && src.requestTypeIds.length) ? 'picked' : 'all',
                 place: src.place === 'start' || src.place === 'after' ? src.place : 'end',
                 placeAfter: src.placeAfter == null ? '' : String(src.placeAfter),
                 fields: normalizeFields(src.fields || [])
@@ -129,7 +130,7 @@
                         ids.push(number);
                     }
                 }
-                block.requestTypeIds = ids;
+                block.requestTypeIds = ids.length ? [ids[0]] : [];
                 delete block._rawTypeIds;
                 if (!block.id || seenBlocks[block.id]) {
                     block.id = freshBlockId(cfg.blocks);
@@ -287,12 +288,11 @@
         }
 
         function exportBlock(block, keepBlank) {
-            var ids = block._scope === 'picked' ? (block.requestTypeIds || []) : [];
             return {
                 id: block.id,
                 title: keepBlank ? (block.title || '') : trim(block.title || ''),
                 clearOnHide: block.clearOnHide !== false,
-                requestTypeIds: ids,
+                requestTypeIds: block.requestTypeIds || [],
                 place: block.place || 'end',
                 placeAfter: block.placeAfter || '',
                 fields: exportFields(block.fields, keepBlank)
@@ -359,18 +359,34 @@
         }
 
         function render() {
+            ensureType();
             while (host.firstChild) {
                 host.removeChild(host.firstChild);
             }
-            document.getElementById('sdf-empty').style.display = config.blocks.length ? 'none' : 'block';
-            document.getElementById('sdf-block-count').textContent =
-                AJS.I18n.getText('ru.saael.dynamicfields.admin.blocks.count') + ' ' + config.blocks.length;
-            document.getElementById('sdf-count').textContent =
-                AJS.I18n.getText('ru.saael.dynamicfields.admin.fields.count') + ' ' + fieldCount();
-            var i;
-            for (i = 0; i < config.blocks.length; i++) {
-                host.appendChild(renderBlock(config.blocks[i], i));
+            var visible = visibleBlockIndexes();
+            var empty = document.getElementById('sdf-empty');
+            empty.style.display = visible.length ? 'none' : 'block';
+            var note = empty.querySelector('p');
+            var exampleBtn = document.getElementById('sdf-example-empty');
+            if (!config.blocks.length) {
+                note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.empty');
+                exampleBtn.style.display = '';
+            } else if (!Number(selectedType)) {
+                note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassignedHint');
+                exampleBtn.style.display = 'none';
+            } else {
+                note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeEmpty');
+                exampleBtn.style.display = 'none';
             }
+            document.getElementById('sdf-block-count').textContent =
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.blocks.count') + ' ' + visible.length;
+            document.getElementById('sdf-count').textContent =
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.fields.count') + ' ' + visibleFieldCount();
+            var i;
+            for (i = 0; i < visible.length; i++) {
+                host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
+            }
+            renderTypeNav();
             renderPreview();
         }
 
@@ -394,8 +410,10 @@
             clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
             head.appendChild(clearLabel);
             head.appendChild(button('add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false));
-            head.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), blockIndex === 0));
-            head.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), blockIndex === config.blocks.length - 1));
+            var order = visibleBlockIndexes();
+            var pos = indexOfNumber(order, blockIndex);
+            head.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), pos <= 0));
+            head.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), pos < 0 || pos === order.length - 1));
             head.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
             card.appendChild(head);
             card.appendChild(renderScope(block));
@@ -413,14 +431,10 @@
 
         function renderScope(block) {
             var box = el('div', 'sdf-scope');
-            box.appendChild(el('div', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whereTitle')));
-            var modes = el('div', 'sdf-scope-modes');
-            modes.appendChild(scopeRadio(block, 'all', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopeAll'), block._scope !== 'picked'));
-            modes.appendChild(scopeRadio(block, 'picked', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopePicked'), block._scope === 'picked'));
-            box.appendChild(modes);
-            if (block._scope === 'picked') {
-                box.appendChild(renderTypeList(block));
-            }
+            var owner = el('div', 'sdf-place');
+            owner.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner')));
+            owner.appendChild(blockTypeSelect(block));
+            box.appendChild(owner);
             var placeRow = el('div', 'sdf-place');
             placeRow.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel')));
             placeRow.appendChild(placeSelect(block.place));
@@ -440,17 +454,186 @@
             return box;
         }
 
-        function scopeRadio(block, value, text, checked) {
-            var label = document.createElement('label');
-            var input = document.createElement('input');
-            input.type = 'radio';
-            input.name = 'sdf-scope-' + block.id;
-            input.setAttribute('data-role', 'scope');
-            input.value = value;
-            input.checked = checked;
-            label.appendChild(input);
-            label.appendChild(document.createTextNode(' ' + text));
-            return label;
+        function blockTypeSelect(block) {
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'block-type');
+            var current = (block.requestTypeIds && block.requestTypeIds.length) ? Number(block.requestTypeIds[0]) : 0;
+            var blank = document.createElement('option');
+            blank.value = '';
+            blank.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeUnset')));
+            if (!current) {
+                blank.selected = true;
+            }
+            select.appendChild(blank);
+            var options = typeOptions();
+            var i;
+            for (i = 0; i < options.length; i++) {
+                var option = document.createElement('option');
+                option.value = String(options[i].id);
+                option.appendChild(document.createTextNode(options[i].label));
+                if (options[i].id === current) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+            return select;
+        }
+
+        function typeOptions() {
+            var items = [];
+            var seen = {};
+            var catalog = requestTypes || [];
+            var i;
+            for (i = 0; i < catalog.length; i++) {
+                var id = Number(catalog[i].id);
+                if (!id || seen[id]) {
+                    continue;
+                }
+                seen[id] = true;
+                items.push({id: id, label: typeCaption(catalog[i])});
+            }
+            for (i = 0; i < config.blocks.length; i++) {
+                var ids = config.blocks[i].requestTypeIds || [];
+                if (ids.length && !seen[Number(ids[0])]) {
+                    var extra = Number(ids[0]);
+                    if (extra > 0) {
+                        seen[extra] = true;
+                        items.push({id: extra, label: String(extra)});
+                    }
+                }
+            }
+            return items;
+        }
+
+        function blockOnType(block, typeId) {
+            var ids = (block && block.requestTypeIds) || [];
+            if (!Number(typeId)) {
+                return !ids.length;
+            }
+            return ids.length > 0 && Number(ids[0]) === Number(typeId);
+        }
+
+        function visibleBlockIndexes() {
+            var out = [];
+            var i;
+            for (i = 0; i < config.blocks.length; i++) {
+                if (blockOnType(config.blocks[i], selectedType)) {
+                    out.push(i);
+                }
+            }
+            return out;
+        }
+
+        function visibleFieldCount() {
+            var n = 0;
+            var order = visibleBlockIndexes();
+            var i;
+            for (i = 0; i < order.length; i++) {
+                n += config.blocks[order[i]].fields.length;
+            }
+            return n;
+        }
+
+        function indexOfNumber(list, value) {
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (list[i] === value) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function countForType(typeId) {
+            var n = 0;
+            var i;
+            for (i = 0; i < config.blocks.length; i++) {
+                if (blockOnType(config.blocks[i], typeId)) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        function ensureType() {
+            if (typePicked) {
+                return;
+            }
+            var i;
+            for (i = 0; i < config.blocks.length; i++) {
+                if ((config.blocks[i].requestTypeIds || []).length) {
+                    selectedType = Number(config.blocks[i].requestTypeIds[0]);
+                    typePicked = true;
+                    return;
+                }
+            }
+            if (config.blocks.length) {
+                selectedType = 0;
+                typePicked = true;
+                return;
+            }
+            if (requestTypes && requestTypes.length) {
+                selectedType = Number(requestTypes[0].id);
+                typePicked = true;
+            }
+        }
+
+        function renderTypeNav() {
+            var nav = document.getElementById('sdf-type-nav');
+            if (!nav) {
+                return;
+            }
+            while (nav.firstChild) {
+                nav.removeChild(nav.firstChild);
+            }
+            nav.appendChild(el('span', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeNav')));
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'current-type');
+            var options = typeOptions();
+            var i;
+            if (countForType(0) > 0 || !Number(selectedType)) {
+                var none = document.createElement('option');
+                none.value = '0';
+                var unassigned = countForType(0);
+                none.appendChild(document.createTextNode(
+                    AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassigned') + (unassigned ? ' (' + unassigned + ')' : '')));
+                if (!Number(selectedType)) {
+                    none.selected = true;
+                }
+                select.appendChild(none);
+            }
+            for (i = 0; i < options.length; i++) {
+                var option = document.createElement('option');
+                option.value = String(options[i].id);
+                var count = countForType(options[i].id);
+                option.appendChild(document.createTextNode(options[i].label + (count ? ' (' + count + ')' : '')));
+                if (Number(selectedType) === options[i].id) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+            if (requestTypes === null) {
+                var loading = document.createElement('option');
+                loading.value = '';
+                loading.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
+                select.appendChild(loading);
+            }
+            nav.appendChild(select);
+            if (!requestTypes || !requestTypes.length) {
+                var manual = document.createElement('input');
+                manual.type = 'text';
+                manual.className = 'text';
+                manual.setAttribute('data-role', 'type-manual');
+                manual.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
+                nav.appendChild(manual);
+                nav.appendChild(button('open-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
+            }
+            var hint = !Number(selectedType)
+                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassignedHint')
+                : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.viewingHint');
+            nav.appendChild(el('p', 'description', hint));
         }
 
         function placeSelect(current) {
@@ -475,54 +658,11 @@
             return select;
         }
 
-        function renderTypeList(block) {
-            var list = el('div', 'sdf-type-list');
-            if (requestTypes === null) {
-                list.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
-            } else if (!requestTypes.length) {
-                list.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requestTypesHint')));
-            }
-            var known = {};
-            var i;
-            var catalog = requestTypes || [];
-            for (i = 0; i < catalog.length; i++) {
-                known[catalog[i].id] = true;
-                list.appendChild(typeCheck(block, catalog[i].id, typeCaption(catalog[i])));
-            }
-            for (i = 0; i < (block.requestTypeIds || []).length; i++) {
-                if (!known[block.requestTypeIds[i]]) {
-                    list.appendChild(typeCheck(block, block.requestTypeIds[i], String(block.requestTypeIds[i])));
-                }
-            }
-            var manual = el('div', 'sdf-type-manual');
-            var manualInput = document.createElement('input');
-            manualInput.type = 'text';
-            manualInput.className = 'text';
-            manualInput.setAttribute('data-role', 'type-manual');
-            manualInput.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
-            manual.appendChild(manualInput);
-            manual.appendChild(button('type-add', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
-            list.appendChild(manual);
-            return list;
-        }
-
         function typeCaption(item) {
             if (item.project) {
                 return item.project + ' \u2014 ' + item.name;
             }
             return item.name || String(item.id);
-        }
-
-        function typeCheck(block, id, caption) {
-            var label = document.createElement('label');
-            var check = document.createElement('input');
-            check.type = 'checkbox';
-            check.setAttribute('data-role', 'type-pick');
-            check.value = String(id);
-            check.checked = hasId(block.requestTypeIds, id);
-            label.appendChild(check);
-            label.appendChild(document.createTextNode(' ' + caption));
-            return label;
         }
 
         function hasId(list, id) {
@@ -871,6 +1011,10 @@
                 addBlock();
                 return;
             }
+            if (role === 'open-type') {
+                openTypedId();
+                return;
+            }
             if (role === 'save') {
                 save();
                 return;
@@ -902,8 +1046,6 @@
             if (role === 'remove-block') {
                 config.blocks.splice(loc.blockIndex, 1);
                 refresh();
-            } else if (role === 'type-add') {
-                addManualType(loc.blockIndex);
             } else if (role === 'add-field') {
                 addField(loc.blockIndex, null);
             } else if (role === 'block-up') {
@@ -963,6 +1105,12 @@
 
         function onChange(e) {
             var role = roleOf(e.target);
+            if (role === 'current-type') {
+                selectedType = parseInt(e.target.value, 10) || 0;
+                typePicked = true;
+                refresh();
+                return;
+            }
             var loc = locate(e.target);
             if (loc.blockIndex < 0) {
                 return;
@@ -974,31 +1122,14 @@
                 renderPreview();
                 return;
             }
-            if (role === 'scope') {
-                block._scope = e.target.value === 'picked' ? 'picked' : 'all';
-                if (block._scope === 'all') {
-                    block.requestTypeIds = [];
-                    block._typesBad = false;
+            if (role === 'block-type') {
+                var typeId = parseInt(e.target.value, 10) || 0;
+                block.requestTypeIds = typeId > 0 ? [typeId] : [];
+                if (typeId > 0 && typeId !== Number(selectedType)) {
+                    showMessage('success', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.moved')]);
                 }
-                refresh();
-                return;
-            }
-            if (role === 'type-pick') {
-                var picked = parseInt(e.target.value, 10);
-                var nextIds = [];
-                var n;
-                for (n = 0; n < (block.requestTypeIds || []).length; n++) {
-                    if (Number(block.requestTypeIds[n]) !== picked) {
-                        nextIds.push(Number(block.requestTypeIds[n]));
-                    }
-                }
-                if (e.target.checked && picked > 0) {
-                    nextIds.push(picked);
-                }
-                block.requestTypeIds = nextIds;
-                block._scope = 'picked';
-                block._typesBad = false;
                 sync();
+                refresh();
                 return;
             }
             if (role === 'place') {
@@ -1053,45 +1184,16 @@
             }
         }
 
-        function addManualType(blockIndex) {
-            var block = config.blocks[blockIndex];
-            var card = host.querySelectorAll('.sdf-block-card')[blockIndex];
-            var input = card ? card.querySelector('input[data-role="type-manual"]') : null;
+        function openTypedId() {
+            var input = document.querySelector('#sdf-type-nav input[data-role="type-manual"]');
             var raw = input ? trim(input.value) : '';
             if (!/^[1-9]\d*$/.test(raw)) {
-                block._typesBad = !!raw;
-                if (raw) {
-                    showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needTypes')]);
-                }
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needTypes')]);
                 return;
             }
-            var id = parseInt(raw, 10);
-            if (!hasId(block.requestTypeIds, id)) {
-                block.requestTypeIds.push(id);
-            }
-            block._scope = 'picked';
-            block._typesBad = false;
+            selectedType = parseInt(raw, 10);
+            typePicked = true;
             refresh();
-        }
-
-        function readTypes(block, raw) {
-            var parts = String(raw || '').split(',');
-            var ids = [];
-            var bad = false;
-            var i;
-            for (i = 0; i < parts.length; i++) {
-                var part = trim(parts[i]);
-                if (!part) {
-                    continue;
-                }
-                if (!/^[1-9]\d*$/.test(part)) {
-                    bad = true;
-                } else {
-                    ids.push(parseInt(part, 10));
-                }
-            }
-            block.requestTypeIds = ids;
-            block._typesBad = bad;
         }
 
         function renameOption(block, fieldId, oldValue, newValue) {
@@ -1198,7 +1300,7 @@
         }
 
         function focusField(blockIndex, fieldIndex) {
-            var scope = host.querySelectorAll('.sdf-block-card')[blockIndex];
+            var scope = host.querySelector('.sdf-block-card[data-block-index="' + blockIndex + '"]');
             if (!scope) {
                 return;
             }
@@ -1234,19 +1336,21 @@
         }
 
         function addBlock() {
+            if (!(selectedType > 0)) {
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.pickTypeFirst')]);
+                return;
+            }
             config.blocks.push({
                 id: freshBlockId(config.blocks),
                 title: '',
                 clearOnHide: true,
-                requestTypeIds: [],
-                _scope: 'all',
+                requestTypeIds: [selectedType],
                 place: 'end',
                 placeAfter: '',
                 fields: []
             });
             refresh();
-            var cards = host.querySelectorAll('.sdf-block-card');
-            var card = cards[cards.length - 1];
+            var card = host.querySelector('.sdf-block-card[data-block-index="' + (config.blocks.length - 1) + '"]');
             if (card && card.scrollIntoView) {
                 card.scrollIntoView(false);
             }
@@ -1290,12 +1394,16 @@
         }
 
         function moveBlock(index, delta) {
-            var next = index + delta;
-            if (next < 0 || next >= config.blocks.length) {
+            var order = visibleBlockIndexes();
+            var pos = indexOfNumber(order, index);
+            var nextPos = pos + delta;
+            if (pos < 0 || nextPos < 0 || nextPos >= order.length) {
                 return;
             }
-            var item = config.blocks.splice(index, 1)[0];
-            config.blocks.splice(next, 0, item);
+            var other = order[nextPos];
+            var item = config.blocks[index];
+            config.blocks[index] = config.blocks[other];
+            config.blocks[other] = item;
             refresh();
         }
 
@@ -1310,10 +1418,7 @@
             }
             var b;
             for (b = 0; b < config.blocks.length; b++) {
-                if (config.blocks[b]._typesBad) {
-                    pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needTypes'));
-                }
-                if (config.blocks[b]._scope === 'picked' && !(doc.blocks[b].requestTypeIds || []).length) {
+                if (!(config.blocks[b].requestTypeIds || []).length) {
                     pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopeEmpty'));
                 }
                 if ((config.blocks[b].place === 'after') && !trim(config.blocks[b].placeAfter)) {
@@ -1439,7 +1544,23 @@
                 dataType: 'text',
                 headers: {'X-Atlassian-Token': 'no-check'}
             }).done(function (text) {
+                var keep = selectedType;
                 applyDocument(parseBody(text));
+                if (!(keep > 0) && requestTypes && requestTypes.length) {
+                    keep = Number(requestTypes[0].id);
+                }
+                if (keep > 0) {
+                    selectedType = keep;
+                    typePicked = true;
+                    var i;
+                    for (i = 0; i < config.blocks.length; i++) {
+                        if (!(config.blocks[i].requestTypeIds || []).length) {
+                            config.blocks[i].requestTypeIds = [selectedType];
+                        }
+                    }
+                    sync();
+                    refresh();
+                }
                 showMessage('success', [AJS.I18n.getText('ru.saael.dynamicfields.admin.example.loaded')]);
             }).fail(function (xhr) {
                 showMessage('error', errorLines(xhr));
@@ -1510,7 +1631,7 @@
             var b;
             for (b = 0; b < cfg.blocks.length; b++) {
                 var block = cfg.blocks[b];
-                if (!block.fields.length) {
+                if (!block.fields.length || !blockOnType(block, selectedType)) {
                     continue;
                 }
                 any = true;

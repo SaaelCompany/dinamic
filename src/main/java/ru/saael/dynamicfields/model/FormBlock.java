@@ -17,7 +17,7 @@ public class FormBlock {
     private String id;
     private String title = "";
     private boolean clearOnHide = true;
-    /** Empty — show on every request type. */
+    /** The request types that show this block. Empty means the block is not shown. */
     private List<Long> requestTypeIds = new ArrayList<Long>();
     /** {@code end} before the send button, {@code start} at the top, {@code after} a named field. */
     private String place = "end";
