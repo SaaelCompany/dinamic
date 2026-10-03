@@ -386,7 +386,14 @@
         var host = existing || document.createElement('div');
         host.id = 'sdf-portal-answers';
         host.className = 'sdf-answers';
-        if (host.parentNode !== mount) {
+        var header = mount.querySelector ? mount.querySelector('.cv-page-title, .vp-request-header') : null;
+        if (header && header.parentNode === mount) {
+            if (header.nextSibling) {
+                mount.insertBefore(host, header.nextSibling);
+            } else {
+                mount.appendChild(host);
+            }
+        } else if (host.parentNode !== mount) {
             mount.insertBefore(host, mount.firstChild);
         }
         while (host.firstChild) {
