@@ -46,11 +46,23 @@ unzip -p target/portal-dynamic-fields-1.0.0.jar ru/saael/dynamicfields/rest/Rule
 # ... 0000 0034  -> major version 52 = Java 8
 ```
 
-Запуск тестовой Jira c плагином (скачивает Jira 8.21 + JSM 4.21, нужен Atlassian SDK или просто Maven):
+Запуск тестовой Jira c плагином (скачивает Jira 8.21.1 + JSM 4.21.1, ~1 ГБ):
 
 ```bash
-mvn jira:run      # или atlas-run
+mvn jira:run      # или atlas-run; потом http://localhost:2990/jira, admin / admin
 ```
+
+Без Atlassian SDK для `jira:run` (но не для `mvn package`) дополнительно нужны:
+репозиторий Atlassian в `~/.m2/settings.xml` (как `<pluginRepository>`, его требует build‑extension POM‑а Jira) и
+заглушка для `javax.transaction:jta:1.0.1B`, которого нет в публичных репозиториях:
+
+```bash
+mvn install:install-file -DgroupId=javax.transaction -DartifactId=jta -Dversion=1.0.1B -Dpackaging=jar \
+    -Dfile=$HOME/.m2/repository/javax/transaction/javax.transaction-api/1.2/javax.transaction-api-1.2.jar
+```
+
+Пока `jira:run` запущен, пересобирайте плагин командой `mvn package` **без** `clean` — QuickReload сам
+подхватит новый jar; `clean` удалит `target/jira` вместе с работающей Jira.
 
 ## Установка
 
@@ -103,6 +115,14 @@ mvn jira:run      # или atlas-run
   «Дополнительная специальность») — два правила с одинаковым `when.fieldId` и разными `values`, как в примере.
 * **Два отдельных чекбокс‑поля** — одно правило с `"show": ["customfield_10101", "customfield_10102"]`,
   а дальше по правилу на каждое поле с пустым `values`.
+
+## Проверено на реальном портале
+
+Сценарий из примера прогнан на Jira 8.21.1 + JSM 4.21.1 (форма «Get IT help» портала): чекбоксы JSM
+рендерятся как `<fieldset class="field-group group">` с `<legend>` и `input[name="customfield_…"]`, остальные
+поля — как `<div class="field-group">` с `<label class="field-label">`. Скрытие/показ четырёх уровней,
+сброс значений при скрытии, общие целевые поля у нескольких правил и отправка запроса работают без
+дополнительных `containerSelectors`.
 
 ## Как это работает
 

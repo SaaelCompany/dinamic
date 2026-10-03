@@ -530,6 +530,10 @@
             if (!fieldId || /^(atl_token|os_|jira\.|sd-)/.test(fieldId)) {
                 return;
             }
+            // hidden inputs of the form itself (projectId, pid, ...) are not fields a rule can use
+            if (control.type === 'hidden' && !/^customfield_/.test(fieldId)) {
+                return;
+            }
             var entry = byId[fieldId];
             if (!entry) {
                 var container = containerOf(control, fieldId);
