@@ -12,18 +12,28 @@ public class IssueFieldSyncTest {
 
     @Test
     public void questionNameBecomesTheJiraFieldName() {
-        assertEquals("Специальность", IssueFieldSync.fieldName("Специальность", "field5", new HashSet<String>()));
+        assertEquals("Специальность", IssueFieldSync.fieldName(null, "Специальность", "field5", new HashSet<String>()));
     }
 
     @Test
     public void blankQuestionUsesItsId() {
-        assertEquals("field5", IssueFieldSync.fieldName("  ", "field5", new HashSet<String>()));
+        assertEquals("field5", IssueFieldSync.fieldName(null, "  ", "field5", new HashSet<String>()));
+    }
+
+    @Test
+    public void customIssueNameWinsOverTheQuestion() {
+        assertEquals("Филиал", IssueFieldSync.fieldName("Филиал", "Специальность", "field5", new HashSet<String>()));
+    }
+
+    @Test
+    public void blankIssueNameUsesTheQuestion() {
+        assertEquals("Специальность", IssueFieldSync.fieldName("  ", "Специальность", "field5", new HashSet<String>()));
     }
 
     @Test
     public void duplicateNamesGetASuffix() {
         assertEquals("Специальность 2", IssueFieldSync.fieldName(
-                "Специальность", "field9", new HashSet<String>(Arrays.asList("специальность"))));
+                null, "Специальность", "field9", new HashSet<String>(Arrays.asList("специальность"))));
     }
 
     @Test

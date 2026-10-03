@@ -22,6 +22,7 @@
         var selectedProject = '';
         var projectChosen = false;
         var selectedField = {blockIndex: -1, index: 0};
+        var selectedBlockId = '';
         var pendingLink = null;
         var ignoreLinkClickUntil = 0;
         var ignorePickUntil = 0;
@@ -140,6 +141,7 @@
                 fields.push({
                     id: src.id ? String(src.id) : '',
                     jiraFieldId: src.jiraFieldId ? String(src.jiraFieldId) : '',
+                    issueName: src.issueName == null ? '' : String(src.issueName),
                     label: src.label == null ? '' : String(src.label),
                     type: src.type || 'text',
                     options: options,
@@ -302,6 +304,11 @@
                 if (src.jiraFieldId) {
                     field.jiraFieldId = src.jiraFieldId;
                 }
+                var issueName = trim(src.issueName || '');
+                var automaticName = trim(src.label) || src.id || '';
+                if (issueName && issueName !== automaticName) {
+                    field.issueName = issueName;
+                }
                 var parent = null;
                 if (src.when && src.when.fieldId) {
                     var p;
@@ -430,9 +437,9 @@
                 note.textContent = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeEmpty');
             }
             document.getElementById('sdf-block-count').textContent =
-                AJS.I18n.getText('ru.saael.dynamicfields.admin.blocks.count') + ' ' + visible.length;
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.blocks.count') + ' ' + listedBlockIndexes().length;
             document.getElementById('sdf-count').textContent =
-                AJS.I18n.getText('ru.saael.dynamicfields.admin.fields.count') + ' ' + visibleFieldCount();
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.fields.count') + ' ' + listedFieldCount();
             var i;
             for (i = 0; i < visible.length; i++) {
                 host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
@@ -588,7 +595,21 @@
             return !onlyField || block.customFieldId === onlyField;
         }
 
-        function visibleBlockIndexes() {
+        function shownInBuilder(block) {
+            if (!shownBlock(block)) {
+                return false;
+            }
+            if (onlyField) {
+                return true;
+            }
+            var listed = listedBlockIndexes();
+            if (listed.length < 2) {
+                return true;
+            }
+            return block.id === selectedBlockId;
+        }
+
+        function listedBlockIndexes() {
             var out = [];
             var i;
             for (i = 0; i < config.blocks.length; i++) {
@@ -599,14 +620,49 @@
             return out;
         }
 
-        function visibleFieldCount() {
+        function ensureActiveBlock() {
+            var listed = listedBlockIndexes();
+            if (!listed.length) {
+                selectedBlockId = '';
+                return;
+            }
+            var i;
+            for (i = 0; i < listed.length; i++) {
+                if (config.blocks[listed[i]].id === selectedBlockId) {
+                    return;
+                }
+            }
+            selectedBlockId = config.blocks[listed[0]].id;
+        }
+
+        function visibleBlockIndexes() {
+            ensureActiveBlock();
+            var listed = listedBlockIndexes();
+            if (onlyField || listed.length < 2) {
+                return listed;
+            }
+            var out = [];
+            var i;
+            for (i = 0; i < listed.length; i++) {
+                if (config.blocks[listed[i]].id === selectedBlockId) {
+                    out.push(listed[i]);
+                }
+            }
+            return out.length ? out : listed;
+        }
+
+        function listedFieldCount() {
             var n = 0;
-            var order = visibleBlockIndexes();
+            var order = listedBlockIndexes();
             var i;
             for (i = 0; i < order.length; i++) {
                 n += config.blocks[order[i]].fields.length;
             }
             return n;
+        }
+
+        function blockCaption(block) {
+            return block.customFieldName || block.title || block.customFieldId || block.id || '';
         }
 
         function indexOfNumber(list, value) {
@@ -655,12 +711,40 @@
 
         function renderTypeNav() {
             var nav = document.getElementById('sdf-type-nav');
-            if (nav) {
-                nav.style.display = 'none';
-                while (nav.firstChild) {
-                    nav.removeChild(nav.firstChild);
-                }
+            if (!nav) {
+                return;
             }
+            while (nav.firstChild) {
+                nav.removeChild(nav.firstChild);
+            }
+            var listed = listedBlockIndexes();
+            if (onlyField || listed.length < 2) {
+                nav.style.display = 'none';
+                return;
+            }
+            nav.style.display = 'block';
+            nav.appendChild(el('h3', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldsNav')));
+            var list = el('ul', 'aui-nav');
+            var i;
+            for (i = 0; i < listed.length; i++) {
+                var block = config.blocks[listed[i]];
+                list.appendChild(fieldNavItem(block, block.id === selectedBlockId));
+            }
+            nav.appendChild(list);
+        }
+
+        function fieldNavItem(block, selected) {
+            var item = el('li', selected ? 'aui-nav-selected' : null);
+            var link = document.createElement('a');
+            link.href = '#sdf-app';
+            link.setAttribute('data-role', 'pick-block');
+            link.setAttribute('data-value', block.id);
+            var caption = blockCaption(block);
+            link.title = caption;
+            link.appendChild(el('span', 'sdf-nav-name', caption));
+            link.appendChild(el('span', 'aui-lozenge aui-lozenge-subtle', String((block.fields || []).length)));
+            item.appendChild(link);
+            return item;
         }
 
         function typeLink(id, label, count, selected) {
@@ -1325,14 +1409,29 @@
             return name;
         }
 
+        function automaticIssueName(field) {
+            return trim(field.label) || field.id || '';
+        }
+
         function idInput(field) {
             var input = document.createElement('input');
             input.type = 'text';
-            input.className = 'text';
-            input.readOnly = true;
-            input.value = field.label || field.id || '';
-            input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldPending'));
+            input.className = 'text long-field';
+            input.setAttribute('data-role', 'issue-name');
+            input.setAttribute('maxlength', '240');
+            input.setAttribute('placeholder', automaticIssueName(field) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldPending'));
+            input.value = trim(field.issueName) ? field.issueName : automaticIssueName(field);
             return input;
+        }
+
+        function applyIssueName(field, typed) {
+            var value = typed == null ? '' : String(typed);
+            var automatic = automaticIssueName(field);
+            if (!trim(value) || trim(value) === automatic) {
+                field.issueName = '';
+            } else {
+                field.issueName = value;
+            }
         }
 
         function renderBlank(field) {
@@ -1946,6 +2045,29 @@
                 refresh();
                 return;
             }
+            if (role === 'pick-block') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var pickedBlock = e.target;
+                while (pickedBlock && pickedBlock !== app && !(pickedBlock.getAttribute && pickedBlock.getAttribute('data-value'))) {
+                    pickedBlock = pickedBlock.parentNode;
+                }
+                if (!pickedBlock || !pickedBlock.getAttribute) {
+                    return;
+                }
+                selectedBlockId = pickedBlock.getAttribute('data-value') || '';
+                var pickedIndex = -1;
+                var bi;
+                for (bi = 0; bi < config.blocks.length; bi++) {
+                    if (config.blocks[bi].id === selectedBlockId) {
+                        pickedIndex = bi;
+                    }
+                }
+                selectedField = {blockIndex: pickedIndex, index: 0};
+                refresh();
+                return;
+            }
             if (role === 'current-type') {
                 if (e.preventDefault) {
                     e.preventDefault();
@@ -2090,6 +2212,9 @@
             } else if (role === 'label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].label = e.target.value;
                 refreshKeepingFocus();
+            } else if (role === 'issue-name' && loc.fieldIndex >= 0) {
+                applyIssueName(block.fields[loc.fieldIndex], e.target.value);
+                sync();
             } else if (role === 'option' && loc.fieldIndex >= 0) {
                 var optIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
                 var field = block.fields[loc.fieldIndex];
@@ -2206,6 +2331,12 @@
                 return;
             }
             var field = block.fields[loc.fieldIndex];
+            if (role === 'issue-name') {
+                if (!trim(field.issueName)) {
+                    e.target.value = automaticIssueName(field);
+                }
+                return;
+            }
             if (role === 'type') {
                 field.type = e.target.value;
                 if (isChoice(field.type)) {
@@ -2702,7 +2833,7 @@
             var b;
             for (b = 0; b < cfg.blocks.length; b++) {
                 var block = cfg.blocks[b];
-                if (!shownBlock(block) || !block.fields.length) {
+                if (!shownInBuilder(block) || !block.fields.length) {
                     continue;
                 }
                 any = true;

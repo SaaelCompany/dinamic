@@ -30,6 +30,8 @@ public class FormField {
     private String id;
     /** Jira custom field id, for example {@code customfield_10100}. Empty until the form is saved. */
     private String jiraFieldId;
+    /** Name of the Jira text field used by automation. Empty means the question label, then the id. */
+    private String issueName;
     private String label;
     private String type = TEXT;
     private List<String> options = new ArrayList<String>();
@@ -55,6 +57,14 @@ public class FormField {
 
     public void setJiraFieldId(String jiraFieldId) {
         this.jiraFieldId = jiraFieldId;
+    }
+
+    public String getIssueName() {
+        return issueName;
+    }
+
+    public void setIssueName(String issueName) {
+        this.issueName = issueName;
     }
 
     public String getLabel() {

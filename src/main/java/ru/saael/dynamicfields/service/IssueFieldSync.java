@@ -180,7 +180,7 @@ public class IssueFieldSync {
             }
             taken.add(other.getName().toLowerCase());
         }
-        String name = fieldName(field.getLabel(), field.getId(), taken);
+        String name = fieldName(field.getIssueName(), field.getLabel(), field.getId(), taken);
         reserved.add(name.toLowerCase());
         String description = marker(blockId, field.getId());
         if (current == null) {
@@ -254,10 +254,8 @@ public class IssueFieldSync {
     }
 
     private static String display(FormField field) {
-        if (field.getLabel() != null && field.getLabel().trim().length() > 0) {
-            return field.getLabel().trim();
-        }
-        return field.getId();
+        String named = fieldName(field.getIssueName(), field.getLabel(), field.getId(), null);
+        return named == null || named.trim().isEmpty() ? field.getId() : named;
     }
 
     static String marker(String blockId, String fieldId) {
@@ -267,12 +265,13 @@ public class IssueFieldSync {
     }
 
     /**
-     * Name shown in the automation field list. A repeated name gets a numeric suffix.
+     * Name shown in the automation field list. A custom name wins, then the question, then the id.
+     * A repeated name gets a numeric suffix.
      */
-    static String fieldName(String label, String id, Set<String> takenLower) {
-        String base = label == null ? "" : label.trim();
+    static String fieldName(String issueName, String label, String id, Set<String> takenLower) {
+        String base = firstText(issueName, label, id);
         if (base.isEmpty()) {
-            base = id == null || id.trim().isEmpty() ? "portal" : id.trim();
+            base = "portal";
         }
         if (base.length() > 240) {
             base = base.substring(0, 240);
@@ -290,5 +289,17 @@ public class IssueFieldSync {
             }
         }
         return name;
+    }
+
+    private static String firstText(String... parts) {
+        if (parts == null) {
+            return "";
+        }
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i] != null && parts[i].trim().length() > 0) {
+                return parts[i].trim();
+            }
+        }
+        return "";
     }
 }
