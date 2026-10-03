@@ -209,6 +209,7 @@
         wrap.setAttribute('data-sdf-type', field.type || 'text');
         if (trim(field.label)) {
             var label = document.createElement('label');
+            label.className = 'field-label';
             label.appendChild(document.createTextNode(trim(field.label)));
             wrap.appendChild(label);
         }
@@ -218,10 +219,12 @@
             var choices = document.createElement('div');
             choices.className = 'sdf-choices';
             for (i = 0; i < options.length; i++) {
-                var line = document.createElement('label');
-                line.className = field.type === 'checkbox' ? 'checkbox' : 'radio';
+                var line = document.createElement('div');
+                line.className = field.type;
                 var input = document.createElement('input');
+                input.className = field.type;
                 input.type = field.type;
+                input.id = 'sdf-' + (blockId || 'main') + '-' + field.id + '-' + i;
                 input.value = options[i];
                 input.checked = listHas(field.defaults, options[i]);
                 // Not a successful control of the Jira request form, so the portal does not submit it.
@@ -229,8 +232,11 @@
                 if (field.type === 'radio') {
                     input.setAttribute('name', 'sdf-' + (blockId || 'main') + '-' + field.id);
                 }
+                var caption = document.createElement('label');
+                caption.setAttribute('for', input.id);
+                caption.appendChild(document.createTextNode(options[i]));
                 line.appendChild(input);
-                line.appendChild(document.createTextNode(' ' + options[i]));
+                line.appendChild(caption);
                 choices.appendChild(line);
             }
             wrap.appendChild(choices);

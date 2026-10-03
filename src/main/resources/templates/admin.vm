@@ -48,7 +48,7 @@
                 </div>
 
                 <div class="sdf-layout">
-                    <div id="sdf-type-nav" class="sdf-type-nav"></div>
+                    <div id="sdf-type-nav" class="aui-navgroup aui-navgroup-vertical sdf-type-nav"></div>
                     <div class="sdf-builder">
                         <div id="sdf-empty" class="aui-message sdf-empty">
                             <p>$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>

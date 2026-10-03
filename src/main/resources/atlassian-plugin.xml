@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <atlassian-plugin key="${atlassian.plugin.key}" name="${project.name}" plugins-version="2">
     <plugin-info>
-        <description>${project.description}</description>
+        <description><![CDATA[
+            <p>Дополнительные вопросы на клиентском портале Jira Service Management. Поле создаётся в настраиваемых полях, вопросы собираются в конструкторе, затем поле добавляется в тип запроса.</p>
+            <p>Поддержка: niouti@yandex.ru, nioutistudio@gmail.com</p>
+            <p><img src="https://raw.githubusercontent.com/SaaelCompany/dinamic/cursor/portal-dynamic-fields-plugin-4b5b/src/main/resources/images/portal.png" alt="Вопросы на портале"></p>
+            <p><img src="https://raw.githubusercontent.com/SaaelCompany/dinamic/cursor/portal-dynamic-fields-plugin-4b5b/src/main/resources/images/fields.png" alt="Список полей в конструкторе"></p>
+        ]]></description>
         <version>${project.version}</version>
-        <vendor name="${project.organization.name}"/>
+        <vendor name="${project.organization.name}" url="${project.organization.url}"/>
         <param name="configure.url">/plugins/servlet/dynamic-fields/admin</param>
     </plugin-info>
 

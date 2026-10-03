@@ -26,16 +26,12 @@
 }
 
 .sdf-label,
-.sdf-field > label {
+.sdf-field > label.field-label {
     display: block;
     float: none;
     width: auto;
-    margin: 0 0 4px;
+    margin: 0 0 5px;
     padding: 0;
-    color: #6b778c;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.333;
 }
 
 .sdf-answer-label {
@@ -44,19 +40,9 @@
     font-weight: normal;
 }
 
-.sdf-option,
-.sdf-choices label,
-.sdf-field label.checkbox,
-.sdf-field label.radio {
-    display: block;
-    float: none;
-    width: auto;
-    margin: 4px 0;
-    padding: 0;
-    color: #172b4d;
-    font-size: 14px;
-    font-weight: normal;
-    line-height: 1.428;
+.sdf-choices .checkbox,
+.sdf-choices .radio {
+    margin-top: 4px;
 }
 
 .sdf-answer-group {
