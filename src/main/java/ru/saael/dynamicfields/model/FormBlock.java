@@ -19,6 +19,10 @@ public class FormBlock {
     private boolean clearOnHide = true;
     /** Empty — show on every request type. */
     private List<Long> requestTypeIds = new ArrayList<Long>();
+    /** {@code end} before the send button, {@code start} at the top, {@code after} a named field. */
+    private String place = "end";
+    /** Portal label of the field this block follows when {@code place} is {@code after}. */
+    private String placeAfter = "";
     private List<FormField> fields = new ArrayList<FormField>();
 
     public String getId() {
@@ -51,6 +55,22 @@ public class FormBlock {
 
     public void setRequestTypeIds(List<Long> requestTypeIds) {
         this.requestTypeIds = requestTypeIds == null ? new ArrayList<Long>() : requestTypeIds;
+    }
+
+    public String getPlace() {
+        return place;
+    }
+
+    public void setPlace(String place) {
+        this.place = place == null || place.trim().isEmpty() ? "end" : place.trim();
+    }
+
+    public String getPlaceAfter() {
+        return placeAfter;
+    }
+
+    public void setPlaceAfter(String placeAfter) {
+        this.placeAfter = placeAfter == null ? "" : placeAfter;
     }
 
     public List<FormField> getFields() {

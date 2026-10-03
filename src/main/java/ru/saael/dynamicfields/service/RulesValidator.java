@@ -21,6 +21,7 @@ public final class RulesValidator {
     private static final Pattern FIELD_ID = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]{0,40}$");
     private static final List<String> TYPES = Arrays.asList(
             FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.TEXT, FormField.TEXTAREA);
+    private static final List<String> PLACES = Arrays.asList("end", "start", "after");
 
     private RulesValidator() {
     }
@@ -50,6 +51,12 @@ public final class RulesValidator {
                 errors.add(blockName + ": \"id\" has invalid format: \"" + block.getId() + "\"");
             } else if (!blockIds.add(block.getId())) {
                 errors.add(blockName + ": duplicate id \"" + block.getId() + "\"");
+            }
+            String place = block.getPlace() == null || block.getPlace().trim().isEmpty() ? "end" : block.getPlace().trim();
+            if (!PLACES.contains(place)) {
+                errors.add(blockName + ": unknown place \"" + place + "\"");
+            } else if ("after".equals(place) && isBlank(block.getPlaceAfter())) {
+                errors.add(blockName + ": name the field the block should follow");
             }
             validateFields(block.getFields(), errors);
             List<Long> typeIds = block.getRequestTypeIds();

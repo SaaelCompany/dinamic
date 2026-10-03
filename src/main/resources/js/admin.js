@@ -15,12 +15,14 @@
         var preview = document.getElementById('sdf-preview');
         var textarea = document.getElementById('sdf-rules');
         var config = parseInitial(textarea.value);
+        var requestTypes = null;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
         app.addEventListener('change', onChange);
 
         refresh();
+        loadRequestTypes();
 
         function parseInitial(text) {
             try {
@@ -69,6 +71,9 @@
                 clearOnHide: src.clearOnHide !== false,
                 requestTypeIds: [],
                 _rawTypeIds: src.requestTypeIds || [],
+                _scope: (src.requestTypeIds && src.requestTypeIds.length) ? 'picked' : 'all',
+                place: src.place === 'start' || src.place === 'after' ? src.place : 'end',
+                placeAfter: src.placeAfter == null ? '' : String(src.placeAfter),
                 fields: normalizeFields(src.fields || [])
             };
         }
@@ -266,13 +271,7 @@
             var i;
             for (i = 0; i < config.blocks.length; i++) {
                 var block = config.blocks[i];
-                blocks.push({
-                    id: block.id,
-                    title: block.title || '',
-                    clearOnHide: block.clearOnHide !== false,
-                    requestTypeIds: block.requestTypeIds || [],
-                    fields: exportFields(block.fields, true)
-                });
+                blocks.push(exportBlock(block, true));
             }
             return {version: 3, blocks: blocks};
         }
@@ -282,15 +281,22 @@
             var i;
             for (i = 0; i < config.blocks.length; i++) {
                 var block = config.blocks[i];
-                blocks.push({
-                    id: block.id,
-                    title: trim(block.title || ''),
-                    clearOnHide: block.clearOnHide !== false,
-                    requestTypeIds: block.requestTypeIds || [],
-                    fields: exportFields(block.fields, false)
-                });
+                blocks.push(exportBlock(block, false));
             }
             return {version: 3, blocks: blocks};
+        }
+
+        function exportBlock(block, keepBlank) {
+            var ids = block._scope === 'picked' ? (block.requestTypeIds || []) : [];
+            return {
+                id: block.id,
+                title: keepBlank ? (block.title || '') : trim(block.title || ''),
+                clearOnHide: block.clearOnHide !== false,
+                requestTypeIds: ids,
+                place: block.place || 'end',
+                placeAfter: block.placeAfter || '',
+                fields: exportFields(block.fields, keepBlank)
+            };
         }
 
         function sync() {
@@ -379,13 +385,6 @@
             title.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockTitle'));
             title.value = block.title || '';
             head.appendChild(title);
-            var types = document.createElement('input');
-            types.type = 'text';
-            types.className = 'text sdf-block-types';
-            types.setAttribute('data-role', 'block-types');
-            types.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requestTypes'));
-            types.value = (block.requestTypeIds || []).join(', ');
-            head.appendChild(types);
             var clearLabel = el('label', 'sdf-clear-label');
             var clear = document.createElement('input');
             clear.type = 'checkbox';
@@ -399,6 +398,7 @@
             head.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), blockIndex === config.blocks.length - 1));
             head.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
             card.appendChild(head);
+            card.appendChild(renderScope(block));
             var tree = el('div', 'sdf-tree');
             if (!block.fields.length) {
                 tree.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
@@ -409,6 +409,197 @@
             }
             card.appendChild(tree);
             return card;
+        }
+
+        function renderScope(block) {
+            var box = el('div', 'sdf-scope');
+            box.appendChild(el('div', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whereTitle')));
+            var modes = el('div', 'sdf-scope-modes');
+            modes.appendChild(scopeRadio(block, 'all', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopeAll'), block._scope !== 'picked'));
+            modes.appendChild(scopeRadio(block, 'picked', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopePicked'), block._scope === 'picked'));
+            box.appendChild(modes);
+            if (block._scope === 'picked') {
+                box.appendChild(renderTypeList(block));
+            }
+            var placeRow = el('div', 'sdf-place');
+            placeRow.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel')));
+            placeRow.appendChild(placeSelect(block.place));
+            if (block.place === 'after') {
+                var after = document.createElement('input');
+                after.type = 'text';
+                after.className = 'text';
+                after.setAttribute('data-role', 'place-after');
+                after.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfter'));
+                after.value = block.placeAfter || '';
+                placeRow.appendChild(after);
+            }
+            box.appendChild(placeRow);
+            if (block.place === 'after') {
+                box.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
+            }
+            return box;
+        }
+
+        function scopeRadio(block, value, text, checked) {
+            var label = document.createElement('label');
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'sdf-scope-' + block.id;
+            input.setAttribute('data-role', 'scope');
+            input.value = value;
+            input.checked = checked;
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(' ' + text));
+            return label;
+        }
+
+        function placeSelect(current) {
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'place');
+            var places = [
+                ['end', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.place.end')],
+                ['start', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.place.start')],
+                ['after', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.place.after')]
+            ];
+            var i;
+            for (i = 0; i < places.length; i++) {
+                var option = document.createElement('option');
+                option.value = places[i][0];
+                option.appendChild(document.createTextNode(places[i][1]));
+                if (places[i][0] === (current || 'end')) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+            return select;
+        }
+
+        function renderTypeList(block) {
+            var list = el('div', 'sdf-type-list');
+            if (requestTypes === null) {
+                list.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
+            } else if (!requestTypes.length) {
+                list.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requestTypesHint')));
+            }
+            var known = {};
+            var i;
+            var catalog = requestTypes || [];
+            for (i = 0; i < catalog.length; i++) {
+                known[catalog[i].id] = true;
+                list.appendChild(typeCheck(block, catalog[i].id, typeCaption(catalog[i])));
+            }
+            for (i = 0; i < (block.requestTypeIds || []).length; i++) {
+                if (!known[block.requestTypeIds[i]]) {
+                    list.appendChild(typeCheck(block, block.requestTypeIds[i], String(block.requestTypeIds[i])));
+                }
+            }
+            var manual = el('div', 'sdf-type-manual');
+            var manualInput = document.createElement('input');
+            manualInput.type = 'text';
+            manualInput.className = 'text';
+            manualInput.setAttribute('data-role', 'type-manual');
+            manualInput.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
+            manual.appendChild(manualInput);
+            manual.appendChild(button('type-add', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
+            list.appendChild(manual);
+            return list;
+        }
+
+        function typeCaption(item) {
+            if (item.project) {
+                return item.project + ' \u2014 ' + item.name;
+            }
+            return item.name || String(item.id);
+        }
+
+        function typeCheck(block, id, caption) {
+            var label = document.createElement('label');
+            var check = document.createElement('input');
+            check.type = 'checkbox';
+            check.setAttribute('data-role', 'type-pick');
+            check.value = String(id);
+            check.checked = hasId(block.requestTypeIds, id);
+            label.appendChild(check);
+            label.appendChild(document.createTextNode(' ' + caption));
+            return label;
+        }
+
+        function hasId(list, id) {
+            var i;
+            for (i = 0; i < (list || []).length; i++) {
+                if (Number(list[i]) === Number(id)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function loadRequestTypes() {
+            AJS.$.ajax({
+                url: contextPath + '/rest/servicedeskapi/servicedesk?limit=50',
+                type: 'GET',
+                dataType: 'json',
+                cache: false
+            }).done(function (data) {
+                var payload = asJson(data);
+                var desks = payload.values || [];
+                var acc = [];
+                var left = desks.length;
+                if (!left) {
+                    requestTypes = [];
+                    render();
+                    return;
+                }
+                function finish() {
+                    left--;
+                    if (left > 0) {
+                        return;
+                    }
+                    acc.sort(function (a, b) {
+                        var ap = (a.project || '') + a.name;
+                        var bp = (b.project || '') + b.name;
+                        return ap < bp ? -1 : (ap > bp ? 1 : 0);
+                    });
+                    requestTypes = acc;
+                    render();
+                }
+                var d;
+                for (d = 0; d < desks.length; d++) {
+                    (function (desk) {
+                        AJS.$.ajax({
+                            url: contextPath + '/rest/servicedeskapi/servicedesk/' + encodeURIComponent(desk.id) + '/requesttype?limit=100',
+                            type: 'GET',
+                            dataType: 'json',
+                            cache: false
+                        }).done(function (page) {
+                            var values = asJson(page).values || [];
+                            var j;
+                            for (j = 0; j < values.length; j++) {
+                                acc.push({
+                                    id: Number(values[j].id),
+                                    name: values[j].name || '',
+                                    project: desk.projectName || desk.projectKey || ''
+                                });
+                            }
+                        }).always(finish);
+                    })(desks[d]);
+                }
+            }).fail(function () {
+                requestTypes = [];
+                render();
+            });
+        }
+
+        function asJson(data) {
+            if (typeof data === 'string') {
+                try {
+                    return JSON.parse(data);
+                } catch (e) {
+                    return {};
+                }
+            }
+            return data || {};
         }
 
         function renderCard(block, blockIndex, index) {
@@ -711,6 +902,8 @@
             if (role === 'remove-block') {
                 config.blocks.splice(loc.blockIndex, 1);
                 refresh();
+            } else if (role === 'type-add') {
+                addManualType(loc.blockIndex);
             } else if (role === 'add-field') {
                 addField(loc.blockIndex, null);
             } else if (role === 'block-up') {
@@ -752,8 +945,8 @@
                 block.title = e.target.value;
                 sync();
                 renderPreview();
-            } else if (role === 'block-types') {
-                readTypes(block, e.target.value);
+            } else if (role === 'place-after') {
+                block.placeAfter = e.target.value;
                 sync();
             } else if (role === 'label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].label = e.target.value;
@@ -779,6 +972,38 @@
                 block.clearOnHide = e.target.checked;
                 sync();
                 renderPreview();
+                return;
+            }
+            if (role === 'scope') {
+                block._scope = e.target.value === 'picked' ? 'picked' : 'all';
+                if (block._scope === 'all') {
+                    block.requestTypeIds = [];
+                    block._typesBad = false;
+                }
+                refresh();
+                return;
+            }
+            if (role === 'type-pick') {
+                var picked = parseInt(e.target.value, 10);
+                var nextIds = [];
+                var n;
+                for (n = 0; n < (block.requestTypeIds || []).length; n++) {
+                    if (Number(block.requestTypeIds[n]) !== picked) {
+                        nextIds.push(Number(block.requestTypeIds[n]));
+                    }
+                }
+                if (e.target.checked && picked > 0) {
+                    nextIds.push(picked);
+                }
+                block.requestTypeIds = nextIds;
+                block._scope = 'picked';
+                block._typesBad = false;
+                sync();
+                return;
+            }
+            if (role === 'place') {
+                block.place = e.target.value === 'start' || e.target.value === 'after' ? e.target.value : 'end';
+                refresh();
                 return;
             }
             if (loc.fieldIndex < 0) {
@@ -826,6 +1051,27 @@
                 sync();
                 renderPreview();
             }
+        }
+
+        function addManualType(blockIndex) {
+            var block = config.blocks[blockIndex];
+            var card = host.querySelectorAll('.sdf-block-card')[blockIndex];
+            var input = card ? card.querySelector('input[data-role="type-manual"]') : null;
+            var raw = input ? trim(input.value) : '';
+            if (!/^[1-9]\d*$/.test(raw)) {
+                block._typesBad = !!raw;
+                if (raw) {
+                    showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needTypes')]);
+                }
+                return;
+            }
+            var id = parseInt(raw, 10);
+            if (!hasId(block.requestTypeIds, id)) {
+                block.requestTypeIds.push(id);
+            }
+            block._scope = 'picked';
+            block._typesBad = false;
+            refresh();
         }
 
         function readTypes(block, raw) {
@@ -993,6 +1239,9 @@
                 title: '',
                 clearOnHide: true,
                 requestTypeIds: [],
+                _scope: 'all',
+                place: 'end',
+                placeAfter: '',
                 fields: []
             });
             refresh();
@@ -1063,6 +1312,12 @@
             for (b = 0; b < config.blocks.length; b++) {
                 if (config.blocks[b]._typesBad) {
                     pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needTypes'));
+                }
+                if (config.blocks[b]._scope === 'picked' && !(doc.blocks[b].requestTypeIds || []).length) {
+                    pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopeEmpty'));
+                }
+                if ((config.blocks[b].place === 'after') && !trim(config.blocks[b].placeAfter)) {
+                    pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needPlace'));
                 }
                 var fields = doc.blocks[b].fields;
                 var i;

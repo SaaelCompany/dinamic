@@ -25,6 +25,11 @@
     .sdf-block-title { flex: 1 1 180px; min-width: 160px; }
     .sdf-block-types { flex: 1 1 140px; min-width: 120px; }
     .sdf-tree { padding: 12px; }
+    .sdf-scope { padding: 12px 12px 4px; border-bottom: 1px solid #ebecf0; }
+    .sdf-scope-modes label, .sdf-type-list label { display: block; margin: 4px 0; font-weight: normal; }
+    .sdf-type-list { margin: 4px 0 8px 18px; max-height: 220px; overflow: auto; }
+    .sdf-type-manual { display: flex; gap: 8px; margin-top: 8px; }
+    .sdf-place { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .sdf-block-empty { margin: 0 0 8px; color: #6b778c; }
     .sdf-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 4px; padding: 12px; margin: 0 0 10px; }
     .sdf-card-head, .sdf-option-row, .sdf-when { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

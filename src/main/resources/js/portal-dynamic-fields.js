@@ -245,34 +245,27 @@
         return wrap;
     }
 
-    function buildForm(blocks) {
-        var root = document.createElement('div');
-        root.id = 'sdf-portal-form';
-        root.className = 'sdf-portal';
-        for (var b = 0; b < blocks.length; b++) {
-            var cfg = blocks[b];
-            var section = document.createElement('div');
-            section.className = 'sdf-block';
-            section.setAttribute('data-sdf-block', cfg.id || ('block' + b));
-            if (cfg.title && trim(cfg.title)) {
-                var title = document.createElement('h3');
-                title.className = 'sdf-title';
-                title.appendChild(document.createTextNode(trim(cfg.title)));
-                section.appendChild(title);
-            }
-            var visible = visibility(cfg.fields, {});
-            for (var i = 0; i < cfg.fields.length; i++) {
-                var node = buildField(cfg.fields[i], cfg.id);
-                var show = !!visible[cfg.fields[i].id];
-                node.setAttribute('data-sdf-shown', show ? '1' : '0');
-                if (!show) {
-                    addClass(node, 'sdf-hidden');
-                }
-                section.appendChild(node);
-            }
-            root.appendChild(section);
+    function buildSection(cfg) {
+        var section = document.createElement('div');
+        section.className = 'sdf-block sdf-portal-block';
+        section.setAttribute('data-sdf-block', cfg.id || 'block');
+        if (cfg.title && trim(cfg.title)) {
+            var title = document.createElement('h3');
+            title.className = 'sdf-title';
+            title.appendChild(document.createTextNode(trim(cfg.title)));
+            section.appendChild(title);
         }
-        return root;
+        var visible = visibility(cfg.fields, {});
+        for (var i = 0; i < cfg.fields.length; i++) {
+            var node = buildField(cfg.fields[i], cfg.id);
+            var show = !!visible[cfg.fields[i].id];
+            node.setAttribute('data-sdf-shown', show ? '1' : '0');
+            if (!show) {
+                addClass(node, 'sdf-hidden');
+            }
+            section.appendChild(node);
+        }
+        return section;
     }
 
     function blocksOf(cfg) {
@@ -288,6 +281,8 @@
                 title: cfg.title || '',
                 clearOnHide: cfg.clearOnHide !== false,
                 requestTypeIds: cfg.requestTypeIds || [],
+                place: cfg.place || 'end',
+                placeAfter: cfg.placeAfter || '',
                 fields: cfg.fields
             }];
         }
@@ -355,54 +350,167 @@
         return match ? match[1] : null;
     }
 
-    function insertBeforeSubmit(formEl, block) {
-        var submit = formEl.querySelector('button[type="submit"], input[type="submit"], .js-submit-button');
-        if (!submit) {
-            formEl.appendChild(block);
+    function normalizeLabel(value) {
+        var text = trim(value).toLowerCase();
+        text = text.replace(/\s*\*\s*$/, '');
+        text = text.replace(/\s*\([^)]*\)\s*$/, '');
+        return trim(text);
+    }
+
+    function fieldGroups(formEl) {
+        var out = [];
+        var nodes = formEl.children;
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+            if (hasClass(nodes[i], 'field-group')) {
+                out.push(nodes[i]);
+            }
+        }
+        return out;
+    }
+
+    function buttonsOf(formEl) {
+        var nodes = formEl.children;
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+            if (hasClass(nodes[i], 'buttons-container')) {
+                return nodes[i];
+            }
+        }
+        return null;
+    }
+
+    function nextReal(node) {
+        var n = node.nextSibling;
+        while (n && n.nodeType === 1 && hasClass(n, 'sdf-portal-block')) {
+            n = n.nextSibling;
+        }
+        return n;
+    }
+
+    function anchorFor(formEl, block) {
+        var place = block.place || 'end';
+        var groups = fieldGroups(formEl);
+        if (place === 'start') {
+            return groups.length ? groups[0] : buttonsOf(formEl);
+        }
+        if (place === 'after') {
+            var wanted = normalizeLabel(block.placeAfter);
+            var i;
+            for (i = 0; i < groups.length; i++) {
+                var label = groups[i].querySelector('label');
+                if (wanted && label && normalizeLabel(label.textContent) === wanted) {
+                    return nextReal(groups[i]);
+                }
+            }
+        }
+        return buttonsOf(formEl);
+    }
+
+    function alreadyPlaced(formEl, nodes, anchor) {
+        var n = anchor ? anchor.previousSibling : formEl.lastChild;
+        var i;
+        for (i = nodes.length - 1; i >= 0; i--) {
+            if (n !== nodes[i]) {
+                return false;
+            }
+            n = n.previousSibling;
+        }
+        return true;
+    }
+
+    function wireForm(formEl) {
+        if (formEl.getAttribute('data-sdf-wired') === '1') {
             return;
         }
-        var parent = submit;
-        while (parent.parentNode && parent.parentNode !== formEl) {
-            parent = parent.parentNode;
+        formEl.setAttribute('data-sdf-wired', '1');
+        function onEvent(e) {
+            var node = e.target;
+            while (node && node !== formEl) {
+                if (node.getAttribute && node.getAttribute('data-sdf-block')) {
+                    var block = findBlock(node.getAttribute('data-sdf-block'));
+                    if (block) {
+                        applyVisibility(node, block);
+                    }
+                    return;
+                }
+                node = node.parentNode;
+            }
         }
-        if (parent.parentNode === formEl) {
-            formEl.insertBefore(block, parent);
-        } else {
-            submit.parentNode.insertBefore(block, submit);
-        }
+        formEl.addEventListener('change', onEvent);
+        formEl.addEventListener('input', onEvent);
     }
 
     function ensureForm() {
-        var blocks = visibleBlocks();
-        if (!blocks.length || !isCreatePage()) {
+        if (!isCreatePage()) {
             return;
         }
+        var blocks = visibleBlocks();
         var formEl = document.querySelector('form.cp-request-form');
         if (!formEl) {
             return;
         }
-        var existing = document.getElementById('sdf-portal-form');
-        if (existing && formEl.contains && formEl.contains(existing)) {
+        var keep = {};
+        var i;
+        for (i = 0; i < blocks.length; i++) {
+            keep[blocks[i].id] = true;
+        }
+        var stale = formEl.querySelectorAll('.sdf-portal-block');
+        for (i = stale.length - 1; i >= 0; i--) {
+            if (!keep[stale[i].getAttribute('data-sdf-block')] && stale[i].parentNode) {
+                stale[i].parentNode.removeChild(stale[i]);
+            }
+        }
+        if (!blocks.length) {
             return;
         }
-        if (existing && existing.parentNode) {
-            existing.parentNode.removeChild(existing);
+        wireForm(formEl);
+        var groups = [];
+        for (i = 0; i < blocks.length; i++) {
+            var block = blocks[i];
+            var node = formEl.querySelector('[data-sdf-block="' + block.id + '"]');
+            if (!node) {
+                node = buildSection(block);
+            }
+            var anchor = anchorFor(formEl, block);
+            var found = null;
+            var g;
+            for (g = 0; g < groups.length; g++) {
+                if (groups[g].anchor === anchor) {
+                    found = groups[g];
+                }
+            }
+            if (!found) {
+                found = {anchor: anchor, nodes: []};
+                groups.push(found);
+            }
+            found.nodes.push(node);
         }
-        var block = buildForm(blocks);
-        insertBeforeSubmit(formEl, block);
-        block.addEventListener('change', function () {
-            repaint(block);
-        });
-        block.addEventListener('input', function () {
-            repaint(block);
-        });
-        debug('form inserted', blocks.length);
+        for (i = 0; i < groups.length; i++) {
+            var nodes = groups[i].nodes;
+            var before = groups[i].anchor;
+            if (alreadyPlaced(formEl, nodes, before)) {
+                continue;
+            }
+            var n;
+            for (n = 0; n < nodes.length; n++) {
+                if (before && before.parentNode === formEl) {
+                    formEl.insertBefore(nodes[n], before);
+                } else {
+                    formEl.appendChild(nodes[n]);
+                }
+            }
+        }
+        debug('form arranged', blocks.length);
     }
 
     function removeForm() {
-        var existing = document.getElementById('sdf-portal-form');
-        if (existing && existing.parentNode) {
-            existing.parentNode.removeChild(existing);
+        var nodes = document.querySelectorAll('.sdf-portal-block');
+        var i;
+        for (i = nodes.length - 1; i >= 0; i--) {
+            if (nodes[i].parentNode) {
+                nodes[i].parentNode.removeChild(nodes[i]);
+            }
         }
     }
 
@@ -605,19 +713,37 @@
         return false;
     }
 
+    function portalSections() {
+        var formEl = document.querySelector('form.cp-request-form');
+        if (!formEl || !formEl.querySelectorAll) {
+            return [];
+        }
+        return formEl.querySelectorAll('[data-sdf-block]');
+    }
+
     function remember() {
-        var root = document.getElementById('sdf-portal-form');
-        if (!root) {
+        var sections = portalSections();
+        if (!sections.length) {
             return;
         }
-        repaint(root);
         var blocks = {};
-        var sections = root.querySelectorAll('[data-sdf-block]');
         for (var i = 0; i < sections.length; i++) {
-            blocks[sections[i].getAttribute('data-sdf-block')] = readValues(sections[i], true);
+            var id = sections[i].getAttribute('data-sdf-block');
+            var block = findBlock(id);
+            if (block) {
+                applyVisibility(sections[i], block);
+            }
+            blocks[id] = readValues(sections[i], true);
         }
         writePending({t: Date.now(), blocks: blocks, sent: null});
         debug('remember', blocks);
+    }
+
+    function stripPortalNames() {
+        var sections = document.querySelectorAll('.sdf-portal-block');
+        for (var i = 0; i < sections.length; i++) {
+            stripNames(sections[i]);
+        }
     }
 
     function stripNames(block) {
@@ -806,11 +932,11 @@
             return;
         }
         var formEl = formOf(control);
-        if (!formEl || !formEl.querySelector || !formEl.querySelector('#sdf-portal-form')) {
+        if (!formEl || !formEl.querySelector || !formEl.querySelector('[data-sdf-block]')) {
             return;
         }
         remember();
-        stripNames(document.getElementById('sdf-portal-form'));
+        stripPortalNames();
     }
 
     function flushPending() {
@@ -871,9 +997,9 @@
         }, true);
         document.addEventListener('submit', function (e) {
             var formEl = e.target;
-            if (formEl && formEl.querySelector && formEl.querySelector('#sdf-portal-form')) {
+            if (formEl && formEl.querySelector && formEl.querySelector('[data-sdf-block]')) {
                 remember();
-                stripNames(document.getElementById('sdf-portal-form'));
+                stripPortalNames();
             }
         }, true);
         if (window.MutationObserver && document.documentElement) {
@@ -889,7 +1015,7 @@
                 onTick();
             } else {
                 flushPending();
-                if (isCreatePage() && config && visibleBlocks().length && !document.getElementById('sdf-portal-form')) {
+                if (isCreatePage() && config && visibleBlocks().length) {
                     ensureForm();
                 }
             }
@@ -911,12 +1037,8 @@
                 return config;
             },
             readValues: function () {
-                var root = document.getElementById('sdf-portal-form');
+                var sections = portalSections();
                 var blocks = {};
-                if (!root || !root.querySelectorAll) {
-                    return blocks;
-                }
-                var sections = root.querySelectorAll('[data-sdf-block]');
                 for (var i = 0; i < sections.length; i++) {
                     blocks[sections[i].getAttribute('data-sdf-block')] = readValues(sections[i], true);
                 }

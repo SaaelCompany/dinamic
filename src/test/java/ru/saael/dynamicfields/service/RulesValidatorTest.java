@@ -163,6 +163,16 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void placeAfterRequiresAFieldName() {
+        RulesConfig config = config(field("note", "Note", FormField.TEXT));
+        config.getBlocks().get(0).setPlace("after");
+        config.getBlocks().get(0).setPlaceAfter("  ");
+        List<String> errors = RulesValidator.validate(config);
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("follow"));
+    }
+
+    @Test
     public void duplicateIdIsReported() {
         RulesConfig config = config(
                 field("category", "One", FormField.TEXT),
