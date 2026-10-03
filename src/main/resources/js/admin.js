@@ -1069,8 +1069,8 @@
                     maxY = laid[i].y + laid[i].h + 16;
                 }
             }
-            if (maxY < 744) {
-                maxY = 744;
+            if (maxY < 200) {
+                maxY = 200;
             }
             var board = el('div', 'sdf-board');
             board.style.width = maxX + 'px';
