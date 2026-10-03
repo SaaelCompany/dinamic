@@ -1075,7 +1075,7 @@
             var board = el('div', 'sdf-board');
             board.style.width = maxX + 'px';
             board.style.height = maxY + 'px';
-            board.appendChild(edgeSvg(block, laid, maxX, maxY));
+            board.appendChild(edgeSvg(block, blockIndex, laid, maxX, maxY));
             for (i = 0; i < laid.length; i++) {
                 board.appendChild(nodeButton(block, blockIndex, laid[i]));
             }
@@ -1147,7 +1147,7 @@
             return laid;
         }
 
-        function edgeSvg(block, laid, width, height) {
+        function edgeSvg(block, blockIndex, laid, width, height) {
             var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('class', 'sdf-edges');
             svg.setAttribute('width', String(width));
