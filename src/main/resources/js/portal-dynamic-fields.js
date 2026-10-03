@@ -283,6 +283,8 @@
                 requestTypeIds: cfg.requestTypeIds || [],
                 place: cfg.place || 'end',
                 placeAfter: cfg.placeAfter || '',
+                anchorFieldId: cfg.anchorFieldId || '',
+                anchorValues: cfg.anchorValues || [],
                 fields: cfg.fields
             }];
         }
@@ -395,13 +397,9 @@
             return groups.length ? groups[0] : buttonsOf(formEl);
         }
         if (place === 'after') {
-            var wanted = normalizeLabel(block.placeAfter);
-            var i;
-            for (i = 0; i < groups.length; i++) {
-                var label = groups[i].querySelector('label');
-                if (wanted && label && normalizeLabel(label.textContent) === wanted) {
-                    return nextReal(groups[i]);
-                }
+            var group = anchorGroup(formEl, block);
+            if (group) {
+                return nextReal(group);
             }
         }
         return buttonsOf(formEl);
@@ -425,6 +423,7 @@
         }
         formEl.setAttribute('data-sdf-wired', '1');
         function onEvent(e) {
+            applyAnchors(formEl);
             var node = e.target;
             while (node && node !== formEl) {
                 if (node.getAttribute && node.getAttribute('data-sdf-block')) {
@@ -501,8 +500,120 @@
                 }
             }
         }
-        debug('form arranged', blocks.length);
-    }
+            applyAnchors(formEl);
+            debug('form arranged', blocks.length);
+        }
+
+        function fieldGroupOf(node, formEl) {
+            var current = node;
+            while (current && current !== formEl) {
+                if (hasClass(current, 'field-group')) {
+                    return current;
+                }
+                current = current.parentNode;
+            }
+            return null;
+        }
+
+        function anchorGroup(formEl, block) {
+            var fieldId = block && block.anchorFieldId;
+            var i;
+            if (fieldId && /^[A-Za-z0-9_]+$/.test(fieldId)) {
+                var named = formEl.querySelectorAll('[name="' + fieldId + '"]');
+                for (i = 0; i < named.length; i++) {
+                    var group = fieldGroupOf(named[i], formEl);
+                    if (group) {
+                        return group;
+                    }
+                }
+            }
+            var wanted = normalizeLabel(block && block.placeAfter);
+            var groups = fieldGroups(formEl);
+            for (i = 0; i < groups.length; i++) {
+                var label = groups[i].querySelector('label');
+                if (wanted && label && normalizeLabel(label.textContent) === wanted) {
+                    return groups[i];
+                }
+            }
+            return null;
+        }
+
+        function readGroupValues(group) {
+            var out = [];
+            if (!group) {
+                return out;
+            }
+            var nodes = group.querySelectorAll('input, select, textarea');
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                if (node.type === 'hidden' || node.type === 'submit' || node.type === 'button') {
+                    continue;
+                }
+                if (node.type === 'checkbox' || node.type === 'radio') {
+                    if (!node.checked) {
+                        continue;
+                    }
+                    if (node.value) {
+                        out.push(node.value);
+                    }
+                    if (node.parentNode && node.parentNode.textContent) {
+                        out.push(node.parentNode.textContent);
+                    }
+                } else if (node.tagName === 'SELECT') {
+                    var option = node.options[node.selectedIndex];
+                    if (option) {
+                        if (option.value) {
+                            out.push(option.value);
+                        }
+                        if (option.text) {
+                            out.push(option.text);
+                        }
+                    }
+                } else if (node.value) {
+                    out.push(node.value);
+                }
+            }
+            return out;
+        }
+
+        function anchorMatches(formEl, block) {
+            var wanted = (block && block.anchorValues) || [];
+            if (!wanted.length || !block || block.place !== 'after') {
+                return true;
+            }
+            var group = anchorGroup(formEl, block);
+            if (!group) {
+                return true;
+            }
+            var current = readGroupValues(group);
+            var i;
+            var j;
+            for (i = 0; i < wanted.length; i++) {
+                for (j = 0; j < current.length; j++) {
+                    if (normalizeLabel(wanted[i]) === normalizeLabel(current[j])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function applyAnchors(formEl) {
+            if (!formEl) {
+                return;
+            }
+            var sections = formEl.querySelectorAll('.sdf-portal-block');
+            var i;
+            for (i = 0; i < sections.length; i++) {
+                var block = findBlock(sections[i].getAttribute('data-sdf-block'));
+                if (block && anchorMatches(formEl, block)) {
+                    removeClass(sections[i], 'sdf-hidden');
+                } else if (block) {
+                    addClass(sections[i], 'sdf-hidden');
+                }
+            }
+        }
 
     function removeForm() {
         var nodes = document.querySelectorAll('.sdf-portal-block');
@@ -729,6 +840,10 @@
         var blocks = {};
         for (var i = 0; i < sections.length; i++) {
             var id = sections[i].getAttribute('data-sdf-block');
+            if (hasClass(sections[i], 'sdf-hidden')) {
+                blocks[id] = {};
+                continue;
+            }
             var block = findBlock(id);
             if (block) {
                 applyVisibility(sections[i], block);

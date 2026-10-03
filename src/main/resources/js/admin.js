@@ -18,6 +18,11 @@
         var requestTypes = null;
         var selectedType = 0;
         var typePicked = false;
+        var selectedProject = '';
+        var projectChosen = false;
+        var selectedField = {blockIndex: -1, index: 0};
+        var portalFields = null;
+        var portalFieldsFor = 0;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
@@ -75,8 +80,22 @@
                 _rawTypeIds: src.requestTypeIds || [],
                 place: src.place === 'start' || src.place === 'after' ? src.place : 'end',
                 placeAfter: src.placeAfter == null ? '' : String(src.placeAfter),
+                anchorFieldId: src.anchorFieldId == null ? '' : String(src.anchorFieldId),
+                anchorValues: stringList(src.anchorValues),
                 fields: normalizeFields(src.fields || [])
             };
+        }
+
+        function stringList(raw) {
+            var out = [];
+            var list = raw || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (list[i] != null && String(list[i])) {
+                    out.push(String(list[i]));
+                }
+            }
+            return out;
         }
 
         function normalizeFields(incoming) {
@@ -295,6 +314,8 @@
                 requestTypeIds: block.requestTypeIds || [],
                 place: block.place || 'end',
                 placeAfter: block.placeAfter || '',
+                anchorFieldId: block.anchorFieldId || '',
+                anchorValues: block.place === 'after' ? (block.anchorValues || []) : [],
                 fields: exportFields(block.fields, keepBlank)
             };
         }
@@ -387,8 +408,10 @@
             for (i = 0; i < visible.length; i++) {
                 host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
             }
+            syncProject();
             renderTypeNav();
             renderPreview();
+            loadPortalFields();
         }
 
         function renderBlock(block, blockIndex) {
@@ -420,16 +443,26 @@
             head.appendChild(actions);
             card.appendChild(head);
             card.appendChild(renderScope(block));
-            var tree = el('div', 'sdf-tree');
-            if (!block.fields.length) {
-                tree.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
+            card.appendChild(renderCanvas(block, blockIndex));
+            var editIndex = editedIndex(block, blockIndex);
+            if (editIndex >= 0) {
+                card.appendChild(renderCard(block, blockIndex, editIndex));
             }
-            var i;
-            for (i = 0; i < block.fields.length; i++) {
-                tree.appendChild(renderCard(block, blockIndex, i));
-            }
-            card.appendChild(tree);
             return card;
+        }
+
+        function editedIndex(block, blockIndex) {
+            if (!block.fields.length) {
+                return -1;
+            }
+            if (selectedField.blockIndex === blockIndex && selectedField.index >= 0 && selectedField.index < block.fields.length) {
+                return selectedField.index;
+            }
+            if (selectedField.blockIndex < 0) {
+                selectedField = {blockIndex: blockIndex, index: 0};
+                return 0;
+            }
+            return -1;
         }
 
         function renderScope(block) {
@@ -443,17 +476,12 @@
             var placeRow = el('div', 'sdf-place');
             placeRow.appendChild(placeSelect(block.place));
             if (block.place === 'after') {
-                var after = document.createElement('input');
-                after.type = 'text';
-                after.className = 'text';
-                after.setAttribute('data-role', 'place-after');
-                after.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfter'));
-                after.value = block.placeAfter || '';
-                placeRow.appendChild(after);
+                placeRow.appendChild(anchorControl(block));
             }
             placeGroup.appendChild(placeRow);
             if (block.place === 'after') {
                 placeGroup.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
+                placeGroup.appendChild(anchorValuesBox(block));
             }
             box.appendChild(placeGroup);
             return box;
@@ -472,15 +500,35 @@
             }
             select.appendChild(blank);
             var options = typeOptions();
+            var groups = [];
+            var grouped = {};
             var i;
             for (i = 0; i < options.length; i++) {
-                var option = document.createElement('option');
-                option.value = String(options[i].id);
-                option.appendChild(document.createTextNode(options[i].label));
-                if (options[i].id === current) {
-                    option.selected = true;
+                var key = options[i].project || '';
+                if (!grouped[key]) {
+                    grouped[key] = [];
+                    groups.push(key);
                 }
-                select.appendChild(option);
+                grouped[key].push(options[i]);
+            }
+            for (i = 0; i < groups.length; i++) {
+                var parent = select;
+                if (groups[i]) {
+                    parent = document.createElement('optgroup');
+                    parent.label = groups[i];
+                    select.appendChild(parent);
+                }
+                var list = grouped[groups[i]];
+                var j;
+                for (j = 0; j < list.length; j++) {
+                    var option = document.createElement('option');
+                    option.value = String(list[j].id);
+                    option.appendChild(document.createTextNode(list[j].name || list[j].label));
+                    if (list[j].id === current) {
+                        option.selected = true;
+                    }
+                    parent.appendChild(option);
+                }
             }
             return select;
         }
@@ -496,7 +544,13 @@
                     continue;
                 }
                 seen[id] = true;
-                items.push({id: id, label: typeCaption(catalog[i])});
+                items.push({
+                    id: id,
+                    name: catalog[i].name || String(id),
+                    project: catalog[i].project || '',
+                    deskId: catalog[i].deskId || '',
+                    label: typeCaption(catalog[i])
+                });
             }
             for (i = 0; i < config.blocks.length; i++) {
                 var ids = config.blocks[i].requestTypeIds || [];
@@ -504,7 +558,7 @@
                     var extra = Number(ids[0]);
                     if (extra > 0) {
                         seen[extra] = true;
-                        items.push({id: extra, label: String(extra)});
+                        items.push({id: extra, name: String(extra), project: '', deskId: '', label: String(extra)});
                     }
                 }
             }
@@ -594,15 +648,22 @@
             }
             nav.className = 'aui-navgroup aui-navgroup-vertical sdf-type-nav';
             var inner = el('div', 'aui-navgroup-inner');
+            var projects = projectNames();
+            if (projects.length) {
+                var projectBox = el('div', 'sdf-project');
+                projectBox.appendChild(el('div', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectNav')));
+                projectBox.appendChild(projectSelect(projects));
+                inner.appendChild(projectBox);
+            }
             inner.appendChild(el('div', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeNav')));
             var list = el('ul', 'aui-nav');
-            var options = typeOptions();
+            var options = typesInProject();
             var i;
             if (countForType(0) > 0 || !Number(selectedType)) {
                 list.appendChild(typeLink(0, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassigned'), countForType(0), !Number(selectedType)));
             }
             for (i = 0; i < options.length; i++) {
-                list.appendChild(typeLink(options[i].id, options[i].label, countForType(options[i].id), Number(selectedType) === options[i].id));
+                list.appendChild(typeLink(options[i].id, options[i].name || options[i].label, countForType(options[i].id), Number(selectedType) === options[i].id));
             }
             if (requestTypes === null) {
                 var loading = el('li');
@@ -641,6 +702,149 @@
             }
             item.appendChild(link);
             return item;
+        }
+
+        function projectNames() {
+            var seen = {};
+            var out = [];
+            var options = typeOptions();
+            var i;
+            for (i = 0; i < options.length; i++) {
+                if (!options[i].project || seen[options[i].project]) {
+                    continue;
+                }
+                seen[options[i].project] = true;
+                out.push(options[i].project);
+            }
+            out.sort();
+            return out;
+        }
+
+        function typesInProject() {
+            var options = typeOptions();
+            var out = [];
+            var i;
+            for (i = 0; i < options.length; i++) {
+                if (!options[i].project || options[i].project === selectedProject) {
+                    out.push(options[i]);
+                }
+            }
+            return out;
+        }
+
+        function projectSelect(projects) {
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'current-project');
+            var i;
+            for (i = 0; i < projects.length; i++) {
+                var option = document.createElement('option');
+                option.value = projects[i];
+                option.appendChild(document.createTextNode(projects[i]));
+                if (projects[i] === selectedProject) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+            return select;
+        }
+
+        function syncProject() {
+            if (projectChosen || !(selectedType > 0)) {
+                return;
+            }
+            var options = typeOptions();
+            var i;
+            for (i = 0; i < options.length; i++) {
+                if (options[i].id === Number(selectedType) && options[i].project) {
+                    selectedProject = options[i].project;
+                    projectChosen = true;
+                    return;
+                }
+            }
+        }
+
+        function typeRecord(typeId) {
+            var options = typeOptions();
+            var i;
+            for (i = 0; i < options.length; i++) {
+                if (options[i].id === Number(typeId)) {
+                    return options[i];
+                }
+            }
+            return null;
+        }
+
+        function portalFieldById(fieldId) {
+            var list = portalFields || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (list[i].fieldId === fieldId) {
+                    return list[i];
+                }
+            }
+            return null;
+        }
+
+        function loadPortalFields() {
+            if (!(selectedType > 0)) {
+                portalFields = [];
+                portalFieldsFor = 0;
+                return;
+            }
+            if (portalFieldsFor === selectedType) {
+                return;
+            }
+            var type = typeRecord(selectedType);
+            if (!type || !type.deskId) {
+                if (requestTypes) {
+                    portalFields = [];
+                    portalFieldsFor = selectedType;
+                }
+                return;
+            }
+            portalFieldsFor = selectedType;
+            portalFields = null;
+            AJS.$.ajax({
+                url: contextPath + '/rest/servicedeskapi/servicedesk/' + encodeURIComponent(type.deskId) + '/requesttype/' + encodeURIComponent(String(type.id)) + '/field',
+                type: 'GET',
+                dataType: 'json',
+                cache: false
+            }).done(function (data) {
+                if (portalFieldsFor !== Number(type.id)) {
+                    return;
+                }
+                var payload = asJson(data);
+                var values = payload.requestTypeFields || payload.values || [];
+                var list = [];
+                var i;
+                for (i = 0; i < values.length; i++) {
+                    var item = values[i] || {};
+                    var choices = [];
+                    var raw = item.validValues || [];
+                    var v;
+                    for (v = 0; v < raw.length; v++) {
+                        var label = raw[v].label || raw[v].value || '';
+                        if (label) {
+                            choices.push(String(label));
+                        }
+                    }
+                    if (item.fieldId) {
+                        list.push({
+                            fieldId: String(item.fieldId),
+                            name: String(item.name || item.fieldId),
+                            values: choices
+                        });
+                    }
+                }
+                portalFields = list;
+                render();
+            }).fail(function () {
+                if (portalFieldsFor === Number(type.id)) {
+                    portalFields = [];
+                    render();
+                }
+            });
         }
 
         function placeSelect(current) {
@@ -726,7 +930,8 @@
                                 acc.push({
                                     id: Number(values[j].id),
                                     name: values[j].name || '',
-                                    project: desk.projectName || desk.projectKey || ''
+                                    project: desk.projectName || desk.projectKey || '',
+                                    deskId: String(desk.id)
                                 });
                             }
                         }).always(finish);
@@ -747,6 +952,230 @@
                 }
             }
             return data || {};
+        }
+
+        function anchorControl(block) {
+            if (portalFields === null) {
+                return el('span', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldsLoading'));
+            }
+            if (!portalFields.length) {
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'text';
+                input.setAttribute('data-role', 'place-after');
+                input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfter'));
+                input.value = block.placeAfter || '';
+                return input;
+            }
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'anchor-field');
+            var blank = document.createElement('option');
+            blank.value = '';
+            blank.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.anchorNone')));
+            select.appendChild(blank);
+            var known = false;
+            var i;
+            for (i = 0; i < portalFields.length; i++) {
+                var field = portalFields[i];
+                var option = document.createElement('option');
+                option.value = field.fieldId;
+                option.appendChild(document.createTextNode(field.name));
+                if (block.anchorFieldId === field.fieldId || (!block.anchorFieldId && block.placeAfter === field.name)) {
+                    option.selected = true;
+                    known = true;
+                }
+                select.appendChild(option);
+            }
+            if (!known && block.placeAfter) {
+                var extra = document.createElement('option');
+                extra.value = 'label:' + block.placeAfter;
+                extra.appendChild(document.createTextNode(block.placeAfter));
+                extra.selected = true;
+                select.appendChild(extra);
+            }
+            return select;
+        }
+
+        function anchorValuesBox(block) {
+            var box = el('div', 'sdf-when-values');
+            var field = portalFieldById(block.anchorFieldId);
+            if (!field || !field.values.length) {
+                return box;
+            }
+            box.appendChild(el('div', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.anchorWhen')));
+            var i;
+            for (i = 0; i < field.values.length; i++) {
+                var label = document.createElement('label');
+                var check = document.createElement('input');
+                check.type = 'checkbox';
+                check.setAttribute('data-role', 'anchor-value');
+                check.value = field.values[i];
+                check.checked = contains(block.anchorValues, field.values[i]);
+                label.appendChild(check);
+                label.appendChild(document.createTextNode(' ' + field.values[i]));
+                box.appendChild(label);
+            }
+            return box;
+        }
+
+        function renderCanvas(block, blockIndex) {
+            var wrap = el('div', 'sdf-canvas-wrap');
+            wrap.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeHint')));
+            var canvas = el('div', 'sdf-canvas');
+            var laid = layoutNodes(block);
+            if (!laid.length) {
+                canvas.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
+                wrap.appendChild(canvas);
+                return wrap;
+            }
+            var pos = [];
+            var maxX = 200;
+            var maxY = 88;
+            var i;
+            for (i = 0; i < laid.length; i++) {
+                var point = {x: 16 + laid[i].col * 220, y: 16 + laid[i].row * 76};
+                pos.push(point);
+                if (point.x + 188 > maxX) {
+                    maxX = point.x + 188;
+                }
+                if (point.y + 72 > maxY) {
+                    maxY = point.y + 72;
+                }
+            }
+            canvas.style.width = maxX + 'px';
+            canvas.style.height = (maxY + 12) + 'px';
+            canvas.appendChild(edgeSvg(block, laid, pos, maxX, maxY + 12));
+            for (i = 0; i < laid.length; i++) {
+                canvas.appendChild(nodeButton(block, blockIndex, laid[i], pos[i]));
+            }
+            wrap.appendChild(canvas);
+            return wrap;
+        }
+
+        function layoutNodes(block) {
+            var anchor = block.place === 'after' && (block.placeAfter || block.anchorFieldId);
+            var shift = anchor ? 1 : 0;
+            var columns = [];
+            var i;
+            var maxDepth = shift;
+            for (i = 0; i < block.fields.length; i++) {
+                var depth = depthOf(block.fields, i) + shift;
+                if (!columns[depth]) {
+                    columns[depth] = [];
+                }
+                columns[depth].push(i);
+                if (depth > maxDepth) {
+                    maxDepth = depth;
+                }
+            }
+            var laid = [];
+            if (anchor) {
+                laid.push({kind: 'anchor', col: 0, row: 0, label: block.placeAfter || block.anchorFieldId});
+            }
+            var col;
+            for (col = 0; col < columns.length; col++) {
+                var indexes = columns[col] || [];
+                var row;
+                for (row = 0; row < indexes.length; row++) {
+                    laid.push({kind: 'field', index: indexes[row], col: col, row: row});
+                }
+            }
+            return laid;
+        }
+
+        function edgeSvg(block, laid, pos, width, height) {
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'sdf-edges');
+            svg.setAttribute('width', String(width));
+            svg.setAttribute('height', String(height));
+            var indexAt = {};
+            var anchorAt = -1;
+            var i;
+            for (i = 0; i < laid.length; i++) {
+                if (laid[i].kind === 'anchor') {
+                    anchorAt = i;
+                } else {
+                    indexAt[laid[i].index] = i;
+                }
+            }
+            function rightOf(at) {
+                return {x: pos[at].x + 168, y: pos[at].y + 28};
+            }
+            function leftOf(at) {
+                return {x: pos[at].x, y: pos[at].y + 28};
+            }
+            function line(from, to) {
+                var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                var mid = (from.x + to.x) / 2;
+                path.setAttribute('d', 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', '#4c9aff');
+                path.setAttribute('stroke-width', '1.5');
+                svg.appendChild(path);
+            }
+            for (i = 0; i < block.fields.length; i++) {
+                if (indexAt[i] == null) {
+                    continue;
+                }
+                var parentAt = -1;
+                var parentId = block.fields[i].when && block.fields[i].when.fieldId;
+                if (parentId) {
+                    var p;
+                    for (p = 0; p < i; p++) {
+                        if (block.fields[p].id === parentId) {
+                            parentAt = indexAt[p];
+                        }
+                    }
+                }
+                if (parentAt >= 0) {
+                    line(rightOf(parentAt), leftOf(indexAt[i]));
+                } else if (anchorAt >= 0 && depthOf(block.fields, i) === 0) {
+                    line(rightOf(anchorAt), leftOf(indexAt[i]));
+                }
+            }
+            return svg;
+        }
+
+        function nodeButton(block, blockIndex, laid, point) {
+            var node = document.createElement('button');
+            node.type = 'button';
+            node.className = 'sdf-node';
+            node.style.left = point.x + 'px';
+            node.style.top = point.y + 'px';
+            if (laid.kind === 'anchor') {
+                node.className += ' sdf-node-anchor';
+                node.disabled = true;
+                node.appendChild(el('span', 'sdf-node-title', laid.label));
+                node.appendChild(el('span', 'sdf-node-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.anchorField')));
+                return node;
+            }
+            node.setAttribute('data-role', 'pick-node');
+            node.setAttribute('data-block-index', String(blockIndex));
+            node.setAttribute('data-field-index', String(laid.index));
+            if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
+                node.className += ' sdf-node-selected';
+            }
+            var field = block.fields[laid.index];
+            node.appendChild(el('span', 'sdf-node-title', field.label || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
+            node.appendChild(el('span', 'sdf-node-type', typeName(field.type)));
+            return node;
+        }
+
+        function typeName(type) {
+            if (type === 'checkbox') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.checkbox');
+            }
+            if (type === 'radio') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.radio');
+            }
+            if (type === 'select') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.select');
+            }
+            if (type === 'textarea') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.textarea');
+            }
+            return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text');
         }
 
         function renderCard(block, blockIndex, index) {
@@ -1032,6 +1461,24 @@
                 refresh();
                 return;
             }
+            if (role === 'pick-node') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var holder = e.target;
+                while (holder && holder !== app && !(holder.getAttribute && holder.getAttribute('data-field-index'))) {
+                    holder = holder.parentNode;
+                }
+                if (!holder || !holder.getAttribute) {
+                    return;
+                }
+                selectedField = {
+                    blockIndex: parseInt(holder.getAttribute('data-block-index'), 10) || 0,
+                    index: parseInt(holder.getAttribute('data-field-index'), 10) || 0
+                };
+                refresh();
+                return;
+            }
             if (role === 'add-block') {
                 addBlock();
                 return;
@@ -1130,6 +1577,32 @@
 
         function onChange(e) {
             var role = roleOf(e.target);
+            if (role === 'current-project') {
+                selectedProject = e.target.value;
+                projectChosen = true;
+                var choices = typesInProject();
+                var next = 0;
+                var n;
+                for (n = 0; n < choices.length; n++) {
+                    if (choices[n].project === selectedProject && countForType(choices[n].id)) {
+                        next = choices[n].id;
+                        break;
+                    }
+                }
+                if (!next) {
+                    for (n = 0; n < choices.length; n++) {
+                        if (choices[n].project === selectedProject) {
+                            next = choices[n].id;
+                            break;
+                        }
+                    }
+                }
+                selectedType = next;
+                typePicked = true;
+                selectedField = {blockIndex: -1, index: 0};
+                refresh();
+                return;
+            }
             var loc = locate(e.target);
             if (loc.blockIndex < 0) {
                 return;
@@ -1153,7 +1626,47 @@
             }
             if (role === 'place') {
                 block.place = e.target.value === 'start' || e.target.value === 'after' ? e.target.value : 'end';
+                if (block.place !== 'after') {
+                    block.anchorFieldId = '';
+                    block.placeAfter = '';
+                    block.anchorValues = [];
+                }
                 refresh();
+                return;
+            }
+            if (role === 'anchor-field') {
+                var raw = e.target.value || '';
+                if (!raw) {
+                    block.anchorFieldId = '';
+                    block.placeAfter = '';
+                } else if (raw.indexOf('label:') === 0) {
+                    block.anchorFieldId = '';
+                    block.placeAfter = raw.substring(6);
+                } else {
+                    var bound = portalFieldById(raw);
+                    block.anchorFieldId = raw;
+                    block.placeAfter = bound ? bound.name : block.placeAfter;
+                }
+                block.anchorValues = [];
+                block.place = 'after';
+                sync();
+                refresh();
+                return;
+            }
+            if (role === 'anchor-value') {
+                var values = [];
+                var kept = block.anchorValues || [];
+                var v;
+                for (v = 0; v < kept.length; v++) {
+                    if (kept[v] !== e.target.value) {
+                        values.push(kept[v]);
+                    }
+                }
+                if (e.target.checked) {
+                    values.push(e.target.value);
+                }
+                block.anchorValues = values;
+                sync();
                 return;
             }
             if (loc.fieldIndex < 0) {
@@ -1366,6 +1879,8 @@
                 requestTypeIds: [selectedType],
                 place: 'end',
                 placeAfter: '',
+                anchorFieldId: '',
+                anchorValues: [],
                 fields: []
             });
             refresh();
@@ -1390,6 +1905,7 @@
                 insertAt = parentIndex + 1;
             }
             block.fields.splice(insertAt, 0, field);
+            selectedField = {blockIndex: blockIndex, index: insertAt};
             refresh();
             focusField(blockIndex, insertAt);
         }

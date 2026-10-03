@@ -23,6 +23,10 @@ public class FormBlock {
     private String place = "end";
     /** Portal label of the field this block follows when {@code place} is {@code after}. */
     private String placeAfter = "";
+    /** Jira field id of that existing field, for example {@code summary}. */
+    private String anchorFieldId = "";
+    /** Empty means the block is always shown. Otherwise only when the existing field has one of these answers. */
+    private List<String> anchorValues = new ArrayList<String>();
     private List<FormField> fields = new ArrayList<FormField>();
 
     public String getId() {
@@ -71,6 +75,22 @@ public class FormBlock {
 
     public void setPlaceAfter(String placeAfter) {
         this.placeAfter = placeAfter == null ? "" : placeAfter;
+    }
+
+    public String getAnchorFieldId() {
+        return anchorFieldId;
+    }
+
+    public void setAnchorFieldId(String anchorFieldId) {
+        this.anchorFieldId = anchorFieldId == null ? "" : anchorFieldId;
+    }
+
+    public List<String> getAnchorValues() {
+        return anchorValues;
+    }
+
+    public void setAnchorValues(List<String> anchorValues) {
+        this.anchorValues = anchorValues == null ? new ArrayList<String>() : anchorValues;
     }
 
     public List<FormField> getFields() {

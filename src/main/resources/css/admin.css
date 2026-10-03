@@ -70,6 +70,80 @@
     color: #6b778c;
 }
 
+.sdf-project {
+    padding: 0 12px 8px;
+}
+
+.sdf-project .select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.sdf-canvas-wrap {
+    padding: 4px 8px 8px;
+}
+
+.sdf-canvas {
+    position: relative;
+    overflow: auto;
+    max-height: 420px;
+    background: #fafbfc;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+}
+
+.sdf-edges {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+}
+
+.sdf-node {
+    position: absolute;
+    width: 168px;
+    min-height: 52px;
+    margin: 0;
+    padding: 6px 8px;
+    text-align: left;
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    box-shadow: 0 1px 1px rgba(9, 30, 66, 0.08);
+    color: #172b4d;
+    cursor: pointer;
+}
+
+.sdf-node-selected {
+    border-color: #0052cc;
+    box-shadow: 0 0 0 1px #0052cc;
+}
+
+.sdf-node-anchor {
+    background: #f4f5f7;
+    color: #42526e;
+    cursor: default;
+}
+
+.sdf-node-title,
+.sdf-node-type {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sdf-node-title {
+    font-weight: 600;
+}
+
+.sdf-node-type {
+    margin-top: 2px;
+    color: #6b778c;
+    font-size: 11px;
+    font-weight: normal;
+}
+
 .sdf-type-manual {
     display: flex;
     gap: 8px;
