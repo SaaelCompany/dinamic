@@ -136,6 +136,13 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void choiceMayOmitTheQuestion() {
+        List<String> errors = RulesValidator.validate(config(
+                field("category", "  ", FormField.RADIO, "Медицинский сотрудник")));
+        assertEquals(Collections.<String>emptyList(), errors);
+    }
+
+    @Test
     public void choiceWithoutOptionsIsReported() {
         List<String> errors = RulesValidator.validate(config(
                 field("category", "Категория", FormField.CHECKBOX)));

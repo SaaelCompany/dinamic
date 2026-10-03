@@ -91,7 +91,7 @@ public final class RulesValidator {
             } else if (!ids.add(field.getId())) {
                 errors.add(label + ": duplicate id \"" + field.getId() + "\"");
             }
-            if (isBlank(field.getLabel())) {
+            if (isBlank(field.getLabel()) && (field.getType() == null || !field.hasOptions())) {
                 errors.add(label + ": name is required");
             }
             if (!TYPES.contains(field.getType())) {

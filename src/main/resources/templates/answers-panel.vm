@@ -6,7 +6,9 @@
         #set ($lastGroup = $row.group)
     #end
     <div style="margin: 0 0 8px;">
+        #if ($row.label)
         <div style="color: #6b778c; font-size: 12px;">$row.label</div>
+        #end
         <div style="white-space: pre-wrap;">$row.value</div>
     </div>
 #end

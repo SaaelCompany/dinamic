@@ -21,12 +21,19 @@
         var selectedProject = '';
         var projectChosen = false;
         var selectedField = {blockIndex: -1, index: 0};
+        var pendingLink = null;
+        var ignoreLinkClickUntil = 0;
+        var dragLink = null;
+        var NODE_W = 280;
+        var NODE_HEAD = 42;
+        var NODE_ROW = 28;
         var portalFields = null;
         var portalFieldsFor = 0;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
         app.addEventListener('change', onChange);
+        app.addEventListener('mousedown', onPortDown);
 
         refresh();
         loadRequestTypes();
@@ -367,7 +374,7 @@
             var fieldIndex = -1;
             while (node && node !== app) {
                 if (node.getAttribute) {
-                    if (fieldIndex < 0 && node.getAttribute('data-field-index') != null && hasClass(node, 'sdf-card')) {
+                    if (fieldIndex < 0 && node.getAttribute('data-field-index') != null && (hasClass(node, 'sdf-card') || hasClass(node, 'sdf-node'))) {
                         fieldIndex = parseInt(node.getAttribute('data-field-index'), 10);
                         blockIndex = parseInt(node.getAttribute('data-block-index'), 10);
                     }
@@ -1022,6 +1029,9 @@
         function renderCanvas(block, blockIndex) {
             var wrap = el('div', 'sdf-canvas-wrap');
             wrap.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeHint')));
+            if (pendingLink && pendingLink.blockIndex === blockIndex) {
+                wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeLinking')));
+            }
             var canvas = el('div', 'sdf-canvas');
             var laid = layoutNodes(block);
             if (!laid.length) {
@@ -1029,83 +1039,114 @@
                 wrap.appendChild(canvas);
                 return wrap;
             }
-            var pos = [];
             var maxX = 200;
-            var maxY = 88;
+            var maxY = 80;
             var i;
             for (i = 0; i < laid.length; i++) {
-                var point = {x: 16 + laid[i].col * 220, y: 16 + laid[i].row * 76};
-                pos.push(point);
-                if (point.x + 188 > maxX) {
-                    maxX = point.x + 188;
+                if (laid[i].x + NODE_W + 24 > maxX) {
+                    maxX = laid[i].x + NODE_W + 24;
                 }
-                if (point.y + 72 > maxY) {
-                    maxY = point.y + 72;
+                if (laid[i].y + laid[i].h + 16 > maxY) {
+                    maxY = laid[i].y + laid[i].h + 16;
                 }
             }
             var board = el('div', 'sdf-board');
             board.style.width = maxX + 'px';
-            board.style.height = (maxY + 12) + 'px';
-            board.appendChild(edgeSvg(block, laid, pos, maxX, maxY + 12));
+            board.style.height = maxY + 'px';
+            board.appendChild(edgeSvg(block, laid, maxX, maxY));
             for (i = 0; i < laid.length; i++) {
-                board.appendChild(nodeButton(block, blockIndex, laid[i], pos[i]));
+                board.appendChild(nodeButton(block, blockIndex, laid[i]));
             }
             canvas.appendChild(board);
             wrap.appendChild(canvas);
             return wrap;
         }
 
+        function filledOptions(field) {
+            var out = [];
+            var i;
+            for (i = 0; i < (field.options || []).length; i++) {
+                if (trim(field.options[i])) {
+                    out.push(field.options[i]);
+                }
+            }
+            return out;
+        }
+
+        function nodeBoxHeight(field) {
+            var rows = isChoice(field.type) ? filledOptions(field).length : 1;
+            if (!rows) {
+                rows = 1;
+            }
+            return 8 + NODE_HEAD + rows * NODE_ROW + 8;
+        }
+
         function layoutNodes(block) {
-            var anchor = block.place === 'after' && (block.placeAfter || block.anchorFieldId);
-            var shift = anchor ? 1 : 0;
             var columns = [];
             var i;
-            var maxDepth = shift;
             for (i = 0; i < block.fields.length; i++) {
-                var depth = depthOf(block.fields, i) + shift;
+                var depth = depthOf(block.fields, i);
                 if (!columns[depth]) {
                     columns[depth] = [];
                 }
                 columns[depth].push(i);
-                if (depth > maxDepth) {
-                    maxDepth = depth;
-                }
             }
             var laid = [];
-            if (anchor) {
-                laid.push({kind: 'anchor', col: 0, row: 0, label: block.placeAfter || block.anchorFieldId});
-            }
             var col;
             for (col = 0; col < columns.length; col++) {
                 var indexes = columns[col] || [];
+                var y = 16;
                 var row;
                 for (row = 0; row < indexes.length; row++) {
-                    laid.push({kind: 'field', index: indexes[row], col: col, row: row});
+                    var index = indexes[row];
+                    var field = block.fields[index];
+                    var options = isChoice(field.type) ? filledOptions(field) : [''];
+                    if (!options.length) {
+                        options = [''];
+                    }
+                    var item = {
+                        index: index,
+                        x: 16 + col * (NODE_W + 48),
+                        y: y,
+                        h: nodeBoxHeight(field),
+                        ports: []
+                    };
+                    var p;
+                    for (p = 0; p < options.length; p++) {
+                        item.ports.push({
+                            option: options[p],
+                            y: 8 + NODE_HEAD + p * NODE_ROW + NODE_ROW / 2
+                        });
+                    }
+                    laid.push(item);
+                    y += item.h + 16;
                 }
             }
             return laid;
         }
 
-        function edgeSvg(block, laid, pos, width, height) {
+        function edgeSvg(block, laid, width, height) {
             var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('class', 'sdf-edges');
             svg.setAttribute('width', String(width));
             svg.setAttribute('height', String(height));
             var indexAt = {};
-            var anchorAt = -1;
             var i;
             for (i = 0; i < laid.length; i++) {
-                if (laid[i].kind === 'anchor') {
-                    anchorAt = i;
-                } else {
-                    indexAt[laid[i].index] = i;
-                }
-            }
-            function rightOf(at) {
-                return {x: pos[at].x + 168, y: pos[at].y + 28};
+                indexAt[laid[i].index] = i;
             }
             function leftOf(at) {
-                return {x: pos[at].x, y: pos[at].y + 28};
+                return {x: laid[at].x, y: laid[at].y + laid[at].h / 2};
+            }
+            function portPoint(item, option) {
+                var ports = item.ports || [];
+                var n;
+                for (n = 0; n < ports.length; n++) {
+                    if (option && ports[n].option === option) {
+                        return {x: item.x + NODE_W, y: item.y + ports[n].y};
+                    }
+                }
+                return {x: item.x + NODE_W, y: item.y + 22};
             }
             function line(from, to) {
                 var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1130,38 +1171,88 @@
                         }
                     }
                 }
-                if (parentAt >= 0) {
-                    line(rightOf(parentAt), leftOf(indexAt[i]));
-                } else if (anchorAt >= 0 && depthOf(block.fields, i) === 0) {
-                    line(rightOf(anchorAt), leftOf(indexAt[i]));
+                if (parentAt < 0) {
+                    continue;
+                }
+                var when = block.fields[i].when;
+                var values = when.values || [];
+                if (!values.length || when._mode === 'any') {
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + 22}, leftOf(indexAt[i]));
+                } else {
+                    var v;
+                    for (v = 0; v < values.length; v++) {
+                        line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[i]));
+                    }
                 }
             }
             return svg;
         }
 
-        function nodeButton(block, blockIndex, laid, point) {
-            var node = document.createElement('button');
-            node.type = 'button';
-            node.className = 'sdf-node';
-            node.style.left = point.x + 'px';
-            node.style.top = point.y + 'px';
-            if (laid.kind === 'anchor') {
-                node.className += ' sdf-node-anchor';
-                node.disabled = true;
-                node.appendChild(el('span', 'sdf-node-title', laid.label));
-                node.appendChild(el('span', 'sdf-node-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.anchorField')));
-                return node;
-            }
+        function nodeButton(block, blockIndex, laid) {
+            var field = block.fields[laid.index];
+            var node = el('div', 'sdf-node');
+            node.style.left = laid.x + 'px';
+            node.style.top = laid.y + 'px';
+            node.style.width = NODE_W + 'px';
+            node.style.height = laid.h + 'px';
             node.setAttribute('data-role', 'pick-node');
             node.setAttribute('data-block-index', String(blockIndex));
             node.setAttribute('data-field-index', String(laid.index));
             if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
                 node.className += ' sdf-node-selected';
             }
-            var field = block.fields[laid.index];
-            node.appendChild(el('span', 'sdf-node-title', field.label || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
-            node.appendChild(el('span', 'sdf-node-type', typeName(field.type)));
+            var question = el('div', 'sdf-node-question');
+            question.setAttribute('data-role', 'pick-node');
+            question.appendChild(el('span', 'sdf-node-kicker', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
+            var title = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+            question.appendChild(el('span', 'sdf-node-title', title));
+            node.appendChild(question);
+            var answers = el('div', 'sdf-node-answers');
+            if (isChoice(field.type)) {
+                var opts = filledOptions(field);
+                var o;
+                if (!opts.length) {
+                    answers.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
+                }
+                for (o = 0; o < opts.length; o++) {
+                    answers.appendChild(portRow(blockIndex, laid.index, opts[o], opts[o]));
+                }
+            } else {
+                answers.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
+            }
+            node.appendChild(answers);
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'sdf-node-del';
+            remove.setAttribute('data-role', 'remove');
+            remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeRemove'));
+            remove.appendChild(document.createTextNode('\u00d7'));
+            node.appendChild(remove);
             return node;
+        }
+
+        function portRow(blockIndex, fieldIndex, option, text) {
+            var row = el('div', 'sdf-port-row');
+            row.appendChild(el('span', 'sdf-port-text', text));
+            var add = document.createElement('button');
+            add.type = 'button';
+            add.className = 'sdf-port-add';
+            add.setAttribute('data-role', 'add-from-answer');
+            add.setAttribute('data-option', option);
+            add.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeAdd'));
+            add.appendChild(document.createTextNode('+'));
+            row.appendChild(add);
+            var port = document.createElement('button');
+            port.type = 'button';
+            port.className = 'sdf-port';
+            port.setAttribute('data-role', 'link-from');
+            port.setAttribute('data-option', option);
+            port.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeConnect'));
+            if (pendingLink && pendingLink.blockIndex === blockIndex && pendingLink.fieldIndex === fieldIndex && pendingLink.option === option) {
+                port.className += ' sdf-port-armed';
+            }
+            row.appendChild(port);
+            return row;
         }
 
         function typeName(type) {
@@ -1192,13 +1283,17 @@
             }
             var head = el('div', 'sdf-card-head');
             head.appendChild(el('span', 'sdf-num', String(index + 1)));
+            var nameWrap = el('div', 'sdf-question');
+            nameWrap.appendChild(el('label', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
             var name = document.createElement('input');
             name.type = 'text';
             name.className = 'text sdf-name';
             name.setAttribute('data-role', 'label');
             name.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'));
             name.value = field.label || '';
-            head.appendChild(name);
+            nameWrap.appendChild(name);
+            nameWrap.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
+            head.appendChild(nameWrap);
             head.appendChild(typeSelect(field.type));
             var actions = el('div', 'aui-buttons sdf-actions');
             actions.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
@@ -1442,9 +1537,180 @@
             refresh();
         }
 
+        function fieldAt(node) {
+            while (node && node !== app) {
+                if (node.getAttribute && node.getAttribute('data-field-index') != null && (hasClass(node, 'sdf-node') || hasClass(node, 'sdf-card'))) {
+                    return {
+                        blockIndex: parseInt(node.getAttribute('data-block-index'), 10) || 0,
+                        fieldIndex: parseInt(node.getAttribute('data-field-index'), 10) || 0
+                    };
+                }
+                node = node.parentNode;
+            }
+            return null;
+        }
+
+        function optionOf(node) {
+            while (node && node !== app) {
+                if (node.getAttribute && node.getAttribute('data-role') && node.getAttribute('data-option') != null) {
+                    return node.getAttribute('data-option') || '';
+                }
+                node = node.parentNode;
+            }
+            return '';
+        }
+
+        function connectFields(blockIndex, fromIndex, option, toIndex) {
+            var fields = config.blocks[blockIndex].fields;
+            if (!fields[fromIndex] || !fields[toIndex] || fromIndex === toIndex) {
+                return;
+            }
+            if (isUnder(fields, fromIndex, fields[toIndex].id)) {
+                pendingLink = null;
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
+                return;
+            }
+            var sourceId = fields[fromIndex].id;
+            if (toIndex < fromIndex) {
+                var end = subtreeEnd(fields, toIndex);
+                var chunk = fields.splice(toIndex, end - toIndex);
+                fromIndex -= chunk.length;
+                var insertAt = subtreeEnd(fields, fromIndex);
+                var n;
+                for (n = 0; n < chunk.length; n++) {
+                    fields.splice(insertAt + n, 0, chunk[n]);
+                }
+                toIndex = insertAt;
+            }
+            fields[toIndex].when = {
+                fieldId: sourceId,
+                values: option ? [option] : [],
+                negate: false,
+                _mode: option ? 'selected' : 'any'
+            };
+            pendingLink = null;
+            selectedField = {blockIndex: blockIndex, index: toIndex};
+            refresh();
+        }
+
+        function onPortDown(e) {
+            if (roleOf(e.target) !== 'link-from') {
+                return;
+            }
+            if (e.button) {
+                return;
+            }
+            var source = fieldAt(e.target);
+            var board = e.target;
+            while (board && board !== app && !hasClass(board, 'sdf-board')) {
+                board = board.parentNode;
+            }
+            if (!source || !board) {
+                return;
+            }
+            var boardBox = board.getBoundingClientRect();
+            var portBox = e.target.getBoundingClientRect();
+            dragLink = {
+                blockIndex: source.blockIndex,
+                fieldIndex: source.fieldIndex,
+                option: optionOf(e.target),
+                moved: false,
+                board: board,
+                x0: e.clientX,
+                y0: e.clientY,
+                x: portBox.left + portBox.width / 2 - boardBox.left,
+                y: portBox.top + portBox.height / 2 - boardBox.top
+            };
+            document.addEventListener('mousemove', onPortMove);
+            document.addEventListener('mouseup', onPortUp);
+        }
+
+        function onPortMove(e) {
+            if (!dragLink) {
+                return;
+            }
+            if (Math.abs(e.clientX - dragLink.x0) + Math.abs(e.clientY - dragLink.y0) > 4) {
+                dragLink.moved = true;
+            }
+            var boardBox = dragLink.board.getBoundingClientRect();
+            paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top);
+        }
+
+        function onPortUp(e) {
+            document.removeEventListener('mousemove', onPortMove);
+            document.removeEventListener('mouseup', onPortUp);
+            if (!dragLink) {
+                return;
+            }
+            var info = dragLink;
+            dragLink = null;
+            clearRubber(info.board);
+            if (!info.moved) {
+                return;
+            }
+            ignoreLinkClickUntil = new Date().getTime() + 400;
+            var under = document.elementFromPoint(e.clientX, e.clientY);
+            var target = fieldAt(under);
+            if (target && target.blockIndex === info.blockIndex && target.fieldIndex !== info.fieldIndex) {
+                connectFields(info.blockIndex, info.fieldIndex, info.option, target.fieldIndex);
+            }
+        }
+
+        function paintRubber(board, x1, y1, x2, y2) {
+            var svg = board.querySelector('.sdf-rubber');
+            if (!svg) {
+                svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('class', 'sdf-rubber');
+                board.appendChild(svg);
+            }
+            svg.setAttribute('width', board.style.width || '0');
+            svg.setAttribute('height', board.style.height || '0');
+            while (svg.firstChild) {
+                svg.removeChild(svg.firstChild);
+            }
+            var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            var mid = (x1 + x2) / 2;
+            path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + mid + ' ' + y1 + ', ' + mid + ' ' + y2 + ', ' + x2 + ' ' + y2);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#0052cc');
+            path.setAttribute('stroke-width', '1.5');
+            svg.appendChild(path);
+        }
+
+        function clearRubber(board) {
+            if (!board) {
+                return;
+            }
+            var svg = board.querySelector('.sdf-rubber');
+            if (svg && svg.parentNode) {
+                svg.parentNode.removeChild(svg);
+            }
+        }
+
         function onClick(e) {
             var role = roleOf(e.target);
             if (!role) {
+                return;
+            }
+            if (role === 'link-from') {
+                if (new Date().getTime() < ignoreLinkClickUntil) {
+                    return;
+                }
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var source = fieldAt(e.target);
+                if (!source) {
+                    return;
+                }
+                var option = optionOf(e.target);
+                if (pendingLink && pendingLink.blockIndex === source.blockIndex && pendingLink.fieldIndex === source.fieldIndex && pendingLink.option === option) {
+                    pendingLink = null;
+                } else {
+                    pendingLink = {blockIndex: source.blockIndex, fieldIndex: source.fieldIndex, option: option};
+                    selectedField = {blockIndex: source.blockIndex, index: source.fieldIndex};
+                }
+                refresh();
                 return;
             }
             if (role === 'current-type') {
@@ -1467,17 +1733,16 @@
                 if (e.preventDefault) {
                     e.preventDefault();
                 }
-                var holder = e.target;
-                while (holder && holder !== app && !(holder.getAttribute && holder.getAttribute('data-field-index'))) {
-                    holder = holder.parentNode;
-                }
-                if (!holder || !holder.getAttribute) {
+                var picked = fieldAt(e.target);
+                if (!picked) {
                     return;
                 }
-                selectedField = {
-                    blockIndex: parseInt(holder.getAttribute('data-block-index'), 10) || 0,
-                    index: parseInt(holder.getAttribute('data-field-index'), 10) || 0
-                };
+                if (pendingLink && pendingLink.blockIndex === picked.blockIndex && pendingLink.fieldIndex !== picked.fieldIndex) {
+                    connectFields(picked.blockIndex, pendingLink.fieldIndex, pendingLink.option, picked.fieldIndex);
+                    return;
+                }
+                pendingLink = null;
+                selectedField = {blockIndex: picked.blockIndex, index: picked.fieldIndex};
                 refresh();
                 return;
             }
@@ -1528,6 +1793,8 @@
                 moveBlock(loc.blockIndex, 1);
             } else if (loc.fieldIndex < 0) {
                 return;
+            } else if (role === 'add-from-answer') {
+                addField(loc.blockIndex, loc.fieldIndex, optionOf(e.target));
             } else if (role === 'add-child') {
                 addField(loc.blockIndex, loc.fieldIndex);
             } else if (role === 'remove') {
@@ -1898,14 +2165,20 @@
             }
         }
 
-        function addField(blockIndex, parentIndex) {
+        function addField(blockIndex, parentIndex, option) {
             var block = config.blocks[blockIndex];
             var field = {id: nextId(block.fields), label: '', type: 'checkbox', options: [''], when: null};
             var insertAt = block.fields.length;
             if (parentIndex != null && parentIndex >= 0) {
-                field.when = {fieldId: block.fields[parentIndex].id, values: [], negate: false, _mode: 'any'};
+                field.when = {
+                    fieldId: block.fields[parentIndex].id,
+                    values: option ? [option] : [],
+                    negate: false,
+                    _mode: option ? 'selected' : 'any'
+                };
                 insertAt = parentIndex + 1;
             }
+            pendingLink = null;
             block.fields.splice(insertAt, 0, field);
             selectedField = {blockIndex: blockIndex, index: insertAt};
             refresh();
@@ -1964,11 +2237,12 @@
                 var fields = doc.blocks[b].fields;
                 var i;
                 for (i = 0; i < fields.length; i++) {
-                    if (!fields[i].label) {
+                    if (isChoice(fields[i].type)) {
+                        if (!fields[i].options.length) {
+                            pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needOption'));
+                        }
+                    } else if (!fields[i].label) {
                         pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needName'));
-                    }
-                    if (isChoice(fields[i].type) && !fields[i].options.length) {
-                        pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needOption'));
                     }
                     var when = config.blocks[b].fields[i].when;
                     if (when && when._mode === 'selected' && !(fields[i].when && fields[i].when.values.length)) {
@@ -2200,7 +2474,9 @@
             var wrap = el('div', 'sdf-field');
             wrap.setAttribute('data-sdf-field', field.id);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
-            wrap.appendChild(el('div', 'sdf-label', field.label || ''));
+            if (trim(field.label)) {
+                wrap.appendChild(el('div', 'sdf-label', trim(field.label)));
+            }
             var options = field.options || [];
             var i;
             if (field.type === 'checkbox' || field.type === 'radio') {

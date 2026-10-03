@@ -192,10 +192,12 @@
         wrap.className = 'sdf-field';
         wrap.setAttribute('data-sdf-field', field.id);
         wrap.setAttribute('data-sdf-type', field.type || 'text');
-        var label = document.createElement('div');
-        label.className = 'sdf-label';
-        label.appendChild(document.createTextNode(field.label || ''));
-        wrap.appendChild(label);
+        if (trim(field.label)) {
+            var label = document.createElement('div');
+            label.className = 'sdf-label';
+            label.appendChild(document.createTextNode(trim(field.label)));
+            wrap.appendChild(label);
+        }
         var options = field.options || [];
         var i;
         if (field.type === 'checkbox' || field.type === 'radio') {

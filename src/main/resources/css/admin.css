@@ -84,12 +84,20 @@
 }
 
 .sdf-canvas {
-    overflow: auto;
-    max-height: 420px;
+    overflow-x: auto;
+    overflow-y: visible;
     max-width: 100%;
     background: #fafbfc;
     border: 1px solid #dfe1e6;
     border-radius: 3px;
+}
+
+.sdf-link-banner {
+    margin: 0 8px 8px;
+    padding: 6px 8px;
+    background: #deebff;
+    border-radius: 3px;
+    color: #0747a6;
 }
 
 .sdf-board {
@@ -105,17 +113,15 @@
 
 .sdf-node {
     position: absolute;
-    width: 168px;
-    min-height: 52px;
+    box-sizing: border-box;
     margin: 0;
-    padding: 6px 8px;
+    padding: 8px 8px 6px;
     text-align: left;
     background: #fff;
     border: 1px solid #dfe1e6;
     border-radius: 3px;
     box-shadow: 0 1px 1px rgba(9, 30, 66, 0.08);
     color: #172b4d;
-    cursor: pointer;
 }
 
 .sdf-node-selected {
@@ -123,14 +129,23 @@
     box-shadow: 0 0 0 1px #0052cc;
 }
 
-.sdf-node-anchor {
-    background: #f4f5f7;
-    color: #42526e;
-    cursor: default;
+.sdf-node-question {
+    height: 42px;
+    padding-right: 18px;
+    cursor: pointer;
+}
+
+.sdf-node-kicker {
+    display: block;
+    color: #6b778c;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 14px;
+    text-transform: uppercase;
 }
 
 .sdf-node-title,
-.sdf-node-type {
+.sdf-port-text {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -139,13 +154,89 @@
 
 .sdf-node-title {
     font-weight: 600;
+    line-height: 18px;
 }
 
-.sdf-node-type {
-    margin-top: 2px;
+.sdf-port-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+}
+
+.sdf-port-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 28px;
+}
+
+.sdf-port-empty {
+    height: 28px;
     color: #6b778c;
-    font-size: 11px;
-    font-weight: normal;
+    font-size: 12px;
+    line-height: 28px;
+}
+
+.sdf-port,
+.sdf-port-add,
+.sdf-node-del {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    background: #fff;
+    color: #172b4d;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.sdf-port-add,
+.sdf-node-del {
+    width: 22px;
+    height: 22px;
+    font-size: 14px;
+}
+
+.sdf-port {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #0052cc;
+    border-radius: 50%;
+    cursor: crosshair;
+}
+
+.sdf-port-armed {
+    background: #0052cc;
+}
+
+.sdf-node-del {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+}
+
+.sdf-rubber {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+}
+
+.sdf-question {
+    flex: 1 1 220px;
+    min-width: 160px;
+}
+
+.sdf-question .description,
+.sdf-question .sdf-label {
+    margin: 0 0 2px;
+}
+
+.sdf-question .text {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .sdf-type-manual {
