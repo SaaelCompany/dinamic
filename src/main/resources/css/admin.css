@@ -16,14 +16,15 @@
 
 .sdf-layout {
     display: flex;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 16px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
 }
 
 .sdf-type-nav {
-    flex: 0 0 260px;
-    width: 260px;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
     margin: 0;
     padding: 0;
     background: #fff;
@@ -41,9 +42,21 @@
     text-transform: uppercase;
 }
 
+.sdf-type-nav .aui-navgroup-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px 16px;
+    padding: 4px 12px 0;
+}
+
 .sdf-type-nav .aui-nav {
-    max-height: 560px;
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1 1 320px;
+    max-height: 132px;
     overflow: auto;
+    margin: 0;
 }
 
 .sdf-type-nav .aui-nav > li > a {
@@ -66,17 +79,19 @@
 }
 
 .sdf-type-nav .description {
+    flex: 1 1 100%;
     margin: 0;
-    padding: 8px 12px 12px;
+    padding: 4px 0 8px;
     color: #6b778c;
 }
 
 .sdf-project {
-    padding: 0 12px 8px;
+    flex: 0 0 280px;
+    padding: 0;
 }
 
 .sdf-project .select {
-    width: 100%;
+    width: 280px;
     max-width: 100%;
 }
 
@@ -86,7 +101,8 @@
 
 .sdf-canvas {
     overflow: auto;
-    min-height: 680px;
+    height: 760px;
+    min-height: 760px;
     max-width: 100%;
     background: #fafbfc;
     border: 1px solid #dfe1e6;
@@ -103,7 +119,7 @@
 
 .sdf-board {
     position: relative;
-    min-height: 680px;
+    min-height: 744px;
     min-width: 100%;
 }
 
@@ -216,8 +232,8 @@
 }
 
 .sdf-port {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     border: 2px solid #0052cc;
     border-radius: 50%;
     cursor: crosshair;
@@ -267,7 +283,8 @@
 }
 
 .sdf-builder {
-    flex: 1 1 480px;
+    flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
 }
 
@@ -378,22 +395,40 @@ form.sdf-card {
     margin: 0;
 }
 
-.sdf-card .field-group {
+form.aui.sdf-card .field-group {
     margin: 0 0 8px;
-    padding: 0;
+    padding: 4px 0 8px 160px;
+    box-sizing: border-box;
 }
 
-.sdf-card .field-group > label {
+form.aui.sdf-card .field-group:after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+form.aui.sdf-card .field-group > label {
+    float: left;
     display: block;
-    margin: 0 0 4px;
+    width: 145px;
+    margin: 5px 0 0 -160px;
+    padding: 0;
+    position: relative;
+    text-align: left;
     color: #6b778c;
     font-size: 12px;
     font-weight: 600;
 }
 
-.sdf-card .sdf-inline-check {
+form.aui.sdf-card .sdf-field-value label,
+form.aui.sdf-card .sdf-inline-check {
+    float: none;
     display: inline-block;
+    width: auto;
     margin: 4px 12px 0 0;
+    padding: 0;
+    position: static;
+    text-align: left;
     color: #172b4d;
     font-size: 14px;
     font-weight: normal;

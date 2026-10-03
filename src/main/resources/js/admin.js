@@ -1069,8 +1069,8 @@
                     maxY = laid[i].y + laid[i].h + 16;
                 }
             }
-            if (maxY < 680) {
-                maxY = 680;
+            if (maxY < 744) {
+                maxY = 744;
             }
             var board = el('div', 'sdf-board');
             board.style.width = maxX + 'px';
@@ -1177,7 +1177,7 @@
                 hit.setAttribute('d', d);
                 hit.setAttribute('fill', 'none');
                 hit.setAttribute('stroke', 'transparent');
-                hit.setAttribute('stroke-width', '16');
+                hit.setAttribute('stroke-width', '22');
                 hit.setAttribute('data-role', 'unlink');
                 hit.setAttribute('data-block-index', String(blockIndex));
                 hit.setAttribute('data-field-index', String(childIndex));
@@ -1359,10 +1359,12 @@
         function group(labelText, control, description) {
             var box = el('div', 'field-group');
             box.appendChild(el('label', null, labelText));
-            box.appendChild(control);
+            var value = el('div', 'sdf-field-value');
+            value.appendChild(control);
             if (description) {
-                box.appendChild(el('div', 'description', description));
+                value.appendChild(el('div', 'description', description));
             }
+            box.appendChild(value);
             return box;
         }
 
@@ -1393,7 +1395,8 @@
             input.setAttribute('data-role', 'blank-label');
             input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.portal.blank'));
             input.value = field.blankLabel || '';
-            box.appendChild(input);
+            var value = el('div', 'sdf-field-value');
+            value.appendChild(input);
             var hide = document.createElement('label');
             hide.className = 'sdf-inline-check';
             var check = document.createElement('input');
@@ -1402,18 +1405,21 @@
             check.checked = !!field.hideBlank;
             hide.appendChild(check);
             hide.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.hideBlank')));
-            box.appendChild(hide);
-            box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blankHint')));
+            value.appendChild(hide);
+            value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blankHint')));
+            box.appendChild(value);
             return box;
         }
 
         function renderDefault(field) {
             var box = el('div', 'field-group');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultValue')));
+            var value = el('div', 'sdf-field-value');
             if (isChoice(field.type)) {
                 var opts = filledOptions(field);
                 if (!opts.length) {
-                    box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needOption')));
+                    value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needOption')));
+                    box.appendChild(value);
                     return box;
                 }
                 var multiple = field.type === 'checkbox' || field.type === 'multiselect';
@@ -1428,7 +1434,7 @@
                     none.checked = !(field.defaults && field.defaults.length);
                     noneLabel.appendChild(none);
                     noneLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultNone')));
-                    box.appendChild(noneLabel);
+                    value.appendChild(noneLabel);
                 }
                 var i;
                 for (i = 0; i < opts.length; i++) {
@@ -1442,8 +1448,9 @@
                     input.checked = contains(field.defaults, opts[i]);
                     label.appendChild(input);
                     label.appendChild(document.createTextNode(' ' + opts[i]));
-                    box.appendChild(label);
+                    value.appendChild(label);
                 }
+                box.appendChild(value);
                 return box;
             }
             var inputText = document.createElement('input');
@@ -1451,7 +1458,8 @@
             inputText.className = 'text';
             inputText.setAttribute('data-role', 'default-text');
             inputText.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
-            box.appendChild(inputText);
+            value.appendChild(inputText);
+            box.appendChild(value);
             return box;
         }
 
@@ -1507,6 +1515,7 @@
         function renderOptions(field) {
             var box = el('div', 'field-group sdf-options');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.options')));
+            var value = el('div', 'sdf-field-value');
             var options = field.options || [];
             var i;
             for (i = 0; i < options.length; i++) {
@@ -1522,9 +1531,10 @@
                 var remove = button('remove-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false);
                 remove.setAttribute('data-option-index', String(i));
                 row.appendChild(remove);
-                box.appendChild(row);
+                value.appendChild(row);
             }
-            box.appendChild(button('add-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption'), false));
+            value.appendChild(button('add-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption'), false));
+            box.appendChild(value);
             return box;
         }
 
