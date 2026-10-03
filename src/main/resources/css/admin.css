@@ -4,6 +4,10 @@
     color: #172b4d;
 }
 
+.sdf-field-links a {
+    margin-right: 16px;
+}
+
 .sdf-toolbar.aui-toolbar2 {
     margin: 0 0 16px;
 }

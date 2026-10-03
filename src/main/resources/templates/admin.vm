@@ -1,15 +1,20 @@
 <html>
 <head>
-    <title>$i18n.getText("ru.saael.dynamicfields.admin.title")</title>
+    <title>$pageTitle</title>
     <meta name="decorator" content="atl.admin">
+#if ($onlyFieldId && $onlyFieldId != "")
+    <meta name="admin.active.section" content="admin_issues_menu/element_options_section/fields_section">
+    <meta name="admin.active.tab" content="view_custom_fields">
+#else
     <meta name="admin.active.section" content="admin_plugins_menu/dynamic-fields-section">
     <meta name="admin.active.tab" content="dynamic-fields-admin-link">
+#end
 </head>
 <body>
 <header class="aui-page-header">
     <div class="aui-page-header-inner">
         <div class="aui-page-header-main">
-            <h1>$i18n.getText("ru.saael.dynamicfields.admin.title")</h1>
+            <h1>$pageTitle</h1>
         </div>
     </div>
 </header>
@@ -17,10 +22,18 @@
 <div class="aui-page-panel">
     <div class="aui-page-panel-inner">
         <section class="aui-page-panel-content">
+#if ($onlyFieldId && $onlyFieldId != "")
+            <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.field.intro")</p>
+            <p class="sdf-field-links">
+                <a href="$contextPath/secure/admin/ViewCustomFields.jspa">$i18n.getText("ru.saael.dynamicfields.admin.field.back")</a>
+                <a href="$contextPath/secure/admin/AssociateFieldToScreens!default.jspa?fieldId=$onlyFieldId">$i18n.getText("ru.saael.dynamicfields.admin.field.screens")</a>
+            </p>
+#else
             <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.intro")</p>
+#end
             <div id="sdf-messages"></div>
 
-            <div id="sdf-app" class="sdf-app" data-context-path="$contextPath">
+            <div id="sdf-app" class="sdf-app" data-context-path="$contextPath" data-only-field="$!onlyFieldId">
                 <div class="aui-toolbar2 sdf-toolbar">
                     <div class="aui-toolbar2-inner">
                         <div class="aui-toolbar2-primary">

@@ -31,7 +31,7 @@ public class PortalFormFields {
 
     private static final Logger log = LoggerFactory.getLogger(PortalFormFields.class);
 
-    static final String TYPE_KEY = "ru.saael.jira.portal-dynamic-fields:portal-form";
+    public static final String TYPE_KEY = "ru.saael.jira.portal-dynamic-fields:portal-form";
 
     private final CustomFieldManager customFieldManager;
 

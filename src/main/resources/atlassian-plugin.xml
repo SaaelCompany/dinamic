@@ -39,6 +39,15 @@
         <url-pattern>/dynamic-fields/admin</url-pattern>
     </servlet>
 
+    <servlet-filter key="configure-field-filter" name="Dynamic fields configure filter"
+                    class="ru.saael.dynamicfields.servlet.ConfigureFieldFilter"
+                    location="before-dispatch" weight="100">
+        <description>Opens the question builder from Custom fields - Configure.</description>
+        <url-pattern>/secure/admin/ConfigureCustomField!default.jspa</url-pattern>
+        <url-pattern>/secure/admin/ConfigureCustomField.jspa</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+    </servlet-filter>
+
     <web-section key="dynamic-fields-section" name="Dynamic fields admin section"
                  location="admin_plugins_menu" weight="150">
         <label key="ru.saael.dynamicfields.admin.section"/>

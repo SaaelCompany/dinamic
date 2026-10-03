@@ -11,6 +11,7 @@
             return;
         }
         var contextPath = app.getAttribute('data-context-path') || '';
+        var onlyField = app.getAttribute('data-only-field') || '';
         var host = document.getElementById('sdf-blocks');
         var preview = document.getElementById('sdf-preview');
         var textarea = document.getElementById('sdf-rules');
@@ -583,11 +584,17 @@
             return ids.length > 0 && Number(ids[0]) === Number(typeId);
         }
 
+        function shownBlock(block) {
+            return !onlyField || block.customFieldId === onlyField;
+        }
+
         function visibleBlockIndexes() {
             var out = [];
             var i;
             for (i = 0; i < config.blocks.length; i++) {
-                out.push(i);
+                if (shownBlock(config.blocks[i])) {
+                    out.push(i);
+                }
             }
             return out;
         }
@@ -2695,7 +2702,7 @@
             var b;
             for (b = 0; b < cfg.blocks.length; b++) {
                 var block = cfg.blocks[b];
-                if (!block.fields.length) {
+                if (!shownBlock(block) || !block.fields.length) {
                     continue;
                 }
                 any = true;
