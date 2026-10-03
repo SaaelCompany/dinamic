@@ -19,7 +19,7 @@
     </organization>
 
     <properties>
-        <jira.version>8.21.0</jira.version>
+        <jira.version>8.21.1</jira.version>
         <amps.version>8.1.2</amps.version>
         <atlassian.spring.scanner.version>2.2.4</atlassian.spring.scanner.version>
         <atlassian.plugin.key>${project.groupId}.${project.artifactId}</atlassian.plugin.key>
@@ -114,6 +114,12 @@
             <version>${atlassian.spring.scanner.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+            NOTE: do not add atlassian-spring-scanner-runtime here. Since scanner 2.0 the runtime is provided
+            by Jira itself and embedding it makes the plugin's Spring context fail to start. The index in
+            META-INF/plugin-components/* is processed because META-INF/spring/plugin-context.xml declares
+            <atlassian-scanner:scan-indexes/>.
+        -->
 
         <!-- tests -->
         <dependency>
@@ -161,7 +167,7 @@
                     <applications>
                         <application>
                             <applicationKey>jira-servicedesk</applicationKey>
-                            <version>4.21.0</version>
+                            <version>4.21.1</version>
                         </application>
                     </applications>
                     <enableQuickReload>true</enableQuickReload>
