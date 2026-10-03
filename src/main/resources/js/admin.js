@@ -321,7 +321,8 @@
         function button(role, text, disabled) {
             var node = document.createElement('button');
             node.type = 'button';
-            node.className = role === 'add-field' || role === 'add-child' ? 'aui-button' : 'aui-button aui-button-subtle';
+            var primary = role === 'add-field' || role === 'add-child' || role === 'add-option' || role === 'open-type';
+            node.className = 'aui-button aui-button-compact' + (primary ? '' : ' aui-button-subtle');
             node.setAttribute('data-role', role);
             node.appendChild(document.createTextNode(text));
             if (disabled) {
@@ -409,12 +410,14 @@
             clearLabel.appendChild(clear);
             clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
             head.appendChild(clearLabel);
-            head.appendChild(button('add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false));
+            var actions = el('div', 'aui-buttons sdf-actions');
+            actions.appendChild(button('add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false));
             var order = visibleBlockIndexes();
             var pos = indexOfNumber(order, blockIndex);
-            head.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), pos <= 0));
-            head.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), pos < 0 || pos === order.length - 1));
-            head.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
+            actions.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), pos <= 0));
+            actions.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), pos < 0 || pos === order.length - 1));
+            actions.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
+            head.appendChild(actions);
             card.appendChild(head);
             card.appendChild(renderScope(block));
             var tree = el('div', 'sdf-tree');
@@ -431,12 +434,13 @@
 
         function renderScope(block) {
             var box = el('div', 'sdf-scope');
-            var owner = el('div', 'sdf-place');
-            owner.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner')));
+            var owner = el('div', 'field-group');
+            owner.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner')));
             owner.appendChild(blockTypeSelect(block));
             box.appendChild(owner);
+            var placeGroup = el('div', 'field-group');
+            placeGroup.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel')));
             var placeRow = el('div', 'sdf-place');
-            placeRow.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel')));
             placeRow.appendChild(placeSelect(block.place));
             if (block.place === 'after') {
                 var after = document.createElement('input');
@@ -447,10 +451,11 @@
                 after.value = block.placeAfter || '';
                 placeRow.appendChild(after);
             }
-            box.appendChild(placeRow);
+            placeGroup.appendChild(placeRow);
             if (block.place === 'after') {
-                box.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
+                placeGroup.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
             }
+            box.appendChild(placeGroup);
             return box;
         }
 
@@ -587,53 +592,55 @@
             while (nav.firstChild) {
                 nav.removeChild(nav.firstChild);
             }
-            nav.appendChild(el('span', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeNav')));
-            var select = document.createElement('select');
-            select.className = 'select';
-            select.setAttribute('data-role', 'current-type');
+            nav.className = 'aui-navgroup aui-navgroup-vertical sdf-type-nav';
+            var inner = el('div', 'aui-navgroup-inner');
+            inner.appendChild(el('div', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeNav')));
+            var list = el('ul', 'aui-nav');
             var options = typeOptions();
             var i;
             if (countForType(0) > 0 || !Number(selectedType)) {
-                var none = document.createElement('option');
-                none.value = '0';
-                var unassigned = countForType(0);
-                none.appendChild(document.createTextNode(
-                    AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassigned') + (unassigned ? ' (' + unassigned + ')' : '')));
-                if (!Number(selectedType)) {
-                    none.selected = true;
-                }
-                select.appendChild(none);
+                list.appendChild(typeLink(0, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassigned'), countForType(0), !Number(selectedType)));
             }
             for (i = 0; i < options.length; i++) {
-                var option = document.createElement('option');
-                option.value = String(options[i].id);
-                var count = countForType(options[i].id);
-                option.appendChild(document.createTextNode(options[i].label + (count ? ' (' + count + ')' : '')));
-                if (Number(selectedType) === options[i].id) {
-                    option.selected = true;
-                }
-                select.appendChild(option);
+                list.appendChild(typeLink(options[i].id, options[i].label, countForType(options[i].id), Number(selectedType) === options[i].id));
             }
             if (requestTypes === null) {
-                var loading = document.createElement('option');
-                loading.value = '';
-                loading.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
-                select.appendChild(loading);
+                var loading = el('li');
+                loading.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
+                list.appendChild(loading);
             }
-            nav.appendChild(select);
+            inner.appendChild(list);
             if (!requestTypes || !requestTypes.length) {
-                var manual = document.createElement('input');
-                manual.type = 'text';
-                manual.className = 'text';
-                manual.setAttribute('data-role', 'type-manual');
-                manual.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
-                nav.appendChild(manual);
-                nav.appendChild(button('open-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
+                var manual = el('div', 'sdf-type-manual');
+                var manualInput = document.createElement('input');
+                manualInput.type = 'text';
+                manualInput.className = 'text';
+                manualInput.setAttribute('data-role', 'type-manual');
+                manualInput.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
+                manual.appendChild(manualInput);
+                manual.appendChild(button('open-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
+                inner.appendChild(manual);
             }
             var hint = !Number(selectedType)
                 ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassignedHint')
                 : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.viewingHint');
-            nav.appendChild(el('p', 'description', hint));
+            inner.appendChild(el('p', 'description', hint));
+            nav.appendChild(inner);
+        }
+
+        function typeLink(id, label, count, selected) {
+            var item = el('li', selected ? 'aui-nav-selected' : null);
+            var link = document.createElement('a');
+            link.href = '#sdf-app';
+            link.setAttribute('data-role', 'current-type');
+            link.setAttribute('data-value', String(id));
+            link.appendChild(document.createTextNode(label));
+            if (count) {
+                link.appendChild(document.createTextNode(' '));
+                link.appendChild(el('span', 'aui-lozenge aui-lozenge-subtle', String(count)));
+            }
+            item.appendChild(link);
+            return item;
         }
 
         function placeSelect(current) {
@@ -749,8 +756,8 @@
             card.setAttribute('data-field-index', String(index));
             var depth = depthOf(block.fields, index);
             if (depth > 0) {
-                card.style.marginLeft = (depth * 22) + 'px';
-                card.style.boxShadow = 'inset 3px 0 0 #4c9aff';
+                card.style.marginLeft = (depth * 16) + 'px';
+                card.style.borderLeft = '2px solid #4c9aff';
             }
             var head = el('div', 'sdf-card-head');
             head.appendChild(el('span', 'sdf-num', String(index + 1)));
@@ -762,10 +769,12 @@
             name.value = field.label || '';
             head.appendChild(name);
             head.appendChild(typeSelect(field.type));
-            head.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
-            head.appendChild(button('up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), previousSiblingStart(block.fields, index) < 0));
-            head.appendChild(button('down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), subtreeEnd(block.fields, index) >= block.fields.length));
-            head.appendChild(button('remove', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false));
+            var actions = el('div', 'aui-buttons sdf-actions');
+            actions.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
+            actions.appendChild(button('up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), previousSiblingStart(block.fields, index) < 0));
+            actions.appendChild(button('down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), subtreeEnd(block.fields, index) >= block.fields.length));
+            actions.appendChild(button('remove', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false));
+            head.appendChild(actions);
             card.appendChild(head);
             if (isChoice(field.type)) {
                 card.appendChild(renderOptions(field));
@@ -1007,6 +1016,22 @@
             if (!role) {
                 return;
             }
+            if (role === 'current-type') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var holder = e.target;
+                while (holder && holder !== app && !(holder.getAttribute && holder.getAttribute('data-value'))) {
+                    holder = holder.parentNode;
+                }
+                if (!holder || !holder.getAttribute) {
+                    return;
+                }
+                selectedType = parseInt(holder.getAttribute('data-value'), 10) || 0;
+                typePicked = true;
+                refresh();
+                return;
+            }
             if (role === 'add-block') {
                 addBlock();
                 return;
@@ -1105,12 +1130,6 @@
 
         function onChange(e) {
             var role = roleOf(e.target);
-            if (role === 'current-type') {
-                selectedType = parseInt(e.target.value, 10) || 0;
-                typePicked = true;
-                refresh();
-                return;
-            }
             var loc = locate(e.target);
             if (loc.blockIndex < 0) {
                 return;

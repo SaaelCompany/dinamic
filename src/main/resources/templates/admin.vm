@@ -6,54 +6,6 @@
     <meta name="admin.active.tab" content="dynamic-fields-admin-link">
 </head>
 <body>
-<style type="text/css">
-    .sdf-intro { max-width: 760px; margin-bottom: 8px; }
-    .sdf-steps { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; }
-    .sdf-step { flex: 1 1 200px; display: flex; gap: 10px; align-items: flex-start; background: #f4f5f7; border: 1px solid #dfe1e6; border-radius: 4px; padding: 10px 12px; }
-    .sdf-step-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: #0052cc; color: #fff; font-weight: 600; font-size: 12px; text-align: center; line-height: 22px; }
-    .sdf-step p { margin: 0; }
-    .sdf-steps-note { max-width: 760px; margin: 0 0 4px; }
-    .sdf-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 8px 0 12px; padding: 8px 0; position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #ebecf0; }
-    .sdf-spacer { flex: 1 1 auto; }
-    .sdf-layout { display: flex; align-items: flex-start; gap: 24px; }
-    .sdf-builder { flex: 1 1 560px; min-width: 0; }
-    .sdf-preview-pane { flex: 0 0 380px; position: sticky; top: 56px; background: #f4f5f7; border: 1px solid #dfe1e6; border-radius: 4px; padding: 12px 14px; }
-    .sdf-preview-pane h3 { margin: 0 0 4px; }
-    .sdf-empty { border: 1px dashed #b3bac5; border-radius: 4px; padding: 16px; background: #fafbfc; }
-    .sdf-block-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 4px; margin: 0 0 16px; box-shadow: 0 1px 2px rgba(9, 30, 66, 0.08); }
-    .sdf-block-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: #f4f5f7; border-bottom: 1px solid #dfe1e6; }
-    .sdf-block-title { flex: 1 1 180px; min-width: 160px; }
-    .sdf-block-types { flex: 1 1 140px; min-width: 120px; }
-    .sdf-tree { padding: 12px; }
-    .sdf-scope { padding: 12px 12px 4px; border-bottom: 1px solid #ebecf0; }
-    .sdf-scope-modes label, .sdf-type-list label { display: block; margin: 4px 0; font-weight: normal; }
-    .sdf-type-list { margin: 4px 0 8px 18px; max-height: 220px; overflow: auto; }
-    .sdf-type-manual { display: flex; gap: 8px; margin-top: 8px; }
-    .sdf-place { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .sdf-type-nav { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; padding: 12px; background: #deebff; border: 1px solid #b3d4ff; border-radius: 4px; }
-    .sdf-type-nav select { min-width: 280px; max-width: 100%; }
-    .sdf-type-nav .description { margin: 0; flex: 1 1 240px; }
-    .sdf-block-empty { margin: 0 0 8px; color: #6b778c; }
-    .sdf-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 4px; padding: 12px; margin: 0 0 10px; }
-    .sdf-card-head, .sdf-option-row, .sdf-when { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-    .sdf-card-head { margin-bottom: 8px; }
-    .sdf-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: #deebff; color: #0747a6; font-weight: 600; text-align: center; line-height: 22px; font-size: 12px; }
-    .sdf-name { flex: 1 1 180px; min-width: 0; }
-    .sdf-options, .sdf-when { margin-top: 8px; }
-    .sdf-label { font-weight: 600; margin: 0 0 4px; }
-    .sdf-option-row input[type="text"] { flex: 1 1 180px; }
-    .sdf-when-values label { display: inline-block; margin: 4px 12px 0 0; font-weight: normal; }
-    .sdf-preview .sdf-block { background: #fff; border: 1px solid #dfe1e6; border-radius: 4px; padding: 12px; margin: 0 0 12px; }
-    .sdf-preview .sdf-field { margin: 0 0 12px; }
-    .sdf-preview .sdf-title { margin: 0 0 12px; font-size: 14px; }
-    .sdf-preview .sdf-option { display: block; font-weight: normal; margin: 2px 0; }
-    .sdf-preview .sdf-hidden { display: none !important; }
-    .sdf-preview .sdf-input, .sdf-preview .sdf-textarea, .sdf-preview .sdf-select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #dfe1e6; border-radius: 3px; font: inherit; background: #fff; }
-    .sdf-json-panel { margin-top: 20px; }
-    .sdf-editor { font-family: monospace; width: 100%; box-sizing: border-box; }
-    .sdf-help { max-width: 920px; }
-</style>
-
 <header class="aui-page-header">
     <div class="aui-page-header-inner">
         <div class="aui-page-header-main">
@@ -66,38 +18,42 @@
     <div class="aui-page-panel-inner">
         <section class="aui-page-panel-content">
             <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.intro")</p>
-            <div class="sdf-steps">
-                <div class="sdf-step"><span class="sdf-step-num">1</span><p>$i18n.getText("ru.saael.dynamicfields.admin.steps.1")</p></div>
-                <div class="sdf-step"><span class="sdf-step-num">2</span><p>$i18n.getText("ru.saael.dynamicfields.admin.steps.2")</p></div>
-                <div class="sdf-step"><span class="sdf-step-num">3</span><p>$i18n.getText("ru.saael.dynamicfields.admin.steps.3")</p></div>
-            </div>
-            <p class="description sdf-steps-note">$i18n.getText("ru.saael.dynamicfields.admin.steps.types")</p>
-            <p class="description sdf-steps-note">$i18n.getText("ru.saael.dynamicfields.admin.steps.many")</p>
             <div id="sdf-messages"></div>
 
             <div id="sdf-app" class="sdf-app" data-context-path="$contextPath">
-                <div class="sdf-toolbar">
-                    <button id="sdf-add-block" class="aui-button" type="button" data-role="add-block">$i18n.getText("ru.saael.dynamicfields.admin.builder.addBlock")</button>
-                    <span class="sdf-spacer"></span>
-                    <span id="sdf-block-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.blocks.count") $blockCount</span>
-                    <span id="sdf-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.fields.count") $fieldCount</span>
-                    <button id="sdf-reload" class="aui-button" type="button" data-role="reload">$i18n.getText("ru.saael.dynamicfields.admin.button.reload")</button>
-                    <button id="sdf-save" class="aui-button aui-button-primary" type="button" data-role="save">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
+                <div class="aui-toolbar2 sdf-toolbar">
+                    <div class="aui-toolbar2-inner">
+                        <div class="aui-toolbar2-primary">
+                            <div class="aui-buttons">
+                                <button id="sdf-add-block" class="aui-button" type="button" data-role="add-block">$i18n.getText("ru.saael.dynamicfields.admin.builder.addBlock")</button>
+                            </div>
+                        </div>
+                        <div class="aui-toolbar2-secondary">
+                            <span id="sdf-block-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.blocks.count") $blockCount</span>
+                            <span id="sdf-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.fields.count") $fieldCount</span>
+                            <button id="sdf-reload" class="aui-button aui-button-subtle" type="button" data-role="reload">$i18n.getText("ru.saael.dynamicfields.admin.button.reload")</button>
+                            <button id="sdf-save" class="aui-button aui-button-primary" type="button" data-role="save">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div id="sdf-type-nav" class="sdf-type-nav"></div>
                 <div class="sdf-layout">
+                    <div id="sdf-type-nav" class="sdf-type-nav"></div>
                     <div class="sdf-builder">
-                        <div id="sdf-empty" class="sdf-empty">
+                        <div id="sdf-empty" class="aui-message sdf-empty">
                             <p>$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>
-                            <button id="sdf-example-empty" class="aui-button aui-button-primary" type="button" data-role="example">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
+                            <button id="sdf-example-empty" class="aui-button" type="button" data-role="example">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
                         </div>
                         <div id="sdf-blocks"></div>
                     </div>
-                    <aside class="sdf-preview-pane">
-                        <h3>$i18n.getText("ru.saael.dynamicfields.admin.builder.previewTitle")</h3>
-                        <p class="description">$i18n.getText("ru.saael.dynamicfields.admin.builder.previewHint")</p>
-                        <div id="sdf-preview" class="sdf-preview"></div>
+                    <aside class="sdf-preview-pane module">
+                        <div class="mod-header">
+                            <h3>$i18n.getText("ru.saael.dynamicfields.admin.builder.previewTitle")</h3>
+                        </div>
+                        <div class="mod-content">
+                            <p class="description">$i18n.getText("ru.saael.dynamicfields.admin.builder.previewHint")</p>
+                            <div id="sdf-preview" class="sdf-preview"></div>
+                        </div>
                     </aside>
                 </div>
 
