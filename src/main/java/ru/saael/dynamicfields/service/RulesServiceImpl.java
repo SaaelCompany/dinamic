@@ -29,11 +29,14 @@ public class RulesServiceImpl implements RulesService {
     private static final String EXAMPLE_RESOURCE = "/example-form.json";
 
     private final PluginSettingsFactory pluginSettingsFactory;
+    private final IssueFieldSync issueFieldSync;
     private final ObjectMapper mapper;
 
     @Inject
-    public RulesServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory) {
+    public RulesServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory,
+                            IssueFieldSync issueFieldSync) {
         this.pluginSettingsFactory = pluginSettingsFactory;
+        this.issueFieldSync = issueFieldSync;
         this.mapper = new ObjectMapper();
         this.mapper.configure(DeserializationConfig.Feature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         this.mapper.configure(SerializationConfig.Feature.INDENT_OUTPUT, true);
@@ -88,6 +91,7 @@ public class RulesServiceImpl implements RulesService {
     @Override
     public String saveConfigJson(String json) throws InvalidRulesException {
         RulesConfig config = parse(json);
+        issueFieldSync.ensureFields(config);
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);
         log.info("Portal form updated: {} block(s), {} field(s)", config.getBlocks().size(), config.fieldCount());

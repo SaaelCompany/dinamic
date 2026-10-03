@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One field of the form the plugin draws on the customer portal. It is not a Jira custom field:
- * the definition lives in the plugin and the answer is stored by the plugin.
+ * One question drawn on the customer portal. Saving the form also creates a Jira text field
+ * ({@link #jiraFieldId}) so automation can pick it by the question name.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
@@ -28,6 +28,8 @@ public class FormField {
     public static final String URL = "url";
 
     private String id;
+    /** Jira custom field id, for example {@code customfield_10100}. Empty until the form is saved. */
+    private String jiraFieldId;
     private String label;
     private String type = TEXT;
     private List<String> options = new ArrayList<String>();
@@ -45,6 +47,14 @@ public class FormField {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getJiraFieldId() {
+        return jiraFieldId;
+    }
+
+    public void setJiraFieldId(String jiraFieldId) {
+        this.jiraFieldId = jiraFieldId;
     }
 
     public String getLabel() {

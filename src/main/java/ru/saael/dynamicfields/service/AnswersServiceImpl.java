@@ -51,6 +51,7 @@ public class AnswersServiceImpl implements AnswersService {
     private final RulesService rulesService;
     private final AdminAccess adminAccess;
     private final JsonEntityPropertyManager entityPropertyManager;
+    private final IssueFieldSync issueFieldSync;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Inject
@@ -60,7 +61,8 @@ public class AnswersServiceImpl implements AnswersService {
                               @ComponentImport GlobalPermissionManager globalPermissionManager,
                               RulesService rulesService,
                               AdminAccess adminAccess,
-                              @ComponentImport JsonEntityPropertyManager entityPropertyManager) {
+                              @ComponentImport JsonEntityPropertyManager entityPropertyManager,
+                              IssueFieldSync issueFieldSync) {
         this.pluginSettingsFactory = pluginSettingsFactory;
         this.issueManager = issueManager;
         this.permissionManager = permissionManager;
@@ -68,6 +70,7 @@ public class AnswersServiceImpl implements AnswersService {
         this.rulesService = rulesService;
         this.adminAccess = adminAccess;
         this.entityPropertyManager = entityPropertyManager;
+        this.issueFieldSync = issueFieldSync;
         installed = this;
     }
 
@@ -99,6 +102,7 @@ public class AnswersServiceImpl implements AnswersService {
             throw new IllegalStateException("Cannot store portal answers", e);
         }
         publishProperty(issue, document, form);
+        issueFieldSync.writeAnswers(issue, form, document.getValues(), adminAccess.currentUser());
         log.info("Stored {} portal answer(s) on {}", rows.size(), issue.getKey());
     }
 

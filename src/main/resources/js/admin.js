@@ -136,6 +136,7 @@
                 }
                 fields.push({
                     id: src.id ? String(src.id) : '',
+                    jiraFieldId: src.jiraFieldId ? String(src.jiraFieldId) : '',
                     label: src.label == null ? '' : String(src.label),
                     type: src.type || 'text',
                     options: options,
@@ -295,6 +296,9 @@
                     hideBlank: !!src.hideBlank,
                     defaults: defaults
                 };
+                if (src.jiraFieldId) {
+                    field.jiraFieldId = src.jiraFieldId;
+                }
                 var parent = null;
                 if (src.when && src.when.fieldId) {
                     var p;
@@ -1379,7 +1383,8 @@
             input.type = 'text';
             input.className = 'text';
             input.readOnly = true;
-            input.value = field.id || '';
+            input.value = field.label || field.id || '';
+            input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldPending'));
             return input;
         }
 
