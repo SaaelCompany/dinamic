@@ -1,5 +1,5 @@
 .sdf-intro {
-    max-width: 720px;
+    max-width: 880px;
     margin: 0 0 12px;
     color: #172b4d;
 }
@@ -22,6 +22,7 @@
 }
 
 .sdf-type-nav {
+    display: none;
     flex: 0 0 240px;
     width: 240px;
     margin: 0;

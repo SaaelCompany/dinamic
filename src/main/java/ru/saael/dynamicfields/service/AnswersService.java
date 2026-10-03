@@ -1,6 +1,7 @@
 package ru.saael.dynamicfields.service;
 
 import ru.saael.dynamicfields.model.AnswerDocument;
+import ru.saael.dynamicfields.model.AnswerRow;
 
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,9 @@ import java.util.Map;
 public interface AnswersService {
 
     AnswerDocument read(String issueKey) throws AnswerRejectedException;
+
+    /** Rows for the issue details field. Empty when the issue has no portal answers. */
+    List<AnswerRow> storedRows(String issueKey);
 
     /**
      * @param blocks block id → field id → values; {@code null} means the body used the legacy flat {@code values} map

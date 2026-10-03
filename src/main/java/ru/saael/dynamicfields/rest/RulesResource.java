@@ -1,9 +1,11 @@
 package ru.saael.dynamicfields.rest;
 
 import com.atlassian.plugins.rest.common.security.AnonymousAllowed;
+import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.ObjectNode;
+import ru.saael.dynamicfields.field.PortalFormFields;
 import ru.saael.dynamicfields.service.AdminAccess;
 import ru.saael.dynamicfields.service.InvalidRulesException;
 import ru.saael.dynamicfields.service.RulesService;
@@ -18,6 +20,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.CacheControl;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.io.IOException;
 
 /**
  * REST API: {@code /rest/dynamic-fields/1.0/form}
@@ -36,11 +39,13 @@ public class RulesResource {
 
     private final RulesService rulesService;
     private final AdminAccess adminAccess;
+    private final PortalFormFields portalFormFields;
 
     @Inject
-    public RulesResource(RulesService rulesService, AdminAccess adminAccess) {
+    public RulesResource(RulesService rulesService, AdminAccess adminAccess, PortalFormFields portalFormFields) {
         this.rulesService = rulesService;
         this.adminAccess = adminAccess;
+        this.portalFormFields = portalFormFields;
     }
 
     @GET
@@ -49,7 +54,25 @@ public class RulesResource {
         CacheControl cacheControl = new CacheControl();
         cacheControl.setNoCache(true);
         cacheControl.setNoStore(true);
-        return Response.ok(rulesService.getConfigJson()).cacheControl(cacheControl).build();
+        return Response.ok(withPortalField(rulesService.getConfigJson())).cacheControl(cacheControl).build();
+    }
+
+    /** Adds the issue-field id the portal uses to find where the questions should sit. Not stored. */
+    private String withPortalField(String json) {
+        String fieldId = portalFormFields.id();
+        if (fieldId == null || fieldId.length() == 0) {
+            return json;
+        }
+        try {
+            JsonNode parsed = MAPPER.readTree(json);
+            if (!(parsed instanceof ObjectNode)) {
+                return json;
+            }
+            ((ObjectNode) parsed).put("portalFieldId", fieldId);
+            return MAPPER.writeValueAsString(parsed);
+        } catch (IOException e) {
+            return json;
+        }
     }
 
     @GET

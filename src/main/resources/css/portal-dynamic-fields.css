@@ -10,7 +10,8 @@
 }
 
 .sdf-field {
-    margin: 0 0 14px;
+    margin: 0 0 20px;
+    clear: both;
 }
 
 .sdf-field.sdf-hidden,
@@ -24,8 +25,17 @@
     margin: 0 0 4px;
 }
 
-.sdf-label {
+.sdf-label,
+.sdf-field > label {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0 0 4px;
+    padding: 0;
+    color: #6b778c;
+    font-size: 12px;
     font-weight: 600;
+    line-height: 1.333;
 }
 
 .sdf-answer-label {
@@ -34,10 +44,19 @@
     font-weight: normal;
 }
 
-.sdf-option {
+.sdf-option,
+.sdf-choices label,
+.sdf-field label.checkbox,
+.sdf-field label.radio {
     display: block;
+    float: none;
+    width: auto;
+    margin: 4px 0;
+    padding: 0;
+    color: #172b4d;
+    font-size: 14px;
     font-weight: normal;
-    margin: 2px 0;
+    line-height: 1.428;
 }
 
 .sdf-answer-group {
@@ -50,16 +69,34 @@
     white-space: pre-wrap;
 }
 
+.sdf-field input.text,
+.sdf-field select.select,
+.sdf-field textarea.textarea,
 .sdf-input,
 .sdf-textarea,
 .sdf-select {
     box-sizing: border-box;
+    display: block;
     width: 100%;
-    max-width: 520px;
-    min-height: 30px;
-    padding: 4px 6px;
+    max-width: none;
+    min-height: 32px;
+    margin: 0;
+    padding: 6px 8px;
     border: 1px solid #dfe1e6;
     border-radius: 3px;
-    font: inherit;
     background: #fff;
+    color: #172b4d;
+    font-size: 14px;
+    font-weight: normal;
+    line-height: 1.428;
+}
+
+.sdf-field select.select,
+.sdf-select {
+    height: 36px;
+    background-color: #fafbfc;
+}
+
+.sdf-cf-value {
+    display: none !important;
 }

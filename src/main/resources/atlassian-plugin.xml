@@ -21,12 +21,12 @@
         <context>servicedesk.portal.requestcreate</context>
     </web-resource>
 
-    <web-panel key="answers-panel" name="Portal answers panel" location="atl.jira.view.issue.left.context" weight="200">
-        <label key="ru.saael.dynamicfields.answers.title"/>
-        <condition class="ru.saael.dynamicfields.panel.AnswersCondition"/>
-        <context-provider class="ru.saael.dynamicfields.panel.AnswersContextProvider"/>
-        <resource name="view" type="velocity" location="templates/answers-panel.vm"/>
-    </web-panel>
+    <customfield-type key="portal-form" name="Dynamic fields" class="ru.saael.dynamicfields.field.PortalFormCFType">
+        <description>Questions from the customer portal, shown in the issue details</description>
+        <resource type="velocity" name="view" location="templates/field/view.vm"/>
+        <resource type="velocity" name="edit" location="templates/field/edit.vm"/>
+        <resource type="velocity" name="xml" location="templates/field/xml.vm"/>
+    </customfield-type>
 
     <!-- ===================== REST ===================== -->
     <rest key="rest" path="/dynamic-fields" version="1.0">

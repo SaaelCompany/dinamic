@@ -15,6 +15,7 @@ import com.atlassian.sal.api.pluginsettings.PluginSettingsFactory;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.saael.dynamicfields.field.PortalFormFields;
 import ru.saael.dynamicfields.model.AnswerDocument;
 import ru.saael.dynamicfields.model.AnswerRow;
 import ru.saael.dynamicfields.model.FormField;
@@ -52,6 +53,7 @@ public class AnswersServiceImpl implements AnswersService {
     private final AdminAccess adminAccess;
     private final JsonEntityPropertyManager entityPropertyManager;
     private final IssueFieldSync issueFieldSync;
+    private final PortalFormFields portalFormFields;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Inject
@@ -62,7 +64,8 @@ public class AnswersServiceImpl implements AnswersService {
                               RulesService rulesService,
                               AdminAccess adminAccess,
                               @ComponentImport JsonEntityPropertyManager entityPropertyManager,
-                              IssueFieldSync issueFieldSync) {
+                              IssueFieldSync issueFieldSync,
+                              PortalFormFields portalFormFields) {
         this.pluginSettingsFactory = pluginSettingsFactory;
         this.issueManager = issueManager;
         this.permissionManager = permissionManager;
@@ -71,6 +74,7 @@ public class AnswersServiceImpl implements AnswersService {
         this.adminAccess = adminAccess;
         this.entityPropertyManager = entityPropertyManager;
         this.issueFieldSync = issueFieldSync;
+        this.portalFormFields = portalFormFields;
         installed = this;
     }
 
@@ -102,8 +106,25 @@ public class AnswersServiceImpl implements AnswersService {
             throw new IllegalStateException("Cannot store portal answers", e);
         }
         publishProperty(issue, document, form);
+        portalFormFields.write(issue, rows);
         issueFieldSync.writeAnswers(issue, form, document.getValues(), adminAccess.currentUser());
         log.info("Stored {} portal answer(s) on {}", rows.size(), issue.getKey());
+    }
+
+    @Override
+    public List<AnswerRow> storedRows(String issueKey) {
+        try {
+            Issue issue = find(issueKey);
+            AnswerDocument document = load(issue.getKey());
+            if (document.getRows() == null) {
+                return java.util.Collections.emptyList();
+            }
+            return document.getRows();
+        } catch (RuntimeException e) {
+            return java.util.Collections.emptyList();
+        } catch (AnswerRejectedException e) {
+            return java.util.Collections.emptyList();
+        }
     }
 
     /**

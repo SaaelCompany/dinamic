@@ -498,19 +498,6 @@
             clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
             titleGroup.querySelector('.sdf-field-value').appendChild(clearLabel);
             box.appendChild(titleGroup);
-            box.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner'), blockTypeSelect(block), null));
-            var placeRow = el('div', 'sdf-place');
-            placeRow.appendChild(placeSelect(block.place));
-            if (block.place === 'after') {
-                placeRow.appendChild(anchorControl(block));
-            }
-            var placeGroup = group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel'), placeRow, null);
-            if (block.place === 'after') {
-                var placeValue = placeGroup.querySelector('.sdf-field-value');
-                placeValue.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
-                placeValue.appendChild(anchorValuesBox(block));
-            }
-            box.appendChild(placeGroup);
             return box;
         }
 
@@ -604,9 +591,7 @@
             var out = [];
             var i;
             for (i = 0; i < config.blocks.length; i++) {
-                if (blockOnType(config.blocks[i], selectedType)) {
-                    out.push(i);
-                }
+                out.push(i);
             }
             return out;
         }
@@ -667,53 +652,12 @@
 
         function renderTypeNav() {
             var nav = document.getElementById('sdf-type-nav');
-            if (!nav) {
-                return;
+            if (nav) {
+                nav.style.display = 'none';
+                while (nav.firstChild) {
+                    nav.removeChild(nav.firstChild);
+                }
             }
-            while (nav.firstChild) {
-                nav.removeChild(nav.firstChild);
-            }
-            nav.className = 'aui-navgroup aui-navgroup-vertical sdf-type-nav';
-            var inner = el('div', 'aui-navgroup-inner');
-            var projects = projectNames();
-            if (projects.length) {
-                var projectBox = el('div', 'sdf-project');
-                projectBox.appendChild(el('div', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectNav')));
-                projectBox.appendChild(projectSelect(projects));
-                inner.appendChild(projectBox);
-            }
-            inner.appendChild(el('div', 'aui-nav-heading', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeNav')));
-            var list = el('ul', 'aui-nav');
-            var options = typesInProject();
-            var i;
-            if (countForType(0) > 0 || !Number(selectedType)) {
-                list.appendChild(typeLink(0, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassigned'), countForType(0), !Number(selectedType)));
-            }
-            for (i = 0; i < options.length; i++) {
-                list.appendChild(typeLink(options[i].id, options[i].name || options[i].label, countForType(options[i].id), Number(selectedType) === options[i].id));
-            }
-            if (requestTypes === null) {
-                var loading = el('li');
-                loading.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesLoading')));
-                list.appendChild(loading);
-            }
-            inner.appendChild(list);
-            if (!requestTypes || !requestTypes.length) {
-                var manual = el('div', 'sdf-type-manual');
-                var manualInput = document.createElement('input');
-                manualInput.type = 'text';
-                manualInput.className = 'text';
-                manualInput.setAttribute('data-role', 'type-manual');
-                manualInput.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typesManual'));
-                manual.appendChild(manualInput);
-                manual.appendChild(button('open-type', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addType'), false));
-                inner.appendChild(manual);
-            }
-            var hint = !Number(selectedType)
-                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unassignedHint')
-                : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.viewingHint');
-            inner.appendChild(el('p', 'description', hint));
-            nav.appendChild(inner);
         }
 
         function typeLink(id, label, count, selected) {
@@ -2476,15 +2420,11 @@
         }
 
         function addBlock() {
-            if (!(selectedType > 0)) {
-                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.pickTypeFirst')]);
-                return;
-            }
             config.blocks.push({
                 id: freshBlockId(config.blocks),
                 title: '',
                 clearOnHide: true,
-                requestTypeIds: [selectedType],
+                requestTypeIds: [],
                 place: 'end',
                 placeAfter: '',
                 anchorFieldId: '',
@@ -2567,12 +2507,6 @@
             }
             var b;
             for (b = 0; b < config.blocks.length; b++) {
-                if (!(config.blocks[b].requestTypeIds || []).length) {
-                    pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.scopeEmpty'));
-                }
-                if ((config.blocks[b].place === 'after') && !trim(config.blocks[b].placeAfter)) {
-                    pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needPlace'));
-                }
                 var fields = doc.blocks[b].fields;
                 var i;
                 for (i = 0; i < fields.length; i++) {
@@ -2694,23 +2628,7 @@
                 dataType: 'text',
                 headers: {'X-Atlassian-Token': 'no-check'}
             }).done(function (text) {
-                var keep = selectedType;
                 applyDocument(parseBody(text));
-                if (!(keep > 0) && requestTypes && requestTypes.length) {
-                    keep = Number(requestTypes[0].id);
-                }
-                if (keep > 0) {
-                    selectedType = keep;
-                    typePicked = true;
-                    var i;
-                    for (i = 0; i < config.blocks.length; i++) {
-                        if (!(config.blocks[i].requestTypeIds || []).length) {
-                            config.blocks[i].requestTypeIds = [selectedType];
-                        }
-                    }
-                    sync();
-                    refresh();
-                }
                 showMessage('success', [AJS.I18n.getText('ru.saael.dynamicfields.admin.example.loaded')]);
             }).fail(function (xhr) {
                 showMessage('error', errorLines(xhr));
@@ -2781,7 +2699,7 @@
             var b;
             for (b = 0; b < cfg.blocks.length; b++) {
                 var block = cfg.blocks[b];
-                if (!block.fields.length || !blockOnType(block, selectedType)) {
+                if (!block.fields.length) {
                     continue;
                 }
                 any = true;

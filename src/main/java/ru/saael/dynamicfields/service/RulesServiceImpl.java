@@ -9,6 +9,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.SerializationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.saael.dynamicfields.field.PortalFormFields;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import javax.inject.Inject;
@@ -30,13 +31,16 @@ public class RulesServiceImpl implements RulesService {
 
     private final PluginSettingsFactory pluginSettingsFactory;
     private final IssueFieldSync issueFieldSync;
+    private final PortalFormFields portalFormFields;
     private final ObjectMapper mapper;
 
     @Inject
     public RulesServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory,
-                            IssueFieldSync issueFieldSync) {
+                            IssueFieldSync issueFieldSync,
+                            PortalFormFields portalFormFields) {
         this.pluginSettingsFactory = pluginSettingsFactory;
         this.issueFieldSync = issueFieldSync;
+        this.portalFormFields = portalFormFields;
         this.mapper = new ObjectMapper();
         this.mapper.configure(DeserializationConfig.Feature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         this.mapper.configure(SerializationConfig.Feature.INDENT_OUTPUT, true);
@@ -91,6 +95,7 @@ public class RulesServiceImpl implements RulesService {
     @Override
     public String saveConfigJson(String json) throws InvalidRulesException {
         RulesConfig config = parse(json);
+        portalFormFields.ensure();
         issueFieldSync.ensureFields(config);
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);

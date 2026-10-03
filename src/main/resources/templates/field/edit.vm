@@ -1,0 +1,2 @@
+<textarea class="textarea sdf-cf-value" name="$customField.id" id="$customField.id" style="display:none" aria-hidden="true">$!textutils.htmlEncode($!value)</textarea>
+<div class="sdf-cf-form"></div>

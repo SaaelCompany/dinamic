@@ -1,7 +1,7 @@
 /**
- * Customer-portal form owned entirely by this plugin.
- * ES5, no libraries. Fields are not Jira custom fields: the block is painted here,
- * and answers are stored by the plugin when the request is created.
+ * Customer-portal questions owned by this plugin.
+ * ES5, no libraries. The questions are painted into the custom field Dynamic fields
+ * when that field is on the request type, and answers are stored on the issue.
  */
 (function () {
     'use strict';
@@ -204,21 +204,22 @@
 
     function buildField(field, blockId) {
         var wrap = document.createElement('div');
-        wrap.className = 'sdf-field';
+        wrap.className = 'field-group sdf-field';
         wrap.setAttribute('data-sdf-field', field.id);
         wrap.setAttribute('data-sdf-type', field.type || 'text');
         if (trim(field.label)) {
-            var label = document.createElement('div');
-            label.className = 'sdf-label';
+            var label = document.createElement('label');
             label.appendChild(document.createTextNode(trim(field.label)));
             wrap.appendChild(label);
         }
         var options = field.options || [];
         var i;
         if (field.type === 'checkbox' || field.type === 'radio') {
+            var choices = document.createElement('div');
+            choices.className = 'sdf-choices';
             for (i = 0; i < options.length; i++) {
                 var line = document.createElement('label');
-                line.className = 'sdf-option';
+                line.className = field.type === 'checkbox' ? 'checkbox' : 'radio';
                 var input = document.createElement('input');
                 input.type = field.type;
                 input.value = options[i];
@@ -230,11 +231,12 @@
                 }
                 line.appendChild(input);
                 line.appendChild(document.createTextNode(' ' + options[i]));
-                wrap.appendChild(line);
+                choices.appendChild(line);
             }
+            wrap.appendChild(choices);
         } else if (field.type === 'select' || field.type === 'multiselect') {
             var select = document.createElement('select');
-            select.className = 'sdf-select';
+            select.className = 'select full-width-field';
             select.setAttribute('form', 'sdf-unattached');
             if (field.type === 'multiselect') {
                 select.multiple = true;
@@ -255,7 +257,7 @@
             wrap.appendChild(select);
         } else if (field.type === 'textarea') {
             var area = document.createElement('textarea');
-            area.className = 'sdf-textarea';
+            area.className = 'textarea';
             area.setAttribute('rows', '3');
             area.setAttribute('form', 'sdf-unattached');
             area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
@@ -263,7 +265,7 @@
         } else {
             var text = document.createElement('input');
             text.type = portalInputKind(field.type);
-            text.className = 'sdf-input';
+            text.className = 'text';
             text.setAttribute('form', 'sdf-unattached');
             text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(text);
@@ -402,21 +404,7 @@
     }
 
     function requestTypeMatches(cfg) {
-        var ids = (cfg && cfg.requestTypeIds) || [];
-        if (!ids.length) {
-            return false;
-        }
-        var match = location.pathname.match(/\/create\/(\d+)/);
-        if (!match) {
-            return false;
-        }
-        var id = parseInt(match[1], 10);
-        for (var i = 0; i < ids.length; i++) {
-            if (Number(ids[i]) === id) {
-                return true;
-            }
-        }
-        return false;
+        return !!(cfg && cfg.fields && cfg.fields.length);
     }
 
     function issueKeyFromPath() {
@@ -512,11 +500,160 @@
         formEl.addEventListener('input', onEvent);
     }
 
+    function findHost() {
+        var host = document.querySelector('.sdf-cf-form');
+        if (host) {
+            return host;
+        }
+        var id = config && config.portalFieldId;
+        if (!id || !/^customfield_\d+$/.test(id)) {
+            return null;
+        }
+        var named = document.querySelector('[name="' + id + '"]');
+        if (!named) {
+            return null;
+        }
+        addClass(named, 'sdf-cf-value');
+        named.style.display = 'none';
+        var group = named.parentNode;
+        var slot = document.createElement('div');
+        slot.className = 'sdf-cf-form';
+        if (named.nextSibling) {
+            group.insertBefore(slot, named.nextSibling);
+        } else {
+            group.appendChild(slot);
+        }
+        return slot;
+    }
+
+    function hideFieldChrome(host) {
+        var areas = document.querySelectorAll('.sdf-cf-value');
+        var i;
+        for (i = 0; i < areas.length; i++) {
+            areas[i].style.display = 'none';
+        }
+        var group = host;
+        while (group && group !== document.body && !hasClass(group, 'field-group')) {
+            group = group.parentNode;
+        }
+        if (!group || group === document.body) {
+            return;
+        }
+        var children = group.children;
+        for (i = 0; i < children.length; i++) {
+            var child = children[i];
+            if (child.tagName && child.tagName.toLowerCase() === 'label') {
+                child.style.display = 'none';
+            }
+        }
+    }
+
+    function removeOutside(host) {
+        var nodes = document.querySelectorAll('.sdf-portal-block');
+        var i;
+        for (i = nodes.length - 1; i >= 0; i--) {
+            if (host.contains && host.contains(nodes[i])) {
+                continue;
+            }
+            if (nodes[i].parentNode) {
+                nodes[i].parentNode.removeChild(nodes[i]);
+            }
+        }
+    }
+
+    function renderInsideField(host, blocks) {
+        hideFieldChrome(host);
+        removeOutside(host);
+        var keep = {};
+        var i;
+        for (i = 0; i < blocks.length; i++) {
+            keep[blocks[i].id] = true;
+        }
+        var stale = host.querySelectorAll('.sdf-portal-block');
+        for (i = stale.length - 1; i >= 0; i--) {
+            if (!keep[stale[i].getAttribute('data-sdf-block')] && stale[i].parentNode) {
+                stale[i].parentNode.removeChild(stale[i]);
+            }
+        }
+        var formEl = formOf(host);
+        if (formEl) {
+            wireForm(formEl);
+        }
+        for (i = 0; i < blocks.length; i++) {
+            var block = blocks[i];
+            var node = host.querySelector('[data-sdf-block="' + block.id + '"]');
+            if (!node) {
+                node = buildSection(block);
+                host.appendChild(node);
+            }
+            applyVisibility(node, block);
+            removeClass(node, 'sdf-hidden');
+        }
+    }
+
+    function joinAnswer(values) {
+        var out = [];
+        var i;
+        for (i = 0; i < (values || []).length; i++) {
+            if (trim(values[i])) {
+                out.push(trim(values[i]));
+            }
+        }
+        return out.join(', ');
+    }
+
+    function answerSummary() {
+        var lines = [];
+        var sections = document.querySelectorAll('.sdf-portal-block');
+        var s;
+        for (s = 0; s < sections.length; s++) {
+            if (hasClass(sections[s], 'sdf-hidden')) {
+                continue;
+            }
+            var id = sections[s].getAttribute('data-sdf-block');
+            var block = findBlock(id);
+            if (block) {
+                applyVisibility(sections[s], block);
+            }
+            var values = readValues(sections[s], true);
+            var fields = (block && block.fields) || [];
+            var i;
+            for (i = 0; i < fields.length; i++) {
+                var text = joinAnswer(values[fields[i].id]);
+                if (!text) {
+                    continue;
+                }
+                var label = trim(fields[i].label);
+                lines.push(label ? (label + ': ' + text) : text);
+            }
+        }
+        return lines.join('\n');
+    }
+
+    function syncFieldValue() {
+        var areas = document.querySelectorAll('.sdf-cf-value');
+        if (!areas.length) {
+            return;
+        }
+        var text = answerSummary();
+        var i;
+        for (i = 0; i < areas.length; i++) {
+            if (typeof areas[i].value === 'string') {
+                areas[i].value = text;
+            }
+        }
+    }
+
     function ensureForm() {
         if (!isCreatePage()) {
             return;
         }
         var blocks = visibleBlocks();
+        var host = findHost();
+        if (host) {
+            renderInsideField(host, blocks);
+            return;
+        }
         var formEl = document.querySelector('form.cp-request-form');
         if (!formEl) {
             return;
@@ -897,11 +1034,10 @@
     }
 
     function portalSections() {
-        var formEl = document.querySelector('form.cp-request-form');
-        if (!formEl || !formEl.querySelectorAll) {
+        if (!document.querySelectorAll) {
             return [];
         }
-        return formEl.querySelectorAll('[data-sdf-block]');
+        return document.querySelectorAll('.sdf-portal-block');
     }
 
     function remember() {
@@ -1122,6 +1258,7 @@
         if (!formEl || !formEl.querySelector || !formEl.querySelector('[data-sdf-block]')) {
             return;
         }
+        syncFieldValue();
         remember();
         stripPortalNames();
     }
@@ -1185,6 +1322,7 @@
         document.addEventListener('submit', function (e) {
             var formEl = e.target;
             if (formEl && formEl.querySelector && formEl.querySelector('[data-sdf-block]')) {
+                syncFieldValue();
                 remember();
                 stripPortalNames();
             }
