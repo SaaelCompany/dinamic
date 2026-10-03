@@ -1,0 +1,99 @@
+<html>
+<head>
+    <title>$pageTitle</title>
+    <meta name="decorator" content="atl.admin">
+#if ($onlyFieldId && $onlyFieldId != "")
+    <meta name="admin.active.section" content="admin_issues_menu/element_options_section/fields_section">
+    <meta name="admin.active.tab" content="view_custom_fields">
+#else
+    <meta name="admin.active.section" content="admin_plugins_menu/dynamic-fields-section">
+    <meta name="admin.active.tab" content="dynamic-fields-admin-link">
+#end
+</head>
+<body>
+<header class="aui-page-header">
+    <div class="aui-page-header-inner">
+        <div class="aui-page-header-main">
+            <h1>$pageTitle</h1>
+        </div>
+    </div>
+</header>
+
+<div class="aui-page-panel">
+    <div class="aui-page-panel-inner">
+        <section class="aui-page-panel-content">
+#if ($onlyFieldId && $onlyFieldId != "")
+            <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.field.intro")</p>
+            <p class="sdf-field-links">
+                <a href="$contextPath/secure/admin/ViewCustomFields.jspa">$i18n.getText("ru.saael.dynamicfields.admin.field.back")</a>
+                <a href="$contextPath/secure/admin/AssociateFieldToScreens!default.jspa?fieldId=$onlyFieldId">$i18n.getText("ru.saael.dynamicfields.admin.field.screens")</a>
+            </p>
+#else
+            <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.intro")</p>
+#end
+            <div id="sdf-messages"></div>
+
+            <div id="sdf-app" class="sdf-app" data-context-path="$contextPath" data-only-field="$!onlyFieldId">
+                <div class="aui-toolbar2 sdf-toolbar">
+                    <div class="aui-toolbar2-inner">
+                        <div class="aui-toolbar2-primary">
+                        </div>
+                        <div class="aui-toolbar2-secondary">
+                            <span id="sdf-block-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.blocks.count") $blockCount</span>
+                            <span id="sdf-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.fields.count") $fieldCount</span>
+                            <button id="sdf-reload" class="aui-button aui-button-subtle" type="button" data-role="reload">$i18n.getText("ru.saael.dynamicfields.admin.button.reload")</button>
+                            <button id="sdf-save" class="aui-button aui-button-primary" type="button" data-role="save">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sdf-layout">
+                    <div id="sdf-type-nav" class="aui-navgroup aui-navgroup-vertical sdf-type-nav"></div>
+                    <div class="sdf-builder">
+                        <div id="sdf-empty" class="aui-message sdf-empty">
+                            <p>$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>
+                        </div>
+                        <div id="sdf-blocks"></div>
+                    </div>
+                    <aside class="sdf-preview-pane module">
+                        <div class="mod-header">
+                            <h3>$i18n.getText("ru.saael.dynamicfields.admin.builder.previewTitle")</h3>
+                        </div>
+                        <div class="mod-content">
+                            <p class="description">$i18n.getText("ru.saael.dynamicfields.admin.builder.previewHint")</p>
+                            <div id="sdf-preview" class="sdf-preview"></div>
+                        </div>
+                    </aside>
+                </div>
+
+                <details class="sdf-json-panel">
+                    <summary>$i18n.getText("ru.saael.dynamicfields.admin.builder.jsonToggle")</summary>
+                    <form id="sdf-form" class="aui" onsubmit="return false;">
+                        <div class="field-group sdf-editor-group">
+                            <label for="sdf-rules">$i18n.getText("ru.saael.dynamicfields.admin.rules.label")</label>
+                            <textarea id="sdf-rules" class="textarea sdf-editor" rows="16" spellcheck="false" autocomplete="off">$rulesJsonHtml</textarea>
+                            <div class="description">$i18n.getText("ru.saael.dynamicfields.admin.rules.description")</div>
+                        </div>
+                        <div class="buttons-container">
+                            <div class="buttons">
+                                <button id="sdf-apply-json" class="aui-button" type="button" data-role="apply-json">$i18n.getText("ru.saael.dynamicfields.admin.builder.applyJson")</button>
+                                <button id="sdf-validate" class="aui-button" type="button" data-role="validate">$i18n.getText("ru.saael.dynamicfields.admin.button.validate")</button>
+                                <button id="sdf-format" class="aui-button aui-button-subtle" type="button" data-role="format">$i18n.getText("ru.saael.dynamicfields.admin.button.format")</button>
+                                <button id="sdf-example" class="aui-button aui-button-subtle" type="button" data-role="example">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
+                            </div>
+                        </div>
+                    </form>
+                    <h3>$i18n.getText("ru.saael.dynamicfields.admin.help.title")</h3>
+                    <ul class="sdf-help">
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.how")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.when")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.scope")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.answers")</li>
+                    </ul>
+                </details>
+            </div>
+        </section>
+    </div>
+</div>
+</body>
+</html>

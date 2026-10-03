@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<atlassian-plugin key="${atlassian.plugin.key}" name="${project.name}" plugins-version="2">
+    <plugin-info>
+        <description><![CDATA[
+            <p>Дополнительные вопросы на клиентском портале Jira Service Management. Поле создаётся в настраиваемых полях, вопросы собираются в конструкторе, затем поле добавляется в тип запроса.</p>
+            <p>Поддержка: niouti@yandex.ru, nioutistudio@gmail.com</p>
+            <p><img src="https://raw.githubusercontent.com/SaaelCompany/dinamic/cursor/portal-dynamic-fields-plugin-4b5b/src/main/resources/images/portal.png" alt="Вопросы на портале"></p>
+            <p><img src="https://raw.githubusercontent.com/SaaelCompany/dinamic/cursor/portal-dynamic-fields-plugin-4b5b/src/main/resources/images/fields.png" alt="Список полей в конструкторе"></p>
+        ]]></description>
+        <version>${project.version}</version>
+        <vendor name="${project.organization.name}" url="${project.organization.url}"/>
+        <param name="configure.url">/plugins/servlet/dynamic-fields/admin</param>
+    </plugin-info>
+
+    <resource type="i18n" name="i18n" location="i18n.dynamic-fields"/>
+
+    <!-- ===================== Customer portal ===================== -->
+    <web-resource key="portal-resources" name="Dynamic fields - customer portal script">
+        <transformation extension="js">
+            <transformer key="jsI18n"/>
+        </transformation>
+        <resource type="download" name="portal-dynamic-fields.js" location="/js/portal-dynamic-fields.js"/>
+        <resource type="download" name="portal-dynamic-fields.css" location="/css/portal-dynamic-fields.css"/>
+        <!-- loaded on every customer portal page (the portal is a single page application) -->
+        <context>customerportal</context>
+        <context>servicedesk.portal.requestcreate</context>
+    </web-resource>
+
+    <customfield-type key="portal-form" name="Dynamic fields" i18n-name-key="ru.saael.dynamicfields.field.type" class="ru.saael.dynamicfields.field.PortalFormCFType">
+        <description key="ru.saael.dynamicfields.field.type.description">Questions configured for this field</description>
+        <resource type="velocity" name="view" location="templates/field/view.vm"/>
+        <resource type="velocity" name="edit" location="templates/field/edit.vm"/>
+        <resource type="velocity" name="xml" location="templates/field/xml.vm"/>
+    </customfield-type>
+
+    <!-- ===================== REST ===================== -->
+    <rest key="rest" path="/dynamic-fields" version="1.0">
+        <description>Dynamic fields rules REST API</description>
+        <package>ru.saael.dynamicfields.rest</package>
+    </rest>
+
+    <!-- ===================== Administration ===================== -->
+    <servlet key="admin-servlet" name="Dynamic fields admin servlet" class="ru.saael.dynamicfields.servlet.AdminServlet">
+        <url-pattern>/dynamic-fields/admin</url-pattern>
+    </servlet>
+
+    <servlet-filter key="configure-field-filter" name="Dynamic fields configure filter"
+                    class="ru.saael.dynamicfields.servlet.ConfigureFieldFilter"
+                    location="before-dispatch" weight="100">
+        <description>Opens the question builder from Custom fields - Configure.</description>
+        <url-pattern>/secure/admin/ConfigureCustomField!default.jspa</url-pattern>
+        <url-pattern>/secure/admin/ConfigureCustomField.jspa</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+    </servlet-filter>
+
+    <web-section key="dynamic-fields-section" name="Dynamic fields admin section"
+                 location="admin_plugins_menu" weight="150">
+        <label key="ru.saael.dynamicfields.admin.section"/>
+    </web-section>
+
+    <web-item key="dynamic-fields-admin-link" name="Dynamic fields admin link"
+              section="admin_plugins_menu/dynamic-fields-section" weight="10">
+        <label key="ru.saael.dynamicfields.admin.title"/>
+        <link linkId="dynamic-fields-admin-link">/plugins/servlet/dynamic-fields/admin</link>
+    </web-item>
+
+    <web-resource key="admin-resources" name="Dynamic fields - admin page resources">
+        <dependency>com.atlassian.auiplugin:ajs</dependency>
+        <dependency>com.atlassian.auiplugin:aui-flag</dependency>
+        <transformation extension="js">
+            <transformer key="jsI18n"/>
+        </transformation>
+        <resource type="download" name="admin.js" location="/js/admin.js"/>
+        <resource type="download" name="admin.css" location="/css/admin.css"/>
+    </web-resource>
+</atlassian-plugin>

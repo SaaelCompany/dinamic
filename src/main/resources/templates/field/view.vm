@@ -1,0 +1,14 @@
+#if ($sdfRows && $sdfRows.size() > 0)
+<div class="sdf-details">
+#foreach ($row in $sdfRows)
+    <div style="margin: 0 0 8px;">
+        #if ($row.label)
+        <div style="color: #6b778c; font-size: 12px;">$textutils.htmlEncode($row.label)</div>
+        #end
+        <div style="white-space: pre-wrap;">$textutils.htmlEncode($row.value)</div>
+    </div>
+#end
+</div>
+#elseif ($value)
+<div style="white-space: pre-wrap;">$textutils.htmlEncode($value)</div>
+#end
