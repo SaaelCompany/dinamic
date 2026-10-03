@@ -69,32 +69,18 @@
     white-space: pre-wrap;
 }
 
-.sdf-field input.text,
-.sdf-field select.select,
-.sdf-field textarea.textarea,
+form.aui .field-group.sdf-field input.text,
+form.aui .field-group.sdf-field select.select,
+form.aui .field-group.sdf-field textarea.textarea,
+.field-group.sdf-field input.text,
+.field-group.sdf-field select.select,
+.field-group.sdf-field textarea.textarea,
 .sdf-input,
 .sdf-textarea,
 .sdf-select {
     box-sizing: border-box;
-    display: block;
     width: 100%;
     max-width: none;
-    min-height: 32px;
-    margin: 0;
-    padding: 6px 8px;
-    border: 1px solid #dfe1e6;
-    border-radius: 3px;
-    background: #fff;
-    color: #172b4d;
-    font-size: 14px;
-    font-weight: normal;
-    line-height: 1.428;
-}
-
-.sdf-field select.select,
-.sdf-select {
-    height: 36px;
-    background-color: #fafbfc;
 }
 
 .sdf-cf-value {

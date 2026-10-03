@@ -257,7 +257,7 @@
             wrap.appendChild(select);
         } else if (field.type === 'textarea') {
             var area = document.createElement('textarea');
-            area.className = 'textarea';
+            area.className = 'textarea full-width-field';
             area.setAttribute('rows', '3');
             area.setAttribute('form', 'sdf-unattached');
             area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
@@ -265,7 +265,7 @@
         } else {
             var text = document.createElement('input');
             text.type = portalInputKind(field.type);
-            text.className = 'text';
+            text.className = 'text full-width-field';
             text.setAttribute('form', 'sdf-unattached');
             text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(text);
