@@ -256,10 +256,10 @@
 }
 
 .sdf-preview-pane {
-    flex: 0 0 320px;
-    width: 320px;
-    position: sticky;
-    top: 16px;
+    flex: 1 1 100%;
+    width: auto;
+    max-width: 920px;
+    position: static;
 }
 
 .sdf-preview-pane .mod-header h3 {
