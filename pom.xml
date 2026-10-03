@@ -6,7 +6,7 @@
 
     <groupId>ru.saael.jira</groupId>
     <artifactId>portal-dynamic-fields</artifactId>
-    <version>2.5.3</version>
+    <version>2.5.4</version>
     <packaging>atlassian-plugin</packaging>
 
     <name>Portal Dynamic Fields</name>
