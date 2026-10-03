@@ -475,39 +475,36 @@
         }
 
         function renderScope(block) {
-            var box = el('div', 'sdf-scope');
-            var titleGroup = el('div', 'field-group');
-            titleGroup.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockTitle')));
+            var box = el('form', 'aui sdf-scope');
+            box.onsubmit = function () {
+                return false;
+            };
             var title = document.createElement('input');
             title.type = 'text';
             title.className = 'text';
             title.setAttribute('data-role', 'block-title');
             title.value = block.title || '';
-            titleGroup.appendChild(title);
-            var clearLabel = el('label', 'sdf-clear-label');
+            var titleGroup = group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockTitle'), title, null);
+            var clearLabel = el('label', 'sdf-inline-check sdf-clear-label');
             var clear = document.createElement('input');
             clear.type = 'checkbox';
             clear.setAttribute('data-role', 'block-clear');
             clear.checked = block.clearOnHide !== false;
             clearLabel.appendChild(clear);
             clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
-            titleGroup.appendChild(clearLabel);
+            titleGroup.querySelector('.sdf-field-value').appendChild(clearLabel);
             box.appendChild(titleGroup);
-            var owner = el('div', 'field-group');
-            owner.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner')));
-            owner.appendChild(blockTypeSelect(block));
-            box.appendChild(owner);
-            var placeGroup = el('div', 'field-group');
-            placeGroup.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel')));
+            box.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner'), blockTypeSelect(block), null));
             var placeRow = el('div', 'sdf-place');
             placeRow.appendChild(placeSelect(block.place));
             if (block.place === 'after') {
                 placeRow.appendChild(anchorControl(block));
             }
-            placeGroup.appendChild(placeRow);
+            var placeGroup = group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeLabel'), placeRow, null);
             if (block.place === 'after') {
-                placeGroup.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
-                placeGroup.appendChild(anchorValuesBox(block));
+                var placeValue = placeGroup.querySelector('.sdf-field-value');
+                placeValue.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterHint')));
+                placeValue.appendChild(anchorValuesBox(block));
             }
             box.appendChild(placeGroup);
             return box;
@@ -1539,8 +1536,9 @@
         }
 
         function renderWhen(block, field, index) {
-            var box = el('div', 'sdf-when');
-            box.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
+            var value = el('div', 'sdf-field-value');
             var select = document.createElement('select');
             select.className = 'select';
             select.setAttribute('data-role', 'when-field');
@@ -1559,7 +1557,7 @@
                 }
                 select.appendChild(option);
             }
-            box.appendChild(select);
+            value.appendChild(select);
             if (field.when && field.when.fieldId) {
                 var parent = null;
                 for (i = 0; i < index; i++) {
@@ -1583,6 +1581,7 @@
                             continue;
                         }
                         var label = document.createElement('label');
+                        label.className = 'sdf-inline-check';
                         var check = document.createElement('input');
                         check.type = 'checkbox';
                         check.setAttribute('data-role', 'when-value');
@@ -1593,13 +1592,15 @@
                         values.appendChild(label);
                     }
                 }
-                box.appendChild(values);
+                value.appendChild(values);
             }
+            box.appendChild(value);
             return box;
         }
 
         function modeRadio(block, index, value, text, checked) {
             var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
             var input = document.createElement('input');
             input.type = 'radio';
             input.name = 'sdf-when-mode-' + block.id + '-' + index;
