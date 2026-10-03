@@ -1,12 +1,211 @@
 /* Portal Dynamic Fields - administration page */
 .sdf-intro {
-    max-width: 900px;
+    max-width: 980px;
+}
+
+.sdf-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 8px 0 16px;
+}
+
+.sdf-clear-label {
+    margin: 0;
+}
+
+.sdf-spacer {
+    flex: 1 1 auto;
+}
+
+.sdf-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.sdf-builder {
+    flex: 1 1 560px;
+    min-width: 0;
+}
+
+.sdf-preview-pane {
+    flex: 0 0 380px;
+    position: sticky;
+    top: 8px;
+}
+
+.sdf-preview-pane h3 {
+    margin-top: 0;
+}
+
+.sdf-loading,
+.sdf-empty,
+.sdf-preview-empty {
+    color: #6b778c;
+}
+
+.sdf-rule {
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    padding: 12px 14px 8px;
+    margin-bottom: 12px;
+}
+
+.sdf-rule-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.sdf-rule-num {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #deebff;
+    color: #0747a6;
+    font-weight: 600;
+    text-align: center;
+    line-height: 22px;
+    font-size: 12px;
+}
+
+.sdf-rule-head .sdf-comment {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sdf-row {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin: 6px 0;
+}
+
+.sdf-kw {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: #0052cc;
+    line-height: 30px;
+    min-width: 64px;
+}
+
+.sdf-rule select,
+.sdf-rule input.text,
+.sdf-extra {
+    max-width: 280px;
+}
+
+.sdf-values {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 8px;
+    background: #f4f5f7;
+    border-radius: 3px;
+}
+
+.sdf-option {
+    margin: 0;
+}
+
+.sdf-show-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.sdf-scope {
+    margin-top: 6px;
+}
+
+.sdf-scope-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding-top: 6px;
+}
+
+.sdf-scope-body label {
+    display: block;
+    color: #6b778c;
+    font-size: 12px;
+}
+
+.sdf-icon-button {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #42526e;
+    line-height: 1;
+    padding: 4px 6px;
+}
+
+.sdf-icon-button:hover {
+    background: #f4f5f7;
+    border-color: #dfe1e6;
+}
+
+.sdf-preview {
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(9, 30, 66, 0.08);
+    padding: 16px 16px 8px;
+    min-height: 120px;
+}
+
+.sdf-preview .field-group {
+    margin-bottom: 14px;
+}
+
+.sdf-preview .field-label,
+.sdf-preview legend {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+    padding: 0;
+    float: none;
+    width: auto;
+    text-align: left;
+}
+
+.sdf-preview .checkbox,
+.sdf-preview .radio {
+    display: block;
+    margin: 2px 0;
+}
+
+.sdf-preview select,
+.sdf-preview input.text,
+.sdf-preview textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.sdf-json-panel {
+    margin-top: 24px;
+    max-width: 980px;
+}
+
+.sdf-json-panel summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 8px;
 }
 
 form.aui .sdf-editor-group > .sdf-editor {
     width: 100%;
     max-width: 900px;
-    min-height: 420px;
+    min-height: 240px;
     font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
     font-size: 12px;
     line-height: 1.5;
@@ -16,31 +215,23 @@ form.aui .sdf-editor-group > .sdf-editor {
     resize: vertical;
 }
 
-form.aui .sdf-editor-group > .description {
-    max-width: 900px;
-}
-
-#sdf-rules-count {
-    margin-left: 6px;
-}
-
-.sdf-errors {
-    margin-top: 6px;
-}
-
 .sdf-help {
     max-width: 900px;
 }
 
-.sdf-schema {
-    max-width: 900px;
-    background: #f4f5f7;
-    border-radius: 3px;
-    padding: 10px 12px;
-    font-size: 12px;
-    overflow: auto;
-}
-
 .sdf-busy {
     opacity: 0.6;
+}
+
+@media (max-width: 1100px) {
+    .sdf-layout {
+        flex-direction: column;
+    }
+
+    .sdf-preview-pane {
+        flex-basis: auto;
+        width: 100%;
+        max-width: 480px;
+        position: static;
+    }
 }

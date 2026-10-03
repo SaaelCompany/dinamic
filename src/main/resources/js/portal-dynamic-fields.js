@@ -33,6 +33,8 @@
     var VALUE_PLACEHOLDERS = { '': true, '-1': true };
 
     var config = null;
+    /** Set once the admin builder pushes an unsaved configuration, so the REST reload cannot overwrite it. */
+    var configLocked = false;
     var timer = null;
     var debug = false;
 
@@ -400,6 +402,12 @@
     function evaluate() {
         timer = null;
         if (!config || !config.rules || !config.rules.length) {
+            // nothing is conditional: drop hides left over from the previous configuration
+            toArray(document.querySelectorAll('.' + HIDDEN_CLASS)).forEach(function (el) {
+                el.classList.remove(HIDDEN_CLASS);
+                el.removeAttribute('aria-hidden');
+                el.removeAttribute(HIDDEN_ATTR);
+            });
             return;
         }
         var scope = pageScope();
@@ -477,9 +485,14 @@
             }
             if (xhr.status >= 200 && xhr.status < 300) {
                 try {
-                    config = JSON.parse(xhr.responseText);
+                    var parsed = JSON.parse(xhr.responseText);
+                    if (!configLocked) {
+                        config = parsed;
+                    }
                 } catch (e) {
-                    config = null;
+                    if (!configLocked) {
+                        config = null;
+                    }
                     log('cannot parse rules', e);
                 }
             } else {
@@ -504,6 +517,12 @@
         }
         window.addEventListener('popstate', scheduleEvaluate);
         window.addEventListener('hashchange', scheduleEvaluate);
+    }
+
+    function setConfig(next) {
+        config = next || { rules: [] };
+        configLocked = true;
+        evaluate();
     }
 
     function start() {
@@ -573,7 +592,8 @@
         },
         readValues: readValues,
         containersOf: containersOf,
-        listFields: listFields
+        listFields: listFields,
+        setConfig: setConfig
     };
 
     if (document.readyState === 'loading') {

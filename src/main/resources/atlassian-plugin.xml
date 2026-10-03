@@ -43,6 +43,8 @@
     <web-resource key="admin-resources" name="Dynamic fields - admin page resources">
         <dependency>com.atlassian.auiplugin:ajs</dependency>
         <dependency>com.atlassian.auiplugin:aui-flag</dependency>
+        <!-- the preview on the admin page is rendered by the same script as the customer portal -->
+        <dependency>ru.saael.jira.portal-dynamic-fields:portal-resources</dependency>
         <transformation extension="js">
             <transformer key="jsI18n"/>
         </transformation>
