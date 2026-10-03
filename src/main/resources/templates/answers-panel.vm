@@ -1,0 +1,8 @@
+<div class="sdf-answers" style="padding: 0 10px 8px;">
+#foreach ($row in $sdfRows)
+    <div style="margin: 0 0 8px;">
+        <div style="color: #6b778c; font-size: 12px;">$row.label</div>
+        <div style="white-space: pre-wrap;">$row.value</div>
+    </div>
+#end
+</div>

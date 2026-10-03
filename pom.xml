@@ -6,13 +6,13 @@
 
     <groupId>ru.saael.jira</groupId>
     <artifactId>portal-dynamic-fields</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <packaging>atlassian-plugin</packaging>
 
     <name>Portal Dynamic Fields</name>
     <description>
-        Dynamic (conditional) fields on the Jira Service Management customer portal:
-        shows dependent fields only when a trigger checkbox / option is selected, with unlimited nesting.
+        Extra questions on the Jira Service Management customer portal.
+        Fields, options and visibility conditions are defined in the plugin; answers are stored on the request.
     </description>
     <organization>
         <name>Saael</name>

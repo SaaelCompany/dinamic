@@ -1,4 +1,58 @@
-/* Portal Dynamic Fields: wrapper of a field hidden by a rule */
-.sdf-hidden {
+.sdf-block,
+.sdf-answers {
+    margin: 8px 0 16px;
+}
+
+.sdf-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px;
+}
+
+.sdf-field {
+    margin: 0 0 14px;
+}
+
+.sdf-field.sdf-hidden {
     display: none !important;
+}
+
+.sdf-label,
+.sdf-answer-label {
+    display: block;
+    margin: 0 0 4px;
+}
+
+.sdf-label {
+    font-weight: 600;
+}
+
+.sdf-answer-label {
+    color: #6b778c;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.sdf-option {
+    display: block;
+    font-weight: normal;
+    margin: 2px 0;
+}
+
+.sdf-answer-value {
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+}
+
+.sdf-input,
+.sdf-textarea,
+.sdf-select {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 520px;
+    padding: 4px 6px;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    font: inherit;
+    background: #fff;
 }

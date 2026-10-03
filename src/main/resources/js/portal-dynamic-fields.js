@@ -1,604 +1,823 @@
-/*
- * Portal Dynamic Fields - customer portal runtime.
- *
- * Loads the rules from /rest/dynamic-fields/1.0/rules and, on every change of the request form,
- * decides which fields have to be visible:
- *
- *   - a field that is not a target of any applicable rule is always visible;
- *   - a target field is visible only while at least one rule that lists it in "show" matches
- *     AND the trigger field of that rule is itself visible (=> unlimited nesting / cascading hide).
- *
- * Written in ES5 without any library dependency on purpose: the customer portal only guarantees
- * a very small set of globals.
+/**
+ * Customer-portal form owned entirely by this plugin.
+ * ES5, no libraries. Fields are not Jira custom fields: the block is painted here,
+ * and answers are stored by the plugin when the request is created.
  */
-(function (window, document) {
+(function () {
     'use strict';
 
-    if (window.SaaelDynamicFields) {
-        return;
-    }
-
-    var REST_PATH = '/rest/dynamic-fields/1.0/rules';
-    var HIDDEN_CLASS = 'sdf-hidden';
-    var HIDDEN_ATTR = 'data-sdf-hidden-field';
-    var DEBOUNCE_MS = 30;
-    var DEFAULT_CONTAINER_SELECTORS = [
-        '[data-field-id]',
-        '.cv-field-group',
-        '.sd-field-group',
-        '.field-group',
-        '.cv-request-field',
-        '.form-field'
-    ];
-    var VALUE_PLACEHOLDERS = { '': true, '-1': true };
-
+    var PENDING_KEY = 'sdf-pending';
+    var PENDING_MS = 120000;
     var config = null;
-    /** Set once the admin builder pushes an unsaved configuration, so the REST reload cannot overwrite it. */
-    var configLocked = false;
-    var timer = null;
-    var debug = false;
+    var answersState = {};
+    var scheduled = false;
+    var lastHref = '';
 
-    try {
-        debug = window.localStorage && window.localStorage.getItem('sdf.debug') === 'true';
-    } catch (e) {
-        debug = false;
+    function trim(value) {
+        return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
     }
 
-    function log() {
-        if (debug && window.console && window.console.log) {
+    function debug() {
+        try {
+            if (!window.console || !window.localStorage || localStorage.getItem('sdf.debug') !== 'true') {
+                return;
+            }
             var args = Array.prototype.slice.call(arguments);
-            args.unshift('[dynamic-fields]');
-            window.console.log.apply(window.console, args);
+            args.unshift('[sdf]');
+            console.log.apply(console, args);
+        } catch (e) {
+            // localStorage can throw
         }
     }
-
-    /* ------------------------------------------------------------------ helpers */
 
     function contextPath() {
-        if (window.AJS && typeof window.AJS.contextPath === 'function') {
-            return window.AJS.contextPath() || '';
+        if (window.AJS && AJS.contextPath) {
+            return AJS.contextPath();
         }
-        var meta = document.querySelector('meta[name="ajs-context-path"]');
-        return meta ? (meta.getAttribute('content') || '') : '';
+        return '';
     }
 
-    function matchesSelector(el, selector) {
-        var fn = el.matches || el.msMatchesSelector || el.webkitMatchesSelector;
-        try {
-            return fn ? fn.call(el, selector) : false;
-        } catch (e) {
-            return false;
+    function rest(path) {
+        return contextPath() + '/rest/dynamic-fields/1.0' + path;
+    }
+
+    function hasClass(el, name) {
+        return !!el && (' ' + el.className + ' ').indexOf(' ' + name + ' ') !== -1;
+    }
+
+    function addClass(el, name) {
+        if (el && !hasClass(el, name)) {
+            el.className += (el.className ? ' ' : '') + name;
         }
     }
 
-    function closest(el, selector) {
-        var node = el;
-        while (node && node.nodeType === 1) {
-            if (matchesSelector(node, selector)) {
-                return node;
-            }
-            node = node.parentElement;
+    function removeClass(el, name) {
+        if (!el) {
+            return;
         }
-        return null;
+        el.className = (' ' + el.className + ' ').replace(' ' + name + ' ', ' ').replace(/^\s+|\s+$/g, '');
     }
 
-    function normalise(value) {
-        return String(value == null ? '' : value).replace(/\s+/g, ' ').replace(/^ | $/g, '').toLowerCase();
-    }
-
-    function tidy(value) {
-        return String(value == null ? '' : value).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-    }
-
-    function toArray(list) {
-        return Array.prototype.slice.call(list || []);
-    }
-
-    function escapeAttr(value) {
-        return String(value).replace(/["\\]/g, '\\$&');
-    }
-
-    function pageScope() {
-        var match = /\/servicedesk\/customer\/portal\/(\d+)(?:\/create\/(\d+))?/.exec(window.location.pathname);
-        return {
-            portalId: match ? Number(match[1]) : null,
-            requestTypeId: match && match[2] ? Number(match[2]) : null
-        };
-    }
-
-    function ruleApplies(rule, scope) {
-        if (!rule || !rule.when || !rule.when.fieldId || !rule.show || !rule.show.length) {
-            return false;
+    function visibility(fields, values) {
+        var visible = {};
+        var list = fields || [];
+        for (var i = 0; i < list.length; i++) {
+            visible[list[i].id] = shown(list[i], visible, values || {});
         }
-        if (rule.portalId != null && scope.portalId !== Number(rule.portalId)) {
-            return false;
-        }
-        if (rule.requestTypeIds && rule.requestTypeIds.length) {
-            if (scope.requestTypeId == null) {
-                return false;
-            }
-            var found = false;
-            for (var i = 0; i < rule.requestTypeIds.length; i++) {
-                if (Number(rule.requestTypeIds[i]) === scope.requestTypeId) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
-        }
-        return true;
+        return visible;
     }
 
-    /* ------------------------------------------------------------- field lookup */
-
-    /**
-     * Base field id of a form control: "customfield_10100" for name="customfield_10100",
-     * name="customfield_10100:1" (cascading select) or id="customfield_10100-10001" (checkbox option).
-     */
-    function fieldOf(control) {
-        var name = control.getAttribute('name');
-        if (name) {
-            return name.split(':')[0];
-        }
-        var id = control.id || '';
-        if (!id) {
-            return null;
-        }
-        id = id.replace(/^s2id_/, '');
-        return id.replace(/[-:].*$/, '');
-    }
-
-    function isControl(el) {
-        var tag = el.tagName;
-        return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
-    }
-
-    function fieldElements(fieldId) {
-        var id = escapeAttr(fieldId);
-        var selector = '[name="' + id + '"],[id="' + id + '"],[name^="' + id + ':"],[id^="' + id + ':"],' +
-            '[id^="' + id + '-"],[id="s2id_' + id + '"],[data-field-id="' + id + '"]';
-        var elements;
-        try {
-            elements = toArray(document.querySelectorAll(selector));
-        } catch (e) {
-            return [];
-        }
-        return elements.filter(function (el) {
-            // "customfield_10100-" would also match ids of unrelated widgets; keep only form-ish elements
-            return isControl(el) || el.hasAttribute('data-field-id') || /^s2id_/.test(el.id || '') ||
-                matchesSelector(el, 'select, .select2-container, .aui-select, .checkbox, .radio');
-        });
-    }
-
-    function fieldControls(fieldId) {
-        return fieldElements(fieldId).filter(isControl);
-    }
-
-    /** Helper inputs of widgets (select2 search box, focusser, ...) do not represent a Jira field. */
-    function isAuxiliaryControl(c) {
-        if (c.getAttribute('name')) {
-            return false;
-        }
-        if (c.type === 'hidden' || /^s2id_autogen/.test(c.id || '')) {
+    function shown(field, visible, values) {
+        var when = field.when;
+        if (!when || !when.fieldId) {
             return true;
         }
-        return !!closest(c, '.select2-container, .select2-drop, .aui-select, .aui-datepicker-dialog');
+        if (!visible[when.fieldId]) {
+            return false;
+        }
+        var current = values[when.fieldId] || [];
+        var expected = when.values || [];
+        var match = false;
+        var i;
+        var a;
+        var b;
+        if (!expected.length) {
+            for (i = 0; i < current.length; i++) {
+                if (trim(current[i])) {
+                    match = true;
+                }
+            }
+        } else {
+            for (a = 0; a < current.length; a++) {
+                for (b = 0; b < expected.length; b++) {
+                    if (String(current[a]) === String(expected[b])) {
+                        match = true;
+                    }
+                }
+            }
+        }
+        return when.negate ? !match : match;
     }
 
-    /**
-     * @param stopAtButtons treat buttons as a boundary too (used while climbing up the tree, so that a
-     *                      lonely field never swallows the submit button or the whole page)
-     */
-    function containsOtherField(root, fieldId, stopAtButtons) {
-        if (root.tagName === 'FORM' || root === document.body || root === document.documentElement) {
+    function readField(node) {
+        var type = node.getAttribute('data-sdf-type');
+        var values = [];
+        var i;
+        if (type === 'checkbox' || type === 'radio') {
+            var inputs = node.getElementsByTagName('input');
+            for (i = 0; i < inputs.length; i++) {
+                if (inputs[i].checked) {
+                    values.push(inputs[i].value);
+                }
+            }
+        } else if (type === 'select') {
+            var select = node.getElementsByTagName('select')[0];
+            if (select && select.value) {
+                values.push(select.value);
+            }
+        } else if (type === 'textarea') {
+            var area = node.getElementsByTagName('textarea')[0];
+            if (area && trim(area.value)) {
+                values.push(trim(area.value));
+            }
+        } else {
+            var text = node.getElementsByTagName('input')[0];
+            if (text && trim(text.value)) {
+                values.push(trim(text.value));
+            }
+        }
+        return values;
+    }
+
+    function readValues(root, onlyVisible) {
+        var result = {};
+        if (!root || !root.querySelectorAll) {
+            return result;
+        }
+        var nodes = root.querySelectorAll('[data-sdf-field]');
+        for (var i = 0; i < nodes.length; i++) {
+            if (onlyVisible && hasClass(nodes[i], 'sdf-hidden')) {
+                continue;
+            }
+            result[nodes[i].getAttribute('data-sdf-field')] = readField(nodes[i]);
+        }
+        return result;
+    }
+
+    function clearNode(node) {
+        var inputs = node.getElementsByTagName('input');
+        var i;
+        for (i = 0; i < inputs.length; i++) {
+            if (inputs[i].type === 'checkbox' || inputs[i].type === 'radio') {
+                inputs[i].checked = false;
+            } else {
+                inputs[i].value = '';
+            }
+        }
+        var areas = node.getElementsByTagName('textarea');
+        for (i = 0; i < areas.length; i++) {
+            areas[i].value = '';
+        }
+        var selects = node.getElementsByTagName('select');
+        for (i = 0; i < selects.length; i++) {
+            selects[i].selectedIndex = 0;
+        }
+    }
+
+    function applyVisibility(root, cfg) {
+        if (!root || !cfg) {
+            return;
+        }
+        var values = readValues(root, false);
+        var visible = visibility(cfg.fields, values);
+        var nodes = root.querySelectorAll('[data-sdf-field]');
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            var show = !!visible[node.getAttribute('data-sdf-field')];
+            var was = node.getAttribute('data-sdf-shown') === '1';
+            if (!show && was && cfg.clearOnHide !== false) {
+                clearNode(node);
+            }
+            node.setAttribute('data-sdf-shown', show ? '1' : '0');
+            if (show) {
+                removeClass(node, 'sdf-hidden');
+            } else {
+                addClass(node, 'sdf-hidden');
+            }
+        }
+    }
+
+    function buildField(field) {
+        var wrap = document.createElement('div');
+        wrap.className = 'sdf-field';
+        wrap.setAttribute('data-sdf-field', field.id);
+        wrap.setAttribute('data-sdf-type', field.type || 'text');
+        var label = document.createElement('div');
+        label.className = 'sdf-label';
+        label.appendChild(document.createTextNode(field.label || ''));
+        wrap.appendChild(label);
+        var options = field.options || [];
+        var i;
+        if (field.type === 'checkbox' || field.type === 'radio') {
+            for (i = 0; i < options.length; i++) {
+                var line = document.createElement('label');
+                line.className = 'sdf-option';
+                var input = document.createElement('input');
+                input.type = field.type;
+                input.value = options[i];
+                // Not a successful control of the Jira request form, so the portal does not submit it.
+                input.setAttribute('form', 'sdf-unattached');
+                if (field.type === 'radio') {
+                    input.setAttribute('name', 'sdf-' + field.id);
+                }
+                line.appendChild(input);
+                line.appendChild(document.createTextNode(' ' + options[i]));
+                wrap.appendChild(line);
+            }
+        } else if (field.type === 'select') {
+            var select = document.createElement('select');
+            select.className = 'sdf-select';
+            select.setAttribute('form', 'sdf-unattached');
+            var empty = document.createElement('option');
+            empty.value = '';
+            empty.appendChild(document.createTextNode('\u2014'));
+            select.appendChild(empty);
+            for (i = 0; i < options.length; i++) {
+                var option = document.createElement('option');
+                option.value = options[i];
+                option.appendChild(document.createTextNode(options[i]));
+                select.appendChild(option);
+            }
+            wrap.appendChild(select);
+        } else if (field.type === 'textarea') {
+            var area = document.createElement('textarea');
+            area.className = 'sdf-textarea';
+            area.setAttribute('rows', '3');
+            area.setAttribute('form', 'sdf-unattached');
+            wrap.appendChild(area);
+        } else {
+            var text = document.createElement('input');
+            text.type = 'text';
+            text.className = 'sdf-input';
+            text.setAttribute('form', 'sdf-unattached');
+            wrap.appendChild(text);
+        }
+        return wrap;
+    }
+
+    function buildForm(cfg) {
+        var block = document.createElement('div');
+        block.id = 'sdf-portal-form';
+        block.className = 'sdf-block';
+        if (cfg.title && trim(cfg.title)) {
+            var title = document.createElement('h3');
+            title.className = 'sdf-title';
+            title.appendChild(document.createTextNode(cfg.title));
+            block.appendChild(title);
+        }
+        var visible = visibility(cfg.fields, {});
+        for (var i = 0; i < cfg.fields.length; i++) {
+            var node = buildField(cfg.fields[i]);
+            var show = !!visible[cfg.fields[i].id];
+            node.setAttribute('data-sdf-shown', show ? '1' : '0');
+            if (!show) {
+                addClass(node, 'sdf-hidden');
+            }
+            block.appendChild(node);
+        }
+        return block;
+    }
+
+    function isCreatePage() {
+        return /\/portal\/\d+\/create\/\d+/.test(location.pathname);
+    }
+
+    function requestTypeMatches(cfg) {
+        var ids = (cfg && cfg.requestTypeIds) || [];
+        if (!ids.length) {
             return true;
         }
-        var controls = root.querySelectorAll('input,select,textarea,button');
-        for (var i = 0; i < controls.length; i++) {
-            var c = controls[i];
-            if (c.tagName === 'BUTTON' || c.type === 'submit' || c.type === 'button') {
-                if (stopAtButtons) {
-                    return true;
-                }
-                continue;
-            }
-            if (isAuxiliaryControl(c)) {
-                continue;
-            }
-            var owner = fieldOf(c);
-            if (owner && owner !== fieldId) {
+        var match = location.pathname.match(/\/create\/(\d+)/);
+        if (!match) {
+            return false;
+        }
+        var id = parseInt(match[1], 10);
+        for (var i = 0; i < ids.length; i++) {
+            if (Number(ids[i]) === id) {
                 return true;
             }
         }
         return false;
     }
 
-    var MAX_CLIMB = 6;
+    function issueKeyFromPath() {
+        var match = location.pathname.match(/\/([A-Z][A-Z0-9]+-\d+)\/?$/);
+        return match ? match[1] : null;
+    }
 
-    function heuristicContainer(el, fieldId) {
-        var candidate = el;
-        var node = el;
-        var depth = 0;
-        while (depth < MAX_CLIMB && node.parentElement && !containsOtherField(node.parentElement, fieldId, true)) {
-            node = node.parentElement;
-            candidate = node;
-            depth++;
+    function insertBeforeSubmit(formEl, block) {
+        var submit = formEl.querySelector('button[type="submit"], input[type="submit"], .js-submit-button');
+        if (!submit) {
+            formEl.appendChild(block);
+            return;
         }
-        return candidate;
+        var parent = submit;
+        while (parent.parentNode && parent.parentNode !== formEl) {
+            parent = parent.parentNode;
+        }
+        if (parent.parentNode === formEl) {
+            formEl.insertBefore(block, parent);
+        } else {
+            submit.parentNode.insertBefore(block, submit);
+        }
     }
 
-    function containerSelectors() {
-        var custom = (config && config.containerSelectors) || [];
-        return custom.concat(DEFAULT_CONTAINER_SELECTORS);
+    function ensureForm() {
+        if (!config || !config.fields || !config.fields.length || !isCreatePage() || !requestTypeMatches(config)) {
+            return;
+        }
+        var formEl = document.querySelector('form.cp-request-form');
+        if (!formEl) {
+            return;
+        }
+        var existing = document.getElementById('sdf-portal-form');
+        if (existing && formEl.contains && formEl.contains(existing)) {
+            return;
+        }
+        if (existing && existing.parentNode) {
+            existing.parentNode.removeChild(existing);
+        }
+        var block = buildForm(config);
+        insertBeforeSubmit(formEl, block);
+        block.addEventListener('change', function () {
+            applyVisibility(block, config);
+        });
+        block.addEventListener('input', function () {
+            applyVisibility(block, config);
+        });
+        debug('form inserted', config.fields.length);
     }
 
-    function containerOf(el, fieldId) {
-        var selectors = containerSelectors();
+    function removeForm() {
+        var existing = document.getElementById('sdf-portal-form');
+        if (existing && existing.parentNode) {
+            existing.parentNode.removeChild(existing);
+        }
+    }
+
+    function answersMount() {
+        var selectors = [
+            '.cv-request-details',
+            '.js-request-details',
+            '.request-details',
+            '.cv-request-content',
+            '.cp-request-content',
+            '#content'
+        ];
         for (var i = 0; i < selectors.length; i++) {
-            var found = closest(el, selectors[i]);
-            if (found && !containsOtherField(found, fieldId)) {
-                return found;
+            var el = document.querySelector(selectors[i]);
+            if (el) {
+                return el;
             }
         }
-        return heuristicContainer(el, fieldId);
+        return null;
     }
 
-    function containersOf(fieldId) {
-        var containers = [];
-        fieldElements(fieldId).forEach(function (el) {
-            var container = containerOf(el, fieldId);
-            if (container && containers.indexOf(container) === -1) {
-                containers.push(container);
-            }
-        });
-        return containers;
-    }
-
-    /* ------------------------------------------------------------ field values */
-
-    function labelOf(control) {
-        var label = null;
-        if (control.id) {
-            label = document.querySelector('label[for="' + escapeAttr(control.id) + '"]');
-        }
-        if (!label) {
-            label = closest(control, 'label');
-        }
-        return label ? label.textContent : '';
-    }
-
-    /** @return array of {id, label} for every current value of the field (empty array = no value). */
-    function readValues(fieldId) {
-        var values = [];
-        fieldControls(fieldId).forEach(function (control) {
-            var type = (control.type || '').toLowerCase();
-            if (type === 'checkbox' || type === 'radio') {
-                if (control.checked) {
-                    values.push({ id: control.value || 'on', label: labelOf(control) });
-                }
-            } else if (control.tagName === 'SELECT') {
-                toArray(control.options).forEach(function (option) {
-                    if (option.selected && !VALUE_PLACEHOLDERS[option.value]) {
-                        values.push({ id: option.value, label: option.text });
-                    }
-                });
-            } else if (type !== 'submit' && type !== 'button' && type !== 'file') {
-                var raw = control.value;
-                if (raw != null && String(raw).replace(/\s/g, '') !== '' && !VALUE_PLACEHOLDERS[raw]) {
-                    String(raw).split(',').forEach(function (part) {
-                        values.push({ id: part, label: part });
-                    });
-                }
-            }
-        });
-        return values;
-    }
-
-    function conditionMatches(condition) {
-        var current = readValues(condition.fieldId);
-        var expected = condition.values || [];
-        var result;
-        if (!expected.length) {
-            result = current.length > 0;
-        } else {
-            var wanted = {};
-            expected.forEach(function (v) {
-                wanted[normalise(v)] = true;
-            });
-            result = current.some(function (v) {
-                return wanted[normalise(v.id)] || wanted[normalise(v.label)];
-            });
-        }
-        return condition.negate ? !result : result;
-    }
-
-    /* ----------------------------------------------------------- show / hide */
-
-    function setNativeValue(control, value) {
-        var proto = control.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement : window.HTMLInputElement;
-        var descriptor = proto && Object.getOwnPropertyDescriptor(proto.prototype, 'value');
-        if (descriptor && descriptor.set) {
-            descriptor.set.call(control, value);
-        } else {
-            control.value = value;
-        }
-    }
-
-    function fire(control, type) {
-        var event;
+    function fallbackHeading() {
         try {
-            event = new window.Event(type, { bubbles: true });
+            return AJS.I18n.getText('ru.saael.dynamicfields.portal.answers');
         } catch (e) {
-            event = document.createEvent('Event');
-            event.initEvent(type, true, true);
+            return 'Answers';
         }
-        control.dispatchEvent(event);
     }
 
-    function clearField(fieldId) {
-        fieldControls(fieldId).forEach(function (control) {
-            var type = (control.type || '').toLowerCase();
-            if (type === 'checkbox' || type === 'radio') {
-                if (control.checked) {
-                    // a real click keeps Backbone/React state in sync with the DOM
-                    control.click();
-                }
-            } else if (control.tagName === 'SELECT') {
-                if (readValues(fieldId).length === 0) {
-                    return;
-                }
-                toArray(control.options).forEach(function (option) {
-                    option.selected = VALUE_PLACEHOLDERS[option.value] && !control.multiple;
-                });
-                if (window.jQuery && window.jQuery.fn && window.jQuery.fn.auiSelect2) {
-                    try {
-                        window.jQuery(control).auiSelect2('val', control.multiple ? [] : '');
-                    } catch (e) {
-                        // not a select2 element
-                    }
-                }
-                fire(control, 'change');
-            } else if (type !== 'submit' && type !== 'button' && type !== 'file') {
-                if (control.value) {
-                    setNativeValue(control, '');
-                    fire(control, 'input');
-                    fire(control, 'change');
-                }
+    function renderAnswers(rows) {
+        var existing = document.getElementById('sdf-portal-answers');
+        if (!rows || !rows.length) {
+            if (existing && existing.parentNode) {
+                existing.parentNode.removeChild(existing);
             }
-        });
-    }
-
-    function setVisible(fieldId, visible, clearOnHide) {
-        var containers = containersOf(fieldId);
-        var wasVisible = false;
-        containers.forEach(function (container) {
-            if (visible) {
-                if (container.classList.contains(HIDDEN_CLASS)) {
-                    container.classList.remove(HIDDEN_CLASS);
-                    container.removeAttribute('aria-hidden');
-                    container.removeAttribute(HIDDEN_ATTR);
-                }
-            } else if (!container.classList.contains(HIDDEN_CLASS)) {
-                wasVisible = true;
-                container.classList.add(HIDDEN_CLASS);
-                container.setAttribute('aria-hidden', 'true');
-                container.setAttribute(HIDDEN_ATTR, fieldId);
-            }
-        });
-        // clear only on the visible -> hidden transition; clearing a hidden field again would loop
-        // (a single select without an empty option always reports a value)
-        if (!visible && clearOnHide && wasVisible) {
-            clearField(fieldId);
-        }
-        if (containers.length) {
-            log(fieldId, visible ? 'shown' : 'hidden', containers);
-        }
-    }
-
-    /* -------------------------------------------------------------- evaluate */
-
-    function evaluate() {
-        timer = null;
-        if (!config || !config.rules || !config.rules.length) {
-            // nothing is conditional: drop hides left over from the previous configuration
-            toArray(document.querySelectorAll('.' + HIDDEN_CLASS)).forEach(function (el) {
-                el.classList.remove(HIDDEN_CLASS);
-                el.removeAttribute('aria-hidden');
-                el.removeAttribute(HIDDEN_ATTR);
-            });
             return;
         }
-        var scope = pageScope();
-        var rules = config.rules.filter(function (rule) {
-            return ruleApplies(rule, scope);
-        });
-        if (!rules.length) {
+        var mount = answersMount();
+        if (!mount) {
             return;
         }
-
-        var rulesByTarget = {};
-        rules.forEach(function (rule) {
-            rule.show.forEach(function (target) {
-                (rulesByTarget[target] = rulesByTarget[target] || []).push(rule);
-            });
-        });
-
-        var memo = {};
-        var stack = {};
-
-        function isVisible(fieldId) {
-            if (!rulesByTarget[fieldId]) {
-                return true;
-            }
-            if (Object.prototype.hasOwnProperty.call(memo, fieldId)) {
-                return memo[fieldId];
-            }
-            if (stack[fieldId]) {
-                return false; // circular dependency: fail closed
-            }
-            stack[fieldId] = true;
-            var visible = false;
-            var candidates = rulesByTarget[fieldId];
-            for (var i = 0; i < candidates.length && !visible; i++) {
-                var rule = candidates[i];
-                visible = isVisible(rule.when.fieldId) && conditionMatches(rule.when);
-            }
-            delete stack[fieldId];
-            memo[fieldId] = visible;
-            return visible;
+        var host = existing || document.createElement('div');
+        host.id = 'sdf-portal-answers';
+        host.className = 'sdf-answers';
+        if (host.parentNode !== mount) {
+            mount.insertBefore(host, mount.firstChild);
         }
-
-        function clearOnHideFor(fieldId) {
-            var candidates = rulesByTarget[fieldId];
-            for (var i = 0; i < candidates.length; i++) {
-                if (candidates[i].clearOnHide != null) {
-                    return !!candidates[i].clearOnHide;
-                }
-            }
-            return config.clearOnHide !== false;
+        while (host.firstChild) {
+            host.removeChild(host.firstChild);
         }
-
-        Object.keys(rulesByTarget).forEach(function (fieldId) {
-            setVisible(fieldId, isVisible(fieldId), clearOnHideFor(fieldId));
-        });
+        var title = document.createElement('h3');
+        title.className = 'sdf-title';
+        var heading = (config && trim(config.title)) ? trim(config.title) : fallbackHeading();
+        title.appendChild(document.createTextNode(heading));
+        host.appendChild(title);
+        for (var i = 0; i < rows.length; i++) {
+            var label = document.createElement('div');
+            label.className = 'sdf-answer-label';
+            label.appendChild(document.createTextNode(rows[i].label || ''));
+            var value = document.createElement('div');
+            value.className = 'sdf-answer-value';
+            value.appendChild(document.createTextNode(rows[i].value || ''));
+            host.appendChild(label);
+            host.appendChild(value);
+        }
     }
 
-    function scheduleEvaluate() {
-        if (timer !== null) {
+    function removeAnswers() {
+        var existing = document.getElementById('sdf-portal-answers');
+        if (existing && existing.parentNode) {
+            existing.parentNode.removeChild(existing);
+        }
+    }
+
+    function loadAnswers(key) {
+        var state = answersState[key];
+        if (state && (state.loading || state.rows)) {
+            if (state.rows) {
+                renderAnswers(state.rows);
+            }
             return;
         }
-        timer = window.setTimeout(evaluate, DEBOUNCE_MS);
-    }
-
-    /* ----------------------------------------------------------------- setup */
-
-    function loadRules(callback) {
-        var xhr = new window.XMLHttpRequest();
-        xhr.open('GET', contextPath() + REST_PATH, true);
-        xhr.setRequestHeader('Accept', 'application/json');
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) {
-                return;
-            }
-            if (xhr.status >= 200 && xhr.status < 300) {
+        answersState[key] = {loading: true, rows: null};
+        getJson(rest('/answers/' + encodeURIComponent(key)), function (status, text) {
+            var rows = [];
+            if (status === 200) {
                 try {
-                    var parsed = JSON.parse(xhr.responseText);
-                    if (!configLocked) {
-                        config = parsed;
-                    }
+                    rows = (JSON.parse(text).rows) || [];
                 } catch (e) {
-                    if (!configLocked) {
-                        config = null;
-                    }
-                    log('cannot parse rules', e);
+                    rows = [];
                 }
-            } else {
-                log('cannot load rules, HTTP ' + xhr.status);
             }
-            if (callback) {
-                callback(config);
+            answersState[key] = {loading: false, rows: rows};
+            if (issueKeyFromPath() === key && !isCreatePage()) {
+                renderAnswers(rows);
+            }
+        });
+    }
+
+    function getJson(url, cb) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                cb(xhr.status, xhr.responseText || '');
             }
         };
-        xhr.send(null);
+        xhr.send();
     }
 
-    function install() {
-        ['change', 'input', 'click', 'keyup'].forEach(function (type) {
-            document.addEventListener(type, scheduleEvaluate, true);
-        });
-        if (window.MutationObserver) {
-            var observer = new window.MutationObserver(scheduleEvaluate);
-            observer.observe(document.documentElement, { childList: true, subtree: true });
-        } else {
-            window.setInterval(scheduleEvaluate, 1000);
+    function putJson(url, body, cb) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('X-Atlassian-Token', 'no-check');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                cb(xhr.status, xhr.responseText || '');
+            }
+        };
+        xhr.send(body);
+    }
+
+    function readPending() {
+        try {
+            var raw = sessionStorage.getItem(PENDING_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
         }
-        window.addEventListener('popstate', scheduleEvaluate);
-        window.addEventListener('hashchange', scheduleEvaluate);
     }
 
-    function setConfig(next) {
-        config = next || { rules: [] };
-        configLocked = true;
-        evaluate();
+    function writePending(value) {
+        try {
+            sessionStorage.setItem(PENDING_KEY, JSON.stringify(value));
+        } catch (e) {
+            // ignore quota / private mode
+        }
     }
 
-    function start() {
-        loadRules(function (loaded) {
-            log('rules loaded', loaded);
-            install();
-            evaluate();
+    function clearPending() {
+        try {
+            sessionStorage.removeItem(PENDING_KEY);
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    function hasAny(values) {
+        if (!values) {
+            return false;
+        }
+        for (var key in values) {
+            if (values.hasOwnProperty(key) && values[key] && values[key].length) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function remember() {
+        var block = document.getElementById('sdf-portal-form');
+        if (!block) {
+            return;
+        }
+        applyVisibility(block, config);
+        var values = readValues(block, true);
+        writePending({t: Date.now(), values: values, sent: null});
+        debug('remember', values);
+    }
+
+    function stripNames(block) {
+        if (!block) {
+            return;
+        }
+        var tags = ['input', 'select', 'textarea'];
+        for (var t = 0; t < tags.length; t++) {
+            var nodes = block.getElementsByTagName(tags[t]);
+            for (var i = 0; i < nodes.length; i++) {
+                nodes[i].removeAttribute('name');
+            }
+        }
+    }
+
+    function submitPending(issueKey) {
+        var pending = readPending();
+        if (!pending || !issueKey) {
+            return;
+        }
+        if (Date.now() - pending.t > PENDING_MS) {
+            clearPending();
+            return;
+        }
+        if (!hasAny(pending.values)) {
+            clearPending();
+            return;
+        }
+        if (pending.sent === issueKey) {
+            return;
+        }
+        pending.sent = issueKey;
+        writePending(pending);
+        debug('put answers', issueKey);
+        putJson(rest('/answers/' + encodeURIComponent(issueKey)), JSON.stringify({values: pending.values}), function (status, text) {
+            debug('put status', status, text);
+            if (status >= 200 && status < 300) {
+                clearPending();
+                answersState[issueKey] = null;
+                if (issueKeyFromPath() === issueKey) {
+                    loadAnswers(issueKey);
+                }
+            } else if (status >= 400 && status < 500) {
+                clearPending();
+            } else {
+                var again = readPending();
+                if (again && again.sent === issueKey) {
+                    again.sent = null;
+                    writePending(again);
+                }
+            }
         });
     }
 
-    /**
-     * Inventory of the fields currently rendered on the page: id, label, control type and options.
-     * Meant to be run from the browser console by the administrator to collect ids for the rules:
-     *   console.table(SaaelDynamicFields.listFields())
-     */
-    function listFields() {
-        var byId = {};
-        var order = [];
-        toArray(document.querySelectorAll('input,select,textarea')).forEach(function (control) {
-            if (isAuxiliaryControl(control) || control.type === 'submit' || control.type === 'button') {
-                return;
-            }
-            var fieldId = fieldOf(control);
-            if (!fieldId || /^(atl_token|os_|jira\.|sd-)/.test(fieldId)) {
-                return;
-            }
-            // hidden inputs of the form itself (projectId, pid, ...) are not fields a rule can use
-            if (control.type === 'hidden' && !/^customfield_/.test(fieldId)) {
-                return;
-            }
-            var entry = byId[fieldId];
-            if (!entry) {
-                var container = containerOf(control, fieldId);
-                var label = container && container.querySelector('label, legend');
-                entry = byId[fieldId] = {
-                    fieldId: fieldId,
-                    label: label ? tidy(label.textContent).replace(/\s*\((необязательно|optional)\)$/i, '') : '',
-                    type: control.tagName === 'SELECT' ? (control.multiple ? 'multiselect' : 'select')
-                        : (control.type || control.tagName.toLowerCase()),
-                    options: []
-                };
-                order.push(fieldId);
-            }
-            var type = (control.type || '').toLowerCase();
-            if (type === 'checkbox' || type === 'radio') {
-                entry.options.push(control.value + ' = ' + tidy(labelOf(control)));
-            } else if (control.tagName === 'SELECT') {
-                toArray(control.options).forEach(function (option) {
-                    if (!VALUE_PLACEHOLDERS[option.value]) {
-                        entry.options.push(option.value + ' = ' + tidy(option.text));
+    function extractKey(text) {
+        if (!text) {
+            return null;
+        }
+        var body = String(text);
+        var match = body.match(/"issueKey"\s*:\s*"([A-Z][A-Z0-9]+-\d+)"/);
+        if (match) {
+            return match[1];
+        }
+        match = body.match(/"key"\s*:\s*"([A-Z][A-Z0-9]+-\d+)"/);
+        return match ? match[1] : null;
+    }
+
+    function isCreateUrl(url) {
+        var value = String(url || '');
+        if (/comment|attachment|avatar/i.test(value)) {
+            return false;
+        }
+        return /request/i.test(value);
+    }
+
+    function hookTransport() {
+        var proto = XMLHttpRequest.prototype;
+        if (proto._sdfHooked) {
+            return;
+        }
+        proto._sdfHooked = true;
+        var origOpen = proto.open;
+        var origSend = proto.send;
+        proto.open = function (method, url) {
+            this._sdfMethod = method;
+            this._sdfUrl = url;
+            return origOpen.apply(this, arguments);
+        };
+        proto.send = function () {
+            var xhr = this;
+            var method = String(xhr._sdfMethod || '').toUpperCase();
+            var url = String(xhr._sdfUrl || '');
+            if (method === 'POST' && isCreateUrl(url)) {
+                debug('watch', url);
+                xhr.addEventListener('load', function () {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        var key = extractKey(xhr.responseText);
+                        debug('response key', key, url);
+                        if (key) {
+                            submitPending(key);
+                        }
                     }
                 });
             }
-        });
-        return order.map(function (fieldId) {
-            var entry = byId[fieldId];
-            entry.options = entry.options.join(' | ');
-            return entry;
-        });
+            return origSend.apply(this, arguments);
+        };
+        if (window.fetch && !window.fetch._sdfHooked) {
+            var origFetch = window.fetch;
+            var wrapped = function (input, init) {
+                var method = (init && init.method) || (input && input.method) || 'GET';
+                var url = typeof input === 'string' ? input : (input && input.url) || '';
+                var result = origFetch.apply(window, arguments);
+                if (String(method).toUpperCase() === 'POST' && isCreateUrl(url) && result && result.then) {
+                    result.then(function (response) {
+                        try {
+                            if (!response || !response.clone) {
+                                return;
+                            }
+                            response.clone().text().then(function (text) {
+                                var key = extractKey(text);
+                                if (key) {
+                                    submitPending(key);
+                                }
+                            });
+                        } catch (e) {
+                            // ignore
+                        }
+                    });
+                }
+                return result;
+            };
+            wrapped._sdfHooked = true;
+            window.fetch = wrapped;
+        }
     }
 
-    window.SaaelDynamicFields = {
-        reload: start,
-        evaluate: evaluate,
-        getConfig: function () {
-            return config;
-        },
-        readValues: readValues,
-        containersOf: containersOf,
-        listFields: listFields,
-        setConfig: setConfig
-    };
+    function isSubmitControl(node) {
+        if (!node || !node.tagName) {
+            return false;
+        }
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'input' && String(node.type).toLowerCase() === 'submit') {
+            return true;
+        }
+        if (tag === 'button') {
+            var type = (node.getAttribute('type') || 'submit').toLowerCase();
+            if (type === 'submit' || hasClass(node, 'js-submit-button')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function formOf(node) {
+        while (node && node !== document) {
+            if (node.tagName && node.tagName.toLowerCase() === 'form') {
+                return node;
+            }
+            node = node.parentNode;
+        }
+        return null;
+    }
+
+    function onActivate(target) {
+        var node = target;
+        if (node && node.nodeType !== 1) {
+            node = node.parentNode;
+        }
+        var control = node;
+        while (control && control !== document) {
+            if (isSubmitControl(control)) {
+                break;
+            }
+            control = control.parentNode;
+        }
+        if (!control || control === document) {
+            return;
+        }
+        var formEl = formOf(control);
+        if (!formEl || !formEl.querySelector || !formEl.querySelector('#sdf-portal-form')) {
+            return;
+        }
+        remember();
+        stripNames(document.getElementById('sdf-portal-form'));
+    }
+
+    function flushPending() {
+        var pending = readPending();
+        if (!pending || !pending.t) {
+            return;
+        }
+        if (Date.now() - pending.t > PENDING_MS) {
+            clearPending();
+            return;
+        }
+        if (isCreatePage()) {
+            return;
+        }
+        var key = issueKeyFromPath();
+        if (key) {
+            submitPending(key);
+        }
+    }
+
+    function onTick() {
+        if (!config) {
+            return;
+        }
+        if (isCreatePage() && requestTypeMatches(config)) {
+            ensureForm();
+            removeAnswers();
+        } else {
+            removeForm();
+            var key = issueKeyFromPath();
+            if (key) {
+                loadAnswers(key);
+            } else {
+                removeAnswers();
+            }
+        }
+        flushPending();
+    }
+
+    function schedule() {
+        if (scheduled) {
+            return;
+        }
+        scheduled = true;
+        setTimeout(function () {
+            scheduled = false;
+            onTick();
+        }, 200);
+    }
+
+    function boot() {
+        if (document.getElementById('sdf-app')) {
+            return;
+        }
+        hookTransport();
+        document.addEventListener('click', function (e) {
+            onActivate(e.target);
+        }, true);
+        document.addEventListener('submit', function (e) {
+            var formEl = e.target;
+            if (formEl && formEl.querySelector && formEl.querySelector('#sdf-portal-form')) {
+                remember();
+                stripNames(document.getElementById('sdf-portal-form'));
+            }
+        }, true);
+        if (window.MutationObserver && document.documentElement) {
+            var observer = new MutationObserver(function () {
+                schedule();
+            });
+            observer.observe(document.documentElement, {childList: true, subtree: true});
+        }
+        lastHref = location.href;
+        setInterval(function () {
+            if (location.href !== lastHref) {
+                lastHref = location.href;
+                onTick();
+            } else {
+                flushPending();
+                if (isCreatePage() && config && !document.getElementById('sdf-portal-form')) {
+                    ensureForm();
+                }
+            }
+        }, 700);
+        getJson(rest('/form'), function (status, text) {
+            if (status === 200) {
+                try {
+                    config = JSON.parse(text);
+                } catch (e) {
+                    config = null;
+                }
+            }
+            debug('config', status, config && config.fields ? config.fields.length : 0);
+            onTick();
+        });
+        window.SaaelDynamicFields = {
+            visibility: visibility,
+            getConfig: function () {
+                return config;
+            },
+            readValues: function () {
+                var block = document.getElementById('sdf-portal-form');
+                return readValues(block, true);
+            },
+            reload: function () {
+                config = null;
+                getJson(rest('/form'), function (status, text) {
+                    if (status === 200) {
+                        try {
+                            config = JSON.parse(text);
+                        } catch (e) {
+                            config = null;
+                        }
+                    }
+                    removeForm();
+                    onTick();
+                });
+            }
+        };
+    }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
+        document.addEventListener('DOMContentLoaded', boot);
     } else {
-        start();
+        boot();
     }
-})(window, document);
+})();

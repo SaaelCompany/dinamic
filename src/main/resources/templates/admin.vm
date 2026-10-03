@@ -6,6 +6,35 @@
     <meta name="admin.active.tab" content="dynamic-fields-admin-link">
 </head>
 <body>
+<style type="text/css">
+    .sdf-intro { max-width: 920px; }
+    .sdf-toolbar, .sdf-types { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 8px 0 12px; }
+    .sdf-title-label, .sdf-clear-label, .sdf-types label { margin: 0; }
+    .sdf-title-label input, .sdf-types input { min-width: 240px; margin-left: 6px; }
+    .sdf-spacer { flex: 1 1 auto; }
+    .sdf-layout { display: flex; align-items: flex-start; gap: 24px; }
+    .sdf-builder { flex: 1 1 560px; min-width: 0; }
+    .sdf-preview-pane { flex: 0 0 380px; position: sticky; top: 8px; background: #f4f5f7; border: 1px solid #dfe1e6; border-radius: 3px; padding: 12px 14px; }
+    .sdf-preview-pane h3 { margin: 0 0 4px; }
+    .sdf-empty { border: 1px dashed #b3bac5; border-radius: 3px; padding: 16px; background: #fafbfc; }
+    .sdf-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 3px; padding: 12px; margin: 0 0 12px; }
+    .sdf-card-head, .sdf-option-row, .sdf-when { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .sdf-card-head { margin-bottom: 8px; }
+    .sdf-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: #deebff; color: #0747a6; font-weight: 600; text-align: center; line-height: 22px; font-size: 12px; }
+    .sdf-name { flex: 1 1 180px; min-width: 0; }
+    .sdf-options, .sdf-when { margin-top: 8px; }
+    .sdf-option-row input[type="text"] { flex: 1 1 180px; }
+    .sdf-when-values label { display: inline-block; margin: 4px 12px 0 0; font-weight: normal; }
+    .sdf-preview .sdf-field { margin: 0 0 12px; }
+    .sdf-preview .sdf-label { font-weight: 600; margin: 0 0 4px; }
+    .sdf-preview .sdf-option { display: block; font-weight: normal; margin: 2px 0; }
+    .sdf-preview .sdf-hidden { display: none !important; }
+    .sdf-preview .sdf-input, .sdf-preview .sdf-textarea, .sdf-preview .sdf-select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #dfe1e6; border-radius: 3px; font: inherit; background: #fff; }
+    .sdf-json-panel { margin-top: 20px; }
+    .sdf-editor { font-family: monospace; width: 100%; box-sizing: border-box; }
+    .sdf-help { max-width: 920px; }
+</style>
+
 <header class="aui-page-header">
     <div class="aui-page-header-inner">
         <div class="aui-page-header-main">
@@ -18,36 +47,45 @@
     <div class="aui-page-panel-inner">
         <section class="aui-page-panel-content">
             <p class="sdf-intro">$i18n.getText("ru.saael.dynamicfields.admin.intro")</p>
-            <div id="sdf-messages"></div>
-            <div class="aui-message aui-message-warning">
-                <p class="title"><strong>$i18n.getText("ru.saael.dynamicfields.admin.help.required")</strong></p>
+            <div class="aui-message aui-message-info">
+                <p>$i18n.getText("ru.saael.dynamicfields.admin.info")</p>
             </div>
+            <div id="sdf-messages"></div>
 
             <div id="sdf-app" class="sdf-app" data-context-path="$contextPath">
                 <div class="sdf-toolbar">
-                    <button id="sdf-add-rule" class="aui-button" type="button">$i18n.getText("ru.saael.dynamicfields.admin.builder.addRule")</button>
-                    <label class="sdf-clear-label" for="sdf-clear-on-hide">
-                        <input type="checkbox" id="sdf-clear-on-hide" checked="checked">
+                    <label class="sdf-title-label" for="sdf-title">$i18n.getText("ru.saael.dynamicfields.admin.builder.blockTitle")
+                        <input id="sdf-title" class="text" type="text" autocomplete="off">
+                    </label>
+                    <button id="sdf-add" class="aui-button" type="button">$i18n.getText("ru.saael.dynamicfields.admin.builder.addField")</button>
+                    <label class="sdf-clear-label" for="sdf-clear">
+                        <input id="sdf-clear" type="checkbox" checked="checked">
                         $i18n.getText("ru.saael.dynamicfields.admin.builder.clearGlobal")
                     </label>
                     <span class="sdf-spacer"></span>
-                    <span id="sdf-rules-count" class="aui-lozenge aui-lozenge-subtle">$rulesCountText</span>
+                    <span id="sdf-count" class="aui-lozenge aui-lozenge-subtle">$i18n.getText("ru.saael.dynamicfields.admin.fields.count") $fieldCount</span>
                     <button id="sdf-reload" class="aui-button" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.reload")</button>
                     <button id="sdf-save" class="aui-button aui-button-primary" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.save")</button>
+                </div>
+                <div class="sdf-types">
+                    <label for="sdf-request-types">$i18n.getText("ru.saael.dynamicfields.admin.builder.requestTypes")
+                        <input id="sdf-request-types" class="text" type="text" autocomplete="off">
+                    </label>
+                    <span class="description">$i18n.getText("ru.saael.dynamicfields.admin.builder.requestTypesHint")</span>
                 </div>
 
                 <div class="sdf-layout">
                     <div class="sdf-builder">
-                        <p id="sdf-loading" class="sdf-loading">$i18n.getText("ru.saael.dynamicfields.admin.builder.loading")</p>
-                        <div id="sdf-rules-list"></div>
-                        <p id="sdf-empty" class="sdf-empty" style="display:none">$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>
+                        <div id="sdf-empty" class="sdf-empty">
+                            <p>$i18n.getText("ru.saael.dynamicfields.admin.builder.empty")</p>
+                            <button id="sdf-example-empty" class="aui-button aui-button-primary" type="button">$i18n.getText("ru.saael.dynamicfields.admin.button.example")</button>
+                        </div>
+                        <div id="sdf-fields"></div>
                     </div>
                     <aside class="sdf-preview-pane">
                         <h3>$i18n.getText("ru.saael.dynamicfields.admin.builder.previewTitle")</h3>
                         <p class="description">$i18n.getText("ru.saael.dynamicfields.admin.builder.previewHint")</p>
-                        <div id="sdf-preview" class="sdf-preview">
-                            <p class="sdf-preview-empty">$i18n.getText("ru.saael.dynamicfields.admin.builder.previewEmpty")</p>
-                        </div>
+                        <div id="sdf-preview" class="sdf-preview"></div>
                     </aside>
                 </div>
 
@@ -56,8 +94,7 @@
                     <form id="sdf-form" class="aui" onsubmit="return false;">
                         <div class="field-group sdf-editor-group">
                             <label for="sdf-rules">$i18n.getText("ru.saael.dynamicfields.admin.rules.label")</label>
-                            <textarea id="sdf-rules" class="textarea sdf-editor" name="rules" rows="16"
-                                      spellcheck="false" autocomplete="off">$rulesJsonHtml</textarea>
+                            <textarea id="sdf-rules" class="textarea sdf-editor" rows="16" spellcheck="false" autocomplete="off">$rulesJsonHtml</textarea>
                             <div class="description">$i18n.getText("ru.saael.dynamicfields.admin.rules.description")</div>
                         </div>
                         <div class="buttons-container">
@@ -71,10 +108,10 @@
                     </form>
                     <h3>$i18n.getText("ru.saael.dynamicfields.admin.help.title")</h3>
                     <ul class="sdf-help">
-                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.fieldid")</li>
-                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.values")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.how")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.when")</li>
                         <li>$i18n.getText("ru.saael.dynamicfields.admin.help.scope")</li>
-                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.clear")</li>
+                        <li>$i18n.getText("ru.saael.dynamicfields.admin.help.answers")</li>
                     </ul>
                 </details>
             </div>

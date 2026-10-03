@@ -1,0 +1,20 @@
+package ru.saael.dynamicfields.service;
+
+import ru.saael.dynamicfields.model.AnswerDocument;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Stores portal answers against an issue. The customer does not need edit permission:
+ * the reporter of a just-created request may write, and anyone who can browse the issue may read.
+ */
+public interface AnswersService {
+
+    AnswerDocument read(String issueKey) throws AnswerRejectedException;
+
+    void save(String issueKey, Map<String, List<String>> values) throws AnswerRejectedException;
+
+    /** True when the current user may see the issue and it has at least one stored answer. */
+    boolean hasRows(String issueKey);
+}

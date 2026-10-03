@@ -26,7 +26,7 @@ public class RulesServiceImpl implements RulesService {
     private static final Logger log = LoggerFactory.getLogger(RulesServiceImpl.class);
 
     static final String SETTINGS_KEY = "ru.saael.dynamicfields.rules";
-    private static final String EXAMPLE_RESOURCE = "/example-rules.json";
+    private static final String EXAMPLE_RESOURCE = "/example-form.json";
 
     private final PluginSettingsFactory pluginSettingsFactory;
     private final ObjectMapper mapper;
@@ -90,7 +90,7 @@ public class RulesServiceImpl implements RulesService {
         RulesConfig config = parse(json);
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);
-        log.info("Dynamic field rules updated: {} rule(s)", config.getRules().size());
+        log.info("Portal form updated: {} field(s)", config.getFields().size());
         return normalised;
     }
 

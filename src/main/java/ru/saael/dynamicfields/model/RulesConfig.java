@@ -7,20 +7,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Root of the configuration document stored in plugin settings and served to the customer portal.
+ * The whole extra form shown on the customer portal. Version 2: the plugin owns the fields,
+ * nothing is read from Jira custom fields.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public class RulesConfig {
 
-    public static final int CURRENT_VERSION = 1;
+    public static final int CURRENT_VERSION = 2;
 
     private int version = CURRENT_VERSION;
-    /** Reset the value of a field when it gets hidden (so stale answers are not submitted). */
+    /** Heading above the block on the portal. Empty — the portal uses its own default. */
+    private String title = "";
     private boolean clearOnHide = true;
-    /** Optional CSS selectors that identify the wrapper element of a field on the portal form. */
-    private List<String> containerSelectors = new ArrayList<String>();
-    private List<Rule> rules = new ArrayList<Rule>();
+    /** Empty — show on every request type. */
+    private List<Long> requestTypeIds = new ArrayList<Long>();
+    private List<FormField> fields = new ArrayList<FormField>();
 
     public int getVersion() {
         return version;
@@ -28,6 +30,14 @@ public class RulesConfig {
 
     public void setVersion(int version) {
         this.version = version;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title == null ? "" : title;
     }
 
     public boolean isClearOnHide() {
@@ -38,19 +48,19 @@ public class RulesConfig {
         this.clearOnHide = clearOnHide;
     }
 
-    public List<String> getContainerSelectors() {
-        return containerSelectors;
+    public List<Long> getRequestTypeIds() {
+        return requestTypeIds;
     }
 
-    public void setContainerSelectors(List<String> containerSelectors) {
-        this.containerSelectors = containerSelectors == null ? new ArrayList<String>() : containerSelectors;
+    public void setRequestTypeIds(List<Long> requestTypeIds) {
+        this.requestTypeIds = requestTypeIds == null ? new ArrayList<Long>() : requestTypeIds;
     }
 
-    public List<Rule> getRules() {
-        return rules;
+    public List<FormField> getFields() {
+        return fields;
     }
 
-    public void setRules(List<Rule> rules) {
-        this.rules = rules == null ? new ArrayList<Rule>() : rules;
+    public void setFields(List<FormField> fields) {
+        this.fields = fields == null ? new ArrayList<FormField>() : fields;
     }
 }

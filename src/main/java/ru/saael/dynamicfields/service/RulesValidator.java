@@ -1,31 +1,29 @@
 package ru.saael.dynamicfields.service;
 
 import ru.saael.dynamicfields.model.Condition;
-import ru.saael.dynamicfields.model.Rule;
+import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Structural validation of a {@link RulesConfig}. Pure, stateless, unit-testable.
+ * Structural validation of a portal form. A field may depend only on a field listed above it,
+ * which makes cycles impossible.
  */
 public final class RulesValidator {
 
-    private static final Pattern FIELD_ID = Pattern.compile("^[A-Za-z0-9_][A-Za-z0-9_:.\\-]*$");
+    private static final Pattern FIELD_ID = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]{0,40}$");
+    private static final List<String> TYPES = Arrays.asList(
+            FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.TEXT, FormField.TEXTAREA);
 
     private RulesValidator() {
     }
 
-    /**
-     * @return list of validation errors; empty when the configuration is valid
-     */
     public static List<String> validate(RulesConfig config) {
         List<String> errors = new ArrayList<String>();
         if (config == null) {
@@ -36,138 +34,73 @@ public final class RulesValidator {
             errors.add("Unsupported \"version\": " + config.getVersion()
                     + " (expected " + RulesConfig.CURRENT_VERSION + ")");
         }
-        for (String selector : config.getContainerSelectors()) {
-            if (isBlank(selector)) {
-                errors.add("\"containerSelectors\" must not contain empty entries");
-                break;
-            }
-        }
-
         Set<String> ids = new HashSet<String>();
-        Map<String, Set<String>> dependsOn = new HashMap<String, Set<String>>();
-        List<Rule> rules = config.getRules();
-        for (int i = 0; i < rules.size(); i++) {
-            Rule rule = rules.get(i);
-            String label = ruleLabel(rule, i);
-            if (rule == null) {
-                errors.add(label + ": rule is null");
+        List<String> earlier = new ArrayList<String>();
+        List<FormField> fields = config.getFields();
+        for (int i = 0; i < fields.size(); i++) {
+            FormField field = fields.get(i);
+            String label = fieldLabel(field, i);
+            if (field == null) {
+                errors.add(label + ": field is empty");
                 continue;
             }
-            if (!isBlank(rule.getId()) && !ids.add(rule.getId())) {
-                errors.add(label + ": duplicate rule id \"" + rule.getId() + "\"");
+            if (isBlank(field.getId())) {
+                errors.add(label + ": \"id\" is required");
+            } else if (!FIELD_ID.matcher(field.getId()).matches()) {
+                errors.add(label + ": \"id\" has invalid format: \"" + field.getId() + "\"");
+            } else if (!ids.add(field.getId())) {
+                errors.add(label + ": duplicate id \"" + field.getId() + "\"");
             }
-            Condition when = rule.getWhen();
-            if (when == null) {
-                errors.add(label + ": \"when\" is required");
-            } else if (isBlank(when.getFieldId())) {
-                errors.add(label + ": \"when.fieldId\" is required");
-            } else if (!FIELD_ID.matcher(when.getFieldId()).matches()) {
-                errors.add(label + ": \"when.fieldId\" has invalid format: \"" + when.getFieldId() + "\"");
-            } else {
-                for (String value : when.getValues()) {
-                    if (value == null) {
-                        errors.add(label + ": \"when.values\" must not contain null");
-                        break;
+            if (isBlank(field.getLabel())) {
+                errors.add(label + ": name is required");
+            }
+            if (!TYPES.contains(field.getType())) {
+                errors.add(label + ": unknown type \"" + field.getType() + "\"");
+            } else if (field.hasOptions()) {
+                if (field.getOptions() == null || field.getOptions().isEmpty()) {
+                    errors.add(label + ": add at least one option");
+                }
+                Set<String> options = new HashSet<String>();
+                List<String> declared = field.getOptions() == null ? new ArrayList<String>() : field.getOptions();
+                for (String option : declared) {
+                    if (isBlank(option)) {
+                        errors.add(label + ": an option is empty");
+                    } else if (!options.add(option)) {
+                        errors.add(label + ": duplicate option \"" + option + "\"");
                     }
                 }
             }
-            if (rule.getShow().isEmpty()) {
-                errors.add(label + ": \"show\" must list at least one field");
-            }
-            for (String target : rule.getShow()) {
-                if (isBlank(target)) {
-                    errors.add(label + ": \"show\" contains an empty field id");
-                } else if (!FIELD_ID.matcher(target).matches()) {
-                    errors.add(label + ": \"show\" contains field id with invalid format: \"" + target + "\"");
-                } else if (when != null && target.equals(when.getFieldId())) {
-                    errors.add(label + ": field \"" + target + "\" cannot show itself");
-                } else if (when != null && !isBlank(when.getFieldId())) {
-                    Set<String> parents = dependsOn.get(target);
-                    if (parents == null) {
-                        parents = new LinkedHashSet<String>();
-                        dependsOn.put(target, parents);
-                    }
-                    parents.add(when.getFieldId());
+            Condition when = field.getWhen();
+            if (when != null) {
+                if (isBlank(when.getFieldId())) {
+                    errors.add(label + ": \"when.fieldId\" is required");
+                } else if (when.getFieldId().equals(field.getId())) {
+                    errors.add(label + ": a field cannot depend on itself");
+                } else if (!earlier.contains(when.getFieldId())) {
+                    errors.add(label + ": condition refers to unknown or later field \"" + when.getFieldId() + "\"");
                 }
             }
-            if (rule.getPortalId() != null && rule.getPortalId() <= 0) {
-                errors.add(label + ": \"portalId\" must be a positive number");
-            }
-            for (Long requestTypeId : rule.getRequestTypeIds()) {
-                if (requestTypeId == null || requestTypeId <= 0) {
-                    errors.add(label + ": \"requestTypeIds\" must contain positive numbers only");
-                    break;
-                }
+            if (!isBlank(field.getId())) {
+                earlier.add(field.getId());
             }
         }
-
-        String cycle = findCycle(dependsOn);
-        if (cycle != null) {
-            errors.add("Circular dependency between fields: " + cycle
-                    + " (such fields would never become visible)");
+        for (Long requestTypeId : config.getRequestTypeIds()) {
+            if (requestTypeId == null || requestTypeId <= 0) {
+                errors.add("\"requestTypeIds\" must contain positive numbers only");
+                break;
+            }
         }
         return errors;
     }
 
-    private static String ruleLabel(Rule rule, int index) {
-        if (rule != null && !isBlank(rule.getId())) {
-            return "Rule \"" + rule.getId() + "\"";
+    private static String fieldLabel(FormField field, int index) {
+        if (field != null && !isBlank(field.getLabel())) {
+            return "Field \"" + field.getLabel() + "\"";
         }
-        return "Rule #" + (index + 1);
+        return "Field #" + (index + 1);
     }
 
-    /**
-     * Depth-first search for a cycle in the "field -> fields it depends on" graph.
-     *
-     * @return textual description of the first cycle found, or {@code null}
-     */
-    private static String findCycle(Map<String, Set<String>> dependsOn) {
-        Set<String> done = new HashSet<String>();
-        for (String start : dependsOn.keySet()) {
-            List<String> path = new ArrayList<String>();
-            String cycle = dfs(start, dependsOn, done, new HashSet<String>(), path);
-            if (cycle != null) {
-                return cycle;
-            }
-        }
-        return null;
-    }
-
-    private static String dfs(String node, Map<String, Set<String>> graph, Set<String> done,
-                              Set<String> onPath, List<String> path) {
-        if (done.contains(node)) {
-            return null;
-        }
-        if (!onPath.add(node)) {
-            StringBuilder sb = new StringBuilder();
-            boolean inCycle = false;
-            for (String step : path) {
-                if (step.equals(node)) {
-                    inCycle = true;
-                }
-                if (inCycle) {
-                    sb.append(step).append(" -> ");
-                }
-            }
-            return sb.append(node).toString();
-        }
-        path.add(node);
-        Set<String> parents = graph.get(node);
-        if (parents != null) {
-            for (String parent : parents) {
-                String cycle = dfs(parent, graph, done, onPath, path);
-                if (cycle != null) {
-                    return cycle;
-                }
-            }
-        }
-        path.remove(path.size() - 1);
-        onPath.remove(node);
-        done.add(node);
-        return null;
-    }
-
-    private static boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

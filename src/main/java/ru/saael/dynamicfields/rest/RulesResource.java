@@ -20,15 +20,15 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 /**
- * REST API: {@code /rest/dynamic-fields/1.0/rules}
+ * REST API: {@code /rest/dynamic-fields/1.0/form}
  * <ul>
- *   <li>{@code GET  /rules}          - rules for the customer portal (anonymous allowed, portals may be public);</li>
- *   <li>{@code PUT  /rules}          - save rules (Jira administrators only);</li>
- *   <li>{@code POST /rules/validate} - validate without saving (Jira administrators only);</li>
- *   <li>{@code GET  /rules/example}  - bundled example (Jira administrators only).</li>
+ *   <li>{@code GET  /form}          - form shown on the customer portal (anonymous allowed);</li>
+ *   <li>{@code PUT  /form}          - save the form (Jira administrators only);</li>
+ *   <li>{@code POST /form/validate} - validate without saving (Jira administrators only);</li>
+ *   <li>{@code GET  /form/example}  - bundled example (Jira administrators only).</li>
  * </ul>
  */
-@Path("/rules")
+@Path("/form")
 @Produces(MediaType.APPLICATION_JSON)
 public class RulesResource {
 
