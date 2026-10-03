@@ -1,4 +1,5 @@
 <div class="sdf-answers" style="padding: 0 10px 8px;">
+    <p style="color: #6b778c; font-size: 12px; margin: 0 0 8px;">$i18n.getText("ru.saael.dynamicfields.answers.automation")</p>
 #set ($lastGroup = "")
 #foreach ($row in $sdfRows)
     #if ($row.group && $row.group != $lastGroup)
@@ -10,6 +11,9 @@
         <div style="color: #6b778c; font-size: 12px;">$row.label</div>
         #end
         <div style="white-space: pre-wrap;">$row.value</div>
+        #if ($row.fieldId)
+        <div style="color: #97a0af; font-size: 11px;">$row.fieldId</div>
+        #end
     </div>
 #end
 </div>

@@ -23,7 +23,9 @@
         var selectedField = {blockIndex: -1, index: 0};
         var pendingLink = null;
         var ignoreLinkClickUntil = 0;
+        var ignorePickUntil = 0;
         var dragLink = null;
+        var dragMove = null;
         var NODE_W = 280;
         var NODE_HEAD = 42;
         var NODE_ROW = 28;
@@ -34,6 +36,7 @@
         app.addEventListener('input', onInput);
         app.addEventListener('change', onChange);
         app.addEventListener('mousedown', onPortDown);
+        app.addEventListener('mousedown', onQuestionDown);
 
         refresh();
         loadRequestTypes();
@@ -136,6 +139,9 @@
                     label: src.label == null ? '' : String(src.label),
                     type: src.type || 'text',
                     options: options,
+                    blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
+                    hideBlank: !!src.hideBlank,
+                    defaults: stringList(src.defaults),
                     when: when
                 });
             }
@@ -214,7 +220,7 @@
         }
 
         function isChoice(type) {
-            return type === 'checkbox' || type === 'radio' || type === 'select';
+            return type === 'checkbox' || type === 'radio' || type === 'select' || type === 'multiselect';
         }
 
         function trim(value) {
@@ -272,11 +278,22 @@
                         }
                     }
                 }
+                var defaults = [];
+                var d;
+                for (d = 0; d < (src.defaults || []).length; d++) {
+                    var one = keepBlank ? String(src.defaults[d] == null ? '' : src.defaults[d]) : trim(src.defaults[d]);
+                    if (keepBlank || one) {
+                        defaults.push(one);
+                    }
+                }
                 var field = {
                     id: src.id,
                     label: keepBlank ? (src.label || '') : trim(src.label),
                     type: src.type || 'text',
-                    options: options
+                    options: options,
+                    blankLabel: src.blankLabel || '',
+                    hideBlank: !!src.hideBlank,
+                    defaults: defaults
                 };
                 var parent = null;
                 if (src.when && src.when.fieldId) {
@@ -424,31 +441,16 @@
         function renderBlock(block, blockIndex) {
             var card = el('section', 'sdf-block-card');
             card.setAttribute('data-block-index', String(blockIndex));
-            var head = el('div', 'sdf-block-head');
-            var title = document.createElement('input');
-            title.type = 'text';
-            title.className = 'text sdf-block-title';
-            title.setAttribute('data-role', 'block-title');
-            title.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockTitle'));
-            title.value = block.title || '';
-            head.appendChild(title);
-            var clearLabel = el('label', 'sdf-clear-label');
-            var clear = document.createElement('input');
-            clear.type = 'checkbox';
-            clear.setAttribute('data-role', 'block-clear');
-            clear.checked = block.clearOnHide !== false;
-            clearLabel.appendChild(clear);
-            clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
-            head.appendChild(clearLabel);
-            var actions = el('div', 'aui-buttons sdf-actions');
+            var bar = el('div', 'sdf-block-bar');
+            var actions = el('div', 'aui-buttons');
             actions.appendChild(button('add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false));
             var order = visibleBlockIndexes();
             var pos = indexOfNumber(order, blockIndex);
             actions.appendChild(button('block-up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), pos <= 0));
             actions.appendChild(button('block-down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), pos < 0 || pos === order.length - 1));
             actions.appendChild(button('remove-block', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.removeBlock'), false));
-            head.appendChild(actions);
-            card.appendChild(head);
+            bar.appendChild(actions);
+            card.appendChild(bar);
             card.appendChild(renderScope(block));
             card.appendChild(renderCanvas(block, blockIndex));
             var editIndex = editedIndex(block, blockIndex);
@@ -474,6 +476,23 @@
 
         function renderScope(block) {
             var box = el('div', 'sdf-scope');
+            var titleGroup = el('div', 'field-group');
+            titleGroup.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockTitle')));
+            var title = document.createElement('input');
+            title.type = 'text';
+            title.className = 'text';
+            title.setAttribute('data-role', 'block-title');
+            title.value = block.title || '';
+            titleGroup.appendChild(title);
+            var clearLabel = el('label', 'sdf-clear-label');
+            var clear = document.createElement('input');
+            clear.type = 'checkbox';
+            clear.setAttribute('data-role', 'block-clear');
+            clear.checked = block.clearOnHide !== false;
+            clearLabel.appendChild(clear);
+            clearLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearGlobal')));
+            titleGroup.appendChild(clearLabel);
+            box.appendChild(titleGroup);
             var owner = el('div', 'field-group');
             owner.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeOwner')));
             owner.appendChild(blockTypeSelect(block));
@@ -1050,6 +1069,9 @@
                     maxY = laid[i].y + laid[i].h + 16;
                 }
             }
+            if (maxY < 680) {
+                maxY = 680;
+            }
             var board = el('div', 'sdf-board');
             board.style.width = maxX + 'px';
             board.style.height = maxY + 'px';
@@ -1106,7 +1128,7 @@
                     }
                     var item = {
                         index: index,
-                        x: 16 + col * (NODE_W + 48),
+                        x: 16 + col * (NODE_W + 88),
                         y: y,
                         h: nodeBoxHeight(field),
                         ports: []
@@ -1148,13 +1170,25 @@
                 }
                 return {x: item.x + NODE_W, y: item.y + 22};
             }
-            function line(from, to) {
-                var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            function line(from, to, childIndex) {
                 var mid = (from.x + to.x) / 2;
-                path.setAttribute('d', 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y);
+                var d = 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y;
+                var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                hit.setAttribute('d', d);
+                hit.setAttribute('fill', 'none');
+                hit.setAttribute('stroke', 'transparent');
+                hit.setAttribute('stroke-width', '16');
+                hit.setAttribute('data-role', 'unlink');
+                hit.setAttribute('data-block-index', String(blockIndex));
+                hit.setAttribute('data-field-index', String(childIndex));
+                hit.setAttribute('class', 'sdf-edge-hit');
+                svg.appendChild(hit);
+                var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', d);
                 path.setAttribute('fill', 'none');
                 path.setAttribute('stroke', '#4c9aff');
                 path.setAttribute('stroke-width', '1.5');
+                path.setAttribute('class', 'sdf-edge');
                 svg.appendChild(path);
             }
             for (i = 0; i < block.fields.length; i++) {
@@ -1177,11 +1211,11 @@
                 var when = block.fields[i].when;
                 var values = when.values || [];
                 if (!values.length || when._mode === 'any') {
-                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + 22}, leftOf(indexAt[i]));
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + 22}, leftOf(indexAt[i]), i);
                 } else {
                     var v;
                     for (v = 0; v < values.length; v++) {
-                        line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[i]));
+                        line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[i]), i);
                     }
                 }
             }
@@ -1265,48 +1299,179 @@
             if (type === 'select') {
                 return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.select');
             }
+            if (type === 'multiselect') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.multiselect');
+            }
             if (type === 'textarea') {
                 return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.textarea');
+            }
+            if (type === 'number') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.number');
+            }
+            if (type === 'date') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.date');
+            }
+            if (type === 'time') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.time');
+            }
+            if (type === 'datetime') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.datetime');
+            }
+            if (type === 'url') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.url');
             }
             return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text');
         }
 
         function renderCard(block, blockIndex, index) {
             var field = block.fields[index];
-            var card = el('div', 'sdf-card');
+            var card = el('form', 'sdf-card aui');
             card.setAttribute('data-block-index', String(blockIndex));
             card.setAttribute('data-field-index', String(index));
-            var depth = depthOf(block.fields, index);
-            if (depth > 0) {
-                card.style.marginLeft = (depth * 16) + 'px';
-                card.style.borderLeft = '2px solid #4c9aff';
-            }
-            var head = el('div', 'sdf-card-head');
-            head.appendChild(el('span', 'sdf-num', String(index + 1)));
-            var nameWrap = el('div', 'sdf-question');
-            nameWrap.appendChild(el('label', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
-            var name = document.createElement('input');
-            name.type = 'text';
-            name.className = 'text sdf-name';
-            name.setAttribute('data-role', 'label');
-            name.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'));
-            name.value = field.label || '';
-            nameWrap.appendChild(name);
-            nameWrap.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
-            head.appendChild(nameWrap);
-            head.appendChild(typeSelect(field.type));
-            var actions = el('div', 'aui-buttons sdf-actions');
-            actions.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
-            actions.appendChild(button('up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), previousSiblingStart(block.fields, index) < 0));
-            actions.appendChild(button('down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), subtreeEnd(block.fields, index) >= block.fields.length));
-            actions.appendChild(button('remove', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false));
-            head.appendChild(actions);
-            card.appendChild(head);
+            card.onsubmit = function () {
+                return false;
+            };
+            card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
+            card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
             if (isChoice(field.type)) {
                 card.appendChild(renderOptions(field));
             }
+            if (field.type === 'select') {
+                card.appendChild(renderBlank(field));
+            }
+            card.appendChild(renderDefault(field));
+            card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldId'), idInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.automationHint')));
             card.appendChild(renderWhen(block, field, index));
+            var buttons = el('div', 'buttons-container');
+            var row = el('div', 'buttons');
+            row.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
+            row.appendChild(button('up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), previousSiblingStart(block.fields, index) < 0));
+            row.appendChild(button('down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), subtreeEnd(block.fields, index) >= block.fields.length));
+            if (field.when && field.when.fieldId) {
+                row.appendChild(button('unlink-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unlink'), false));
+            }
+            row.appendChild(button('remove', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false));
+            buttons.appendChild(row);
+            card.appendChild(buttons);
             return card;
+        }
+
+        function group(labelText, control, description) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, labelText));
+            box.appendChild(control);
+            if (description) {
+                box.appendChild(el('div', 'description', description));
+            }
+            return box;
+        }
+
+        function questionInput(field) {
+            var name = document.createElement('input');
+            name.type = 'text';
+            name.className = 'text long-field';
+            name.setAttribute('data-role', 'label');
+            name.value = field.label || '';
+            return name;
+        }
+
+        function idInput(field) {
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'text';
+            input.readOnly = true;
+            input.value = field.id || '';
+            return input;
+        }
+
+        function renderBlank(field) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blankLabel')));
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'text';
+            input.setAttribute('data-role', 'blank-label');
+            input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.portal.blank'));
+            input.value = field.blankLabel || '';
+            box.appendChild(input);
+            var hide = document.createElement('label');
+            hide.className = 'sdf-inline-check';
+            var check = document.createElement('input');
+            check.type = 'checkbox';
+            check.setAttribute('data-role', 'hide-blank');
+            check.checked = !!field.hideBlank;
+            hide.appendChild(check);
+            hide.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.hideBlank')));
+            box.appendChild(hide);
+            box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blankHint')));
+            return box;
+        }
+
+        function renderDefault(field) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultValue')));
+            if (isChoice(field.type)) {
+                var opts = filledOptions(field);
+                if (!opts.length) {
+                    box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needOption')));
+                    return box;
+                }
+                var multiple = field.type === 'checkbox' || field.type === 'multiselect';
+                if (!multiple) {
+                    var noneLabel = document.createElement('label');
+                    noneLabel.className = 'sdf-inline-check';
+                    var none = document.createElement('input');
+                    none.type = 'radio';
+                    none.name = 'sdf-default-' + field.id;
+                    none.setAttribute('data-role', 'default-choice');
+                    none.value = '';
+                    none.checked = !(field.defaults && field.defaults.length);
+                    noneLabel.appendChild(none);
+                    noneLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultNone')));
+                    box.appendChild(noneLabel);
+                }
+                var i;
+                for (i = 0; i < opts.length; i++) {
+                    var label = document.createElement('label');
+                    label.className = 'sdf-inline-check';
+                    var input = document.createElement('input');
+                    input.type = multiple ? 'checkbox' : 'radio';
+                    input.name = 'sdf-default-' + field.id;
+                    input.setAttribute('data-role', 'default-choice');
+                    input.value = opts[i];
+                    input.checked = contains(field.defaults, opts[i]);
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(' ' + opts[i]));
+                    box.appendChild(label);
+                }
+                return box;
+            }
+            var inputText = document.createElement('input');
+            inputText.type = inputKind(field.type);
+            inputText.className = 'text';
+            inputText.setAttribute('data-role', 'default-text');
+            inputText.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
+            box.appendChild(inputText);
+            return box;
+        }
+
+        function inputKind(type) {
+            if (type === 'number') {
+                return 'number';
+            }
+            if (type === 'date') {
+                return 'date';
+            }
+            if (type === 'time') {
+                return 'time';
+            }
+            if (type === 'datetime') {
+                return 'datetime-local';
+            }
+            if (type === 'url') {
+                return 'url';
+            }
+            return 'text';
         }
 
         function typeSelect(current) {
@@ -1317,8 +1482,14 @@
                 ['checkbox', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.checkbox')],
                 ['radio', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.radio')],
                 ['select', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.select')],
+                ['multiselect', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.multiselect')],
                 ['text', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text')],
-                ['textarea', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.textarea')]
+                ['textarea', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.textarea')],
+                ['number', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.number')],
+                ['date', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.date')],
+                ['time', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.time')],
+                ['datetime', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.datetime')],
+                ['url', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.url')]
             ];
             var i;
             for (i = 0; i < types.length; i++) {
@@ -1334,8 +1505,8 @@
         }
 
         function renderOptions(field) {
-            var box = el('div', 'sdf-options');
-            box.appendChild(el('div', 'sdf-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.options')));
+            var box = el('div', 'field-group sdf-options');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.options')));
             var options = field.options || [];
             var i;
             for (i = 0; i < options.length; i++) {
@@ -1677,6 +1848,105 @@
             svg.appendChild(path);
         }
 
+        function onQuestionDown(e) {
+            if (e.button || roleOf(e.target) !== 'pick-node') {
+                return;
+            }
+            var tag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+            if (tag === 'button' || tag === 'input' || tag === 'select') {
+                return;
+            }
+            var source = fieldAt(e.target);
+            if (!source) {
+                return;
+            }
+            dragMove = {
+                blockIndex: source.blockIndex,
+                fieldIndex: source.fieldIndex,
+                x0: e.clientX,
+                y0: e.clientY,
+                moved: false
+            };
+            document.addEventListener('mousemove', onQuestionMove);
+            document.addEventListener('mouseup', onQuestionUp);
+        }
+
+        function onQuestionMove(e) {
+            if (!dragMove) {
+                return;
+            }
+            if (Math.abs(e.clientX - dragMove.x0) + Math.abs(e.clientY - dragMove.y0) > 6) {
+                dragMove.moved = true;
+            }
+            clearDropMarks();
+            if (!dragMove.moved) {
+                return;
+            }
+            var under = document.elementFromPoint(e.clientX, e.clientY);
+            var target = fieldAt(under);
+            if (target && target.blockIndex === dragMove.blockIndex && target.fieldIndex !== dragMove.fieldIndex) {
+                var mark = under;
+                while (mark && mark !== app && !hasClass(mark, 'sdf-node')) {
+                    mark = mark.parentNode;
+                }
+                if (mark && mark.className.indexOf('sdf-node-drop') < 0) {
+                    mark.className += ' sdf-node-drop';
+                }
+            }
+        }
+
+        function onQuestionUp(e) {
+            document.removeEventListener('mousemove', onQuestionMove);
+            document.removeEventListener('mouseup', onQuestionUp);
+            if (!dragMove) {
+                return;
+            }
+            var info = dragMove;
+            dragMove = null;
+            clearDropMarks();
+            if (!info.moved) {
+                return;
+            }
+            ignorePickUntil = new Date().getTime() + 400;
+            var target = fieldAt(document.elementFromPoint(e.clientX, e.clientY));
+            if (target && target.blockIndex === info.blockIndex && target.fieldIndex !== info.fieldIndex) {
+                moveNodeTo(info.blockIndex, info.fieldIndex, target.fieldIndex);
+            }
+        }
+
+        function clearDropMarks() {
+            var nodes = app.getElementsByClassName('sdf-node-drop');
+            var copy = [];
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                copy.push(nodes[i]);
+            }
+            for (i = 0; i < copy.length; i++) {
+                copy[i].className = copy[i].className.replace(' sdf-node-drop', '');
+            }
+        }
+
+        function moveNodeTo(blockIndex, fromIndex, toIndex) {
+            var fields = config.blocks[blockIndex].fields;
+            if (!fields[fromIndex] || !fields[toIndex] || fromIndex === toIndex) {
+                return;
+            }
+            if (isUnder(fields, toIndex, fields[fromIndex].id)) {
+                return;
+            }
+            var end = subtreeEnd(fields, fromIndex);
+            var chunk = fields.splice(fromIndex, end - fromIndex);
+            if (toIndex > fromIndex) {
+                toIndex -= chunk.length;
+            }
+            var n;
+            for (n = 0; n < chunk.length; n++) {
+                fields.splice(toIndex + n, 0, chunk[n]);
+            }
+            selectedField = {blockIndex: blockIndex, index: toIndex};
+            refresh();
+        }
+
         function clearRubber(board) {
             if (!board) {
                 return;
@@ -1729,7 +1999,30 @@
                 refresh();
                 return;
             }
+            if (role === 'unlink' || role === 'unlink-field') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var linked = e.target;
+                while (linked && linked !== app && !(linked.getAttribute && linked.getAttribute('data-field-index') != null)) {
+                    linked = linked.parentNode;
+                }
+                if (!linked) {
+                    return;
+                }
+                var linkBlock = parseInt(linked.getAttribute('data-block-index'), 10) || 0;
+                var linkField = parseInt(linked.getAttribute('data-field-index'), 10) || 0;
+                if (config.blocks[linkBlock] && config.blocks[linkBlock].fields[linkField]) {
+                    config.blocks[linkBlock].fields[linkField].when = null;
+                    selectedField = {blockIndex: linkBlock, index: linkField};
+                    refresh();
+                }
+                return;
+            }
             if (role === 'pick-node') {
+                if (new Date().getTime() < ignorePickUntil) {
+                    return;
+                }
                 if (e.preventDefault) {
                     e.preventDefault();
                 }
@@ -1841,6 +2134,14 @@
                 field.options[optIndex] = e.target.value;
                 renameOption(block, field.id, old, e.target.value);
                 refreshKeepingFocus();
+            } else if (role === 'blank-label' && loc.fieldIndex >= 0) {
+                block.fields[loc.fieldIndex].blankLabel = e.target.value;
+                sync();
+                renderPreview();
+            } else if (role === 'default-text' && loc.fieldIndex >= 0) {
+                block.fields[loc.fieldIndex].defaults = trim(e.target.value) ? [e.target.value] : [];
+                sync();
+                renderPreview();
             }
         }
 
@@ -1953,6 +2254,28 @@
                     relaxDependents(block, field.id);
                 }
                 refresh();
+            } else if (role === 'hide-blank') {
+                field.hideBlank = !!e.target.checked;
+                refresh();
+            } else if (role === 'default-choice') {
+                var chosen = [];
+                var kept = field.defaults || [];
+                var n;
+                for (n = 0; n < kept.length; n++) {
+                    if (kept[n] !== e.target.value) {
+                        chosen.push(kept[n]);
+                    }
+                }
+                if (e.target.checked) {
+                    if (e.target.type === 'radio') {
+                        chosen = e.target.value ? [e.target.value] : [];
+                    } else {
+                        chosen.push(e.target.value);
+                    }
+                }
+                field.defaults = chosen;
+                sync();
+                renderPreview();
             } else if (role === 'when-field') {
                 if (!e.target.value) {
                     field.when = null;
@@ -2488,6 +2811,7 @@
                     var input = document.createElement('input');
                     input.type = field.type;
                     input.value = options[i];
+                    input.checked = contains(field.defaults, options[i]);
                     if (field.type === 'radio') {
                         input.name = 'sdf-preview-' + blockId + '-' + field.id;
                     }
@@ -2495,19 +2819,25 @@
                     line.appendChild(document.createTextNode(' ' + options[i]));
                     wrap.appendChild(line);
                 }
-            } else if (field.type === 'select') {
+            } else if (field.type === 'select' || field.type === 'multiselect') {
                 var select = document.createElement('select');
                 select.className = 'sdf-select';
-                var empty = document.createElement('option');
-                empty.value = '';
-                empty.appendChild(document.createTextNode('\u2014'));
-                select.appendChild(empty);
+                if (field.type === 'multiselect') {
+                    select.multiple = true;
+                    select.size = options.length > 6 ? 6 : Math.max(options.length, 2);
+                } else if (!(field.hideBlank && hasDefault(field))) {
+                    var empty = document.createElement('option');
+                    empty.value = '';
+                    empty.appendChild(document.createTextNode(blankCaption(field)));
+                    select.appendChild(empty);
+                }
                 for (i = 0; i < options.length; i++) {
                     if (!trim(options[i])) {
                         continue;
                     }
                     var option = document.createElement('option');
                     option.value = options[i];
+                    option.selected = contains(field.defaults, options[i]);
                     option.appendChild(document.createTextNode(options[i]));
                     select.appendChild(option);
                 }
@@ -2516,14 +2846,34 @@
                 var area = document.createElement('textarea');
                 area.className = 'sdf-textarea';
                 area.rows = 3;
+                area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
                 wrap.appendChild(area);
             } else {
                 var text = document.createElement('input');
-                text.type = 'text';
+                text.type = inputKind(field.type);
                 text.className = 'sdf-input';
+                text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
                 wrap.appendChild(text);
             }
             return wrap;
+        }
+
+        function hasDefault(field) {
+            var list = field.defaults || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (trim(list[i])) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function blankCaption(field) {
+            if (field.blankLabel && trim(field.blankLabel)) {
+                return trim(field.blankLabel);
+            }
+            return AJS.I18n.getText('ru.saael.dynamicfields.portal.blank');
         }
 
         function readPreview(root) {
@@ -2569,8 +2919,17 @@
                 for (n = 0; n < inputs.length; n++) {
                     inputs[n].checked = contains(values, inputs[n].value);
                 }
-            } else if (type === 'select') {
-                node.getElementsByTagName('select')[0].value = values[0];
+            } else if (type === 'select' || type === 'multiselect') {
+                var select = node.getElementsByTagName('select')[0];
+                if (select && select.multiple) {
+                    var opts = select.options;
+                    var m;
+                    for (m = 0; m < opts.length; m++) {
+                        opts[m].selected = contains(values, opts[m].value);
+                    }
+                } else if (select) {
+                    select.value = values[0];
+                }
             } else if (type === 'textarea') {
                 node.getElementsByTagName('textarea')[0].value = values[0];
             } else {
@@ -2602,9 +2961,16 @@
                         values.push(inputs[i].value);
                     }
                 }
-            } else if (type === 'select') {
+            } else if (type === 'select' || type === 'multiselect') {
                 var select = node.getElementsByTagName('select')[0];
-                if (select && select.value) {
+                if (select && select.multiple) {
+                    var opts = select.options;
+                    for (i = 0; i < opts.length; i++) {
+                        if (opts[i].selected && opts[i].value) {
+                            values.push(opts[i].value);
+                        }
+                    }
+                } else if (select && select.value) {
                     values.push(select.value);
                 }
             } else if (type === 'textarea') {

@@ -143,6 +143,14 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void dateAndMultipleChoiceAreAllowed() {
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(
+                field("when", "Дата", FormField.DATE))));
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(
+                field("many", "Роли", FormField.MULTISELECT, "Врач", "Сестра"))));
+    }
+
+    @Test
     public void choiceWithoutOptionsIsReported() {
         List<String> errors = RulesValidator.validate(config(
                 field("category", "Категория", FormField.CHECKBOX)));

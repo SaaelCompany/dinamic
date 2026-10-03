@@ -80,6 +80,7 @@ public final class AnswerSanitizer {
                     text.append(value);
                 }
                 AnswerRow row = new AnswerRow(field.getLabel(), text.toString());
+                row.setFieldId(field.getId());
                 if (!group.isEmpty()) {
                     row.setGroup(group);
                 }

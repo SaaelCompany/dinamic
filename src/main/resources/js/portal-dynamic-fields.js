@@ -110,9 +110,16 @@
                     values.push(inputs[i].value);
                 }
             }
-        } else if (type === 'select') {
+        } else if (type === 'select' || type === 'multiselect') {
             var select = node.getElementsByTagName('select')[0];
-            if (select && select.value) {
+            if (select && select.multiple) {
+                var opts = select.options;
+                for (i = 0; i < opts.length; i++) {
+                    if (opts[i].selected && opts[i].value) {
+                        values.push(opts[i].value);
+                    }
+                }
+            } else if (select && select.value) {
                 values.push(select.value);
             }
         } else if (type === 'textarea') {
@@ -160,7 +167,15 @@
         }
         var selects = node.getElementsByTagName('select');
         for (i = 0; i < selects.length; i++) {
-            selects[i].selectedIndex = 0;
+            if (selects[i].multiple) {
+                var opts = selects[i].options;
+                var n;
+                for (n = 0; n < opts.length; n++) {
+                    opts[n].selected = false;
+                }
+            } else {
+                selects[i].selectedIndex = 0;
+            }
         }
     }
 
@@ -207,6 +222,7 @@
                 var input = document.createElement('input');
                 input.type = field.type;
                 input.value = options[i];
+                input.checked = listHas(field.defaults, options[i]);
                 // Not a successful control of the Jira request form, so the portal does not submit it.
                 input.setAttribute('form', 'sdf-unattached');
                 if (field.type === 'radio') {
@@ -216,17 +232,23 @@
                 line.appendChild(document.createTextNode(' ' + options[i]));
                 wrap.appendChild(line);
             }
-        } else if (field.type === 'select') {
+        } else if (field.type === 'select' || field.type === 'multiselect') {
             var select = document.createElement('select');
             select.className = 'sdf-select';
             select.setAttribute('form', 'sdf-unattached');
-            var empty = document.createElement('option');
-            empty.value = '';
-            empty.appendChild(document.createTextNode('\u2014'));
-            select.appendChild(empty);
+            if (field.type === 'multiselect') {
+                select.multiple = true;
+                select.size = options.length > 6 ? 6 : Math.max(options.length, 2);
+            } else if (!(field.hideBlank && listHasAny(field.defaults))) {
+                var empty = document.createElement('option');
+                empty.value = '';
+                empty.appendChild(document.createTextNode(blankCaption(field)));
+                select.appendChild(empty);
+            }
             for (i = 0; i < options.length; i++) {
                 var option = document.createElement('option');
                 option.value = options[i];
+                option.selected = listHas(field.defaults, options[i]);
                 option.appendChild(document.createTextNode(options[i]));
                 select.appendChild(option);
             }
@@ -236,15 +258,63 @@
             area.className = 'sdf-textarea';
             area.setAttribute('rows', '3');
             area.setAttribute('form', 'sdf-unattached');
+            area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(area);
         } else {
             var text = document.createElement('input');
-            text.type = 'text';
+            text.type = portalInputKind(field.type);
             text.className = 'sdf-input';
             text.setAttribute('form', 'sdf-unattached');
+            text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(text);
         }
         return wrap;
+    }
+
+    function listHas(list, value) {
+        var i;
+        for (i = 0; i < (list || []).length; i++) {
+            if (list[i] === value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function listHasAny(list) {
+        var i;
+        for (i = 0; i < (list || []).length; i++) {
+            if (trim(list[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function blankCaption(field) {
+        if (field.blankLabel && trim(field.blankLabel)) {
+            return trim(field.blankLabel);
+        }
+        return AJS.I18n.getText('ru.saael.dynamicfields.portal.blank');
+    }
+
+    function portalInputKind(type) {
+        if (type === 'number') {
+            return 'number';
+        }
+        if (type === 'date') {
+            return 'date';
+        }
+        if (type === 'time') {
+            return 'time';
+        }
+        if (type === 'datetime') {
+            return 'datetime-local';
+        }
+        if (type === 'url') {
+            return 'url';
+        }
+        return 'text';
     }
 
     function buildSection(cfg) {

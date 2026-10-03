@@ -1,5 +1,6 @@
 package ru.saael.dynamicfields.service;
 
+import com.atlassian.jira.entity.property.JsonEntityPropertyManager;
 import com.atlassian.jira.issue.Issue;
 import com.atlassian.jira.issue.IssueManager;
 import com.atlassian.jira.permission.GlobalPermissionKey;
@@ -16,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.saael.dynamicfields.model.AnswerDocument;
 import ru.saael.dynamicfields.model.AnswerRow;
+import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import javax.inject.Inject;
@@ -33,6 +35,9 @@ public class AnswersServiceImpl implements AnswersService {
     private static final Logger log = LoggerFactory.getLogger(AnswersServiceImpl.class);
 
     static final String KEY_PREFIX = "ru.saael.dynamicfields.answer.";
+    /** Issue entity property read by Automation for Jira as issue.properties.sdf.answers. */
+    static final String PROPERTY_KEY = "sdf.answers";
+    private static final String ISSUE_PROPERTY = "IssueProperty";
     /** A reporter may attach answers only to a request they just created. */
     static final long MAX_AGE_MS = 30L * 60L * 1000L;
     private static final Pattern ISSUE_KEY = Pattern.compile("^[A-Z][A-Z0-9]+-\\d+$");
@@ -45,6 +50,7 @@ public class AnswersServiceImpl implements AnswersService {
     private final GlobalPermissionManager globalPermissionManager;
     private final RulesService rulesService;
     private final AdminAccess adminAccess;
+    private final JsonEntityPropertyManager entityPropertyManager;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Inject
@@ -53,13 +59,15 @@ public class AnswersServiceImpl implements AnswersService {
                               @ComponentImport PermissionManager permissionManager,
                               @ComponentImport GlobalPermissionManager globalPermissionManager,
                               RulesService rulesService,
-                              AdminAccess adminAccess) {
+                              AdminAccess adminAccess,
+                              @ComponentImport JsonEntityPropertyManager entityPropertyManager) {
         this.pluginSettingsFactory = pluginSettingsFactory;
         this.issueManager = issueManager;
         this.permissionManager = permissionManager;
         this.globalPermissionManager = globalPermissionManager;
         this.rulesService = rulesService;
         this.adminAccess = adminAccess;
+        this.entityPropertyManager = entityPropertyManager;
         installed = this;
     }
 
@@ -90,7 +98,60 @@ public class AnswersServiceImpl implements AnswersService {
         } catch (IOException e) {
             throw new IllegalStateException("Cannot store portal answers", e);
         }
+        publishProperty(issue, document, form);
         log.info("Stored {} portal answer(s) on {}", rows.size(), issue.getKey());
+    }
+
+    /**
+     * Copies answers onto the issue so Automation for Jira can read
+     * {@code issue.properties.sdf.answers.values.<field id>}.
+     */
+    private void publishProperty(Issue issue, AnswerDocument document, RulesConfig form) {
+        try {
+            Map<String, String> values = new LinkedHashMap<String, String>();
+            Map<String, List<String>> flat = document.getValues();
+            if (flat != null) {
+                for (Map.Entry<String, List<String>> entry : flat.entrySet()) {
+                    values.put(entry.getKey(), join(entry.getValue()));
+                }
+            }
+            Map<String, String> labels = new LinkedHashMap<String, String>();
+            if (form != null && form.getBlocks() != null) {
+                for (int b = 0; b < form.getBlocks().size(); b++) {
+                    if (form.getBlocks().get(b) == null || form.getBlocks().get(b).getFields() == null) {
+                        continue;
+                    }
+                    List<FormField> fields = form.getBlocks().get(b).getFields();
+                    for (int i = 0; i < fields.size(); i++) {
+                        if (fields.get(i) != null && fields.get(i).getId() != null) {
+                            labels.put(fields.get(i).getId(), fields.get(i).getLabel() == null ? "" : fields.get(i).getLabel());
+                        }
+                    }
+                }
+            }
+            Map<String, Object> property = new LinkedHashMap<String, Object>();
+            property.put("values", values);
+            property.put("labels", labels);
+            entityPropertyManager.put(ISSUE_PROPERTY, issue.getId(), PROPERTY_KEY, mapper.writeValueAsString(property));
+        } catch (RuntimeException e) {
+            log.warn("Cannot publish portal answers on {} as an issue property", issue.getKey(), e);
+        } catch (IOException e) {
+            log.warn("Cannot publish portal answers on {} as an issue property", issue.getKey(), e);
+        }
+    }
+
+    private static String join(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                text.append(", ");
+            }
+            text.append(values.get(i) == null ? "" : values.get(i));
+        }
+        return text.toString();
     }
 
     @Override

@@ -7,6 +7,7 @@ public class AnswerRow {
 
     /** Block title at submit time. Empty for answers saved before blocks existed. */
     private String group;
+    private String fieldId;
     private String label;
     private String value;
 
@@ -24,6 +25,14 @@ public class AnswerRow {
 
     public void setGroup(String group) {
         this.group = group;
+    }
+
+    public String getFieldId() {
+        return fieldId;
+    }
+
+    public void setFieldId(String fieldId) {
+        this.fieldId = fieldId;
     }
 
     public String getLabel() {

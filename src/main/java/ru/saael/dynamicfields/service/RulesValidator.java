@@ -20,7 +20,9 @@ public final class RulesValidator {
 
     private static final Pattern FIELD_ID = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]{0,40}$");
     private static final List<String> TYPES = Arrays.asList(
-            FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.TEXT, FormField.TEXTAREA);
+            FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.MULTISELECT,
+            FormField.TEXT, FormField.TEXTAREA, FormField.NUMBER,
+            FormField.DATE, FormField.TIME, FormField.DATETIME, FormField.URL);
     private static final List<String> PLACES = Arrays.asList("end", "start", "after");
 
     private RulesValidator() {

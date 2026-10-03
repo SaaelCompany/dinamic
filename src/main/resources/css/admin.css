@@ -85,8 +85,8 @@
 }
 
 .sdf-canvas {
-    overflow-x: auto;
-    overflow-y: visible;
+    overflow: auto;
+    min-height: 680px;
     max-width: 100%;
     background: #fafbfc;
     border: 1px solid #dfe1e6;
@@ -103,6 +103,8 @@
 
 .sdf-board {
     position: relative;
+    min-height: 680px;
+    min-width: 100%;
 }
 
 .sdf-edges {
@@ -110,6 +112,15 @@
     left: 0;
     top: 0;
     pointer-events: none;
+}
+
+.sdf-edge {
+    pointer-events: none;
+}
+
+.sdf-edge-hit {
+    pointer-events: stroke;
+    cursor: pointer;
 }
 
 .sdf-node {
@@ -133,7 +144,11 @@
 .sdf-node-question {
     height: 42px;
     padding-right: 18px;
-    cursor: pointer;
+    cursor: grab;
+}
+
+.sdf-node-drop {
+    outline: 2px solid #0052cc;
 }
 
 .sdf-node-kicker {
@@ -201,8 +216,8 @@
 }
 
 .sdf-port {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     border: 2px solid #0052cc;
     border-radius: 50%;
     cursor: crosshair;
@@ -278,6 +293,14 @@
     margin: 0 0 16px;
 }
 
+.sdf-block-bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 12px;
+    background: #f4f5f7;
+    border-bottom: 1px solid #dfe1e6;
+}
+
 .sdf-block-head {
     display: flex;
     align-items: center;
@@ -345,9 +368,41 @@
 .sdf-card {
     background: #fff;
     border: 1px solid #dfe1e6;
-    border-radius: 3px;
-    padding: 8px 10px;
+    border-top: 0;
+    border-radius: 0 0 3px 3px;
+    padding: 8px 16px 12px;
+    margin: 0;
+}
+
+form.sdf-card {
+    margin: 0;
+}
+
+.sdf-card .field-group {
     margin: 0 0 8px;
+    padding: 0;
+}
+
+.sdf-card .field-group > label {
+    display: block;
+    margin: 0 0 4px;
+    color: #6b778c;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sdf-card .sdf-inline-check {
+    display: inline-block;
+    margin: 4px 12px 0 0;
+    color: #172b4d;
+    font-size: 14px;
+    font-weight: normal;
+}
+
+.sdf-card .buttons-container {
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
 }
 
 .sdf-card-head,
