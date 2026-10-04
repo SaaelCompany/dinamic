@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Spring context of the plugin. The only thing it does is ask the Atlassian Spring Scanner runtime
+    (bundled in the jar) to read META-INF/plugin-components/* generated at build time and register the
+    @Named components, @ComponentImport host services and @ExportAsService exports.
+    Without this file nothing processes the index and the servlet / REST modules cannot be instantiated.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:atlassian-scanner="http://www.atlassian.com/schema/atlassian-scanner/2"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.atlassian.com/schema/atlassian-scanner/2
+        http://www.atlassian.com/schema/atlassian-scanner/2/atlassian-scanner.xsd">
+
+    <atlassian-scanner:scan-indexes/>
+
+</beans>

@@ -1,0 +1,59 @@
+{
+  "version": 3,
+  "blocks": [
+    {
+      "id": "main",
+      "title": "Дополнительно",
+      "clearOnHide": true,
+      "requestTypeIds": [],
+      "fields": [
+        {
+          "id": "category",
+          "label": "Категория сотрудника",
+          "type": "checkbox",
+          "options": ["Медицинский сотрудник", "Административный персонал"]
+        },
+        {
+          "id": "specialty",
+          "label": "Специальность",
+          "type": "checkbox",
+          "options": ["Основная специальность", "Дополнительная специальность"],
+          "when": { "fieldId": "category", "values": ["Медицинский сотрудник"] }
+        },
+        {
+          "id": "profile",
+          "label": "Профиль",
+          "type": "select",
+          "options": ["Терапевт", "Хирург", "Педиатр"],
+          "when": { "fieldId": "specialty", "values": ["Основная специальность"] }
+        },
+        {
+          "id": "experience",
+          "label": "Стаж",
+          "type": "text",
+          "when": { "fieldId": "specialty", "values": ["Основная специальность", "Дополнительная специальность"] }
+        },
+        {
+          "id": "extraProfile",
+          "label": "Дополнительный профиль",
+          "type": "select",
+          "options": ["Функциональная диагностика", "Рентгенология"],
+          "when": { "fieldId": "specialty", "values": ["Дополнительная специальность"] }
+        },
+        {
+          "id": "certs",
+          "label": "Сертификаты",
+          "type": "checkbox",
+          "options": ["Есть сертификаты"],
+          "when": { "fieldId": "specialty", "values": ["Основная специальность"] }
+        },
+        {
+          "id": "certlist",
+          "label": "Перечень сертификатов",
+          "type": "textarea",
+          "when": { "fieldId": "certs", "values": ["Есть сертификаты"] }
+        }
+      ]
+    }
+  ]
+}

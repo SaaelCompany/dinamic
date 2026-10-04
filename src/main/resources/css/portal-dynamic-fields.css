@@ -1,0 +1,90 @@
+.sdf-block,
+.sdf-answers {
+    margin: 8px 0 16px;
+}
+
+.sdf-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px;
+}
+
+.sdf-field {
+    margin: 0 0 20px;
+    clear: both;
+}
+
+.sdf-field.sdf-hidden,
+.sdf-portal-block.sdf-hidden {
+    display: none !important;
+}
+
+.sdf-label,
+.sdf-answer-label {
+    display: block;
+    margin: 0 0 4px;
+}
+
+.sdf-label,
+.sdf-field > label.field-label {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0 0 5px;
+    padding: 0;
+}
+
+.sdf-answer-label {
+    color: #6b778c;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.sdf-choices .checkbox,
+.sdf-choices .radio {
+    margin-top: 4px;
+}
+
+.sdf-answer-group {
+    font-weight: 600;
+    margin: 12px 0 6px;
+}
+
+.sdf-answer-value {
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+}
+
+.activity-item.request-fields > dl.sdf-detail-row {
+    margin: 0 0 16px;
+}
+
+.activity-item.request-fields > dl.sdf-detail-row > dt {
+    color: #707070;
+    font-weight: normal;
+    margin: 0;
+}
+
+.activity-item.request-fields > dl.sdf-detail-row > dd {
+    margin: 0;
+    color: #172b4d;
+    white-space: pre-wrap;
+}
+
+form.aui .field-group.sdf-field input.text,
+form.aui .field-group.sdf-field select.select,
+form.aui .field-group.sdf-field textarea.textarea,
+.field-group.sdf-field input.text,
+.field-group.sdf-field select.select,
+.field-group.sdf-field textarea.textarea,
+.sdf-input,
+.sdf-textarea,
+.sdf-select {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+}
+
+.sdf-cf-value {
+    display: none !important;
+}
