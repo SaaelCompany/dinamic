@@ -6,7 +6,7 @@
 
     <groupId>ru.saael.jira</groupId>
     <artifactId>portal-dynamic-fields</artifactId>
-    <version>2.13.0</version>
+    <version>2.13.1</version>
     <packaging>atlassian-plugin</packaging>
 
     <name>Niout Portal Dynamic fields for JSM</name>
@@ -176,6 +176,9 @@
                         <Import-Package>
                             org.springframework.osgi.*;resolution:="optional",
                             org.eclipse.gemini.blueprint.*;resolution:="optional",
+                            com.atlassian.servicedesk.api.organization;resolution:="optional",
+                            com.atlassian.servicedesk.api.util.paging;resolution:="optional",
+                            io.atlassian.fugue;resolution:="optional",
                             *
                         </Import-Package>
                         <Spring-Context>*</Spring-Context>

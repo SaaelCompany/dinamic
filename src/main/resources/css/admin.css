@@ -473,6 +473,18 @@ form.aui.sdf-card .buttons-container {
     flex: 1 1 160px;
 }
 
+.sdf-when-value > .sdf-project-filter,
+.sdf-when-value > select.select,
+.sdf-when-value > .sdf-portal-choice {
+    display: block;
+    float: none;
+    clear: both;
+    width: 100%;
+    max-width: 420px;
+    box-sizing: border-box;
+    margin: 0 0 8px;
+}
+
 .sdf-project-filter {
     width: 100%;
     margin: 0 0 6px;
@@ -488,12 +500,14 @@ form.aui.sdf-card .buttons-container {
 }
 
 .sdf-when-values {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    align-items: center;
+    display: block;
     width: 100%;
     margin-top: 6px;
+}
+
+.sdf-when-values .sdf-inline-check {
+    display: block;
+    margin: 0 0 6px;
 }
 
 .sdf-when-values label {

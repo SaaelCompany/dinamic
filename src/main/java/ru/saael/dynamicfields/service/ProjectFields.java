@@ -12,6 +12,7 @@ import com.atlassian.jira.issue.fields.config.FieldConfig;
 import com.atlassian.jira.issue.fields.config.FieldConfigScheme;
 import com.atlassian.jira.issue.priority.Priority;
 import com.atlassian.jira.project.Project;
+import com.atlassian.jira.security.JiraAuthenticationContext;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
@@ -47,16 +48,19 @@ public class ProjectFields {
     private final OptionsManager optionsManager;
     private final FieldManager fieldManager;
     private final ConstantsManager constantsManager;
+    private final JiraAuthenticationContext authenticationContext;
 
     @Inject
     public ProjectFields(@ComponentImport CustomFieldManager customFieldManager,
                          @ComponentImport OptionsManager optionsManager,
                          @ComponentImport FieldManager fieldManager,
-                         @ComponentImport ConstantsManager constantsManager) {
+                         @ComponentImport ConstantsManager constantsManager,
+                         @ComponentImport JiraAuthenticationContext authenticationContext) {
         this.customFieldManager = customFieldManager;
         this.optionsManager = optionsManager;
         this.fieldManager = fieldManager;
         this.constantsManager = constantsManager;
+        this.authenticationContext = authenticationContext;
     }
 
     public String toJson() {
@@ -69,6 +73,7 @@ public class ProjectFields {
             node.put("id", field.getId());
             node.put("name", field.getName());
             node.put("project", field.getProject());
+            node.put("control", field.getControl());
             ArrayNode values = node.putArray("values");
             List<String> options = field.getValues();
             for (int v = 0; v < options.size(); v++) {
@@ -90,12 +95,17 @@ public class ProjectFields {
         } catch (RuntimeException e) {
             log.warn("Cannot list project custom fields", e);
         }
+        attachAllOptions(byId);
         addSystem(byId, "summary", "Summary");
         addSystem(byId, "description", "Description");
         addPriority(byId);
         List<ListedField> found = new ArrayList<ListedField>();
         for (Accumulator acc : byId.values()) {
-            found.add(new ListedField(acc.id, acc.name, projectLabel(acc), new ArrayList<String>(acc.values)));
+            String control = acc.control;
+            if (ProjectFieldKinds.TEXT.equals(control) && !acc.values.isEmpty()) {
+                control = ProjectFieldKinds.SELECT;
+            }
+            found.add(new ListedField(acc.id, acc.name, projectLabel(acc), control, new ArrayList<String>(acc.values)));
         }
         Collections.sort(found, new Comparator<ListedField>() {
             @Override
@@ -138,6 +148,11 @@ public class ProjectFields {
             acc = new Accumulator(field.getId(), field.getName().trim());
             byId.put(field.getId(), acc);
         }
+        String typeKey = field.getCustomFieldType() == null ? "" : field.getCustomFieldType().getKey();
+        acc.control = ProjectFieldKinds.control(typeKey);
+        if (ProjectFieldKinds.CHECKBOXES.equals(acc.control) && typeKey.toLowerCase().contains("organization")) {
+            fillOrganizations(acc);
+        }
         List<FieldConfigScheme> schemes = field.getConfigurationSchemes();
         if (schemes == null) {
             return;
@@ -178,6 +193,47 @@ public class ProjectFields {
         }
     }
 
+    private void attachAllOptions(Map<String, Accumulator> byId) {
+        List<Option> all;
+        try {
+            all = optionsManager.getAllOptions();
+        } catch (RuntimeException e) {
+            log.warn("Cannot list custom field options", e);
+            return;
+        }
+        if (all == null) {
+            return;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            Option option = all.get(i);
+            if (option == null || Boolean.TRUE.equals(option.getDisabled())) {
+                continue;
+            }
+            FieldConfig related = option.getRelatedCustomField();
+            if (related == null || isBlank(related.getFieldId())) {
+                continue;
+            }
+            Accumulator acc = byId.get(related.getFieldId());
+            if (acc == null) {
+                continue;
+            }
+            addOption(acc, option);
+        }
+    }
+
+    private void fillOrganizations(Accumulator acc) {
+        try {
+            List<String> names = OrganizationDirectory.names(authenticationContext.getLoggedInUser());
+            for (int i = 0; i < names.size(); i++) {
+                if (!isBlank(names.get(i))) {
+                    acc.values.add(names.get(i).trim());
+                }
+            }
+        } catch (RuntimeException e) {
+            log.debug("Cannot list service desk organizations", e);
+        }
+    }
+
     private static void addOption(Accumulator acc, Option option) {
         if (option == null || Boolean.TRUE.equals(option.getDisabled())) {
             return;
@@ -204,6 +260,7 @@ public class ProjectFields {
             return;
         }
         Accumulator acc = new Accumulator("priority", fieldName("priority", "Priority"));
+        acc.control = ProjectFieldKinds.SELECT;
         try {
             Collection<Priority> priorities = constantsManager.getPriorities();
             if (priorities != null) {
@@ -262,6 +319,7 @@ public class ProjectFields {
         private final String name;
         private final LinkedHashSet<String> projects = new LinkedHashSet<String>();
         private final LinkedHashSet<String> values = new LinkedHashSet<String>();
+        private String control = ProjectFieldKinds.TEXT;
         private boolean global;
 
         private Accumulator(String id, String name) {
@@ -274,12 +332,14 @@ public class ProjectFields {
         private final String id;
         private final String name;
         private final String project;
+        private final String control;
         private final List<String> values;
 
-        public ListedField(String id, String name, String project, List<String> values) {
+        public ListedField(String id, String name, String project, String control, List<String> values) {
             this.id = id;
             this.name = name;
             this.project = project == null ? "" : project;
+            this.control = control == null ? ProjectFieldKinds.TEXT : control;
             this.values = values == null ? new ArrayList<String>() : values;
         }
 
@@ -293,6 +353,10 @@ public class ProjectFields {
 
         public String getProject() {
             return project;
+        }
+
+        public String getControl() {
+            return control;
         }
 
         public List<String> getValues() {

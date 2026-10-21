@@ -970,6 +970,7 @@
                         id: String(item.id),
                         name: String(item.name || item.id),
                         project: item.project ? String(item.project) : '',
+                        control: item.control || (values.length ? 'select' : 'text'),
                         values: values
                     });
                 }
@@ -1802,7 +1803,7 @@
         function renderWhen(block, field, index) {
             var box = el('div', 'field-group');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
-            var value = el('div', 'sdf-field-value');
+            var value = el('div', 'sdf-field-value sdf-when-value');
             if (projectFields && projectFields.length) {
                 var filter = document.createElement('input');
                 filter.type = 'text';
@@ -1830,18 +1831,30 @@
             return box;
         }
 
+        function portalControl(when) {
+            var catalog = projectFieldById(when.fieldId);
+            if (catalog && catalog.control) {
+                return catalog.control;
+            }
+            return portalChoiceList(when).length ? 'select' : 'text';
+        }
+
         function renderWhenValues(block, field, index) {
             var values = el('div', 'sdf-when-values');
             var when = field.when;
             if (when.source === 'portal') {
                 var portalOptions = portalChoiceList(when);
-                if (portalOptions.length) {
-                    appendWhenModes(values, block, index, when);
+                var control = portalControl(when);
+                if (control === 'select' && portalOptions.length) {
+                    appendPortalSelect(values, when, portalOptions);
+                } else if (control === 'radio' && portalOptions.length) {
+                    appendPortalRadios(values, block, index, when, portalOptions);
+                } else if ((control === 'checkboxes' || portalOptions.length) && portalOptions.length) {
+                    appendPortalAny(values, when);
                     appendWhenChecks(values, when, portalOptions);
                 } else {
-                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
+                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalFilled')));
                 }
-                values.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalHint')));
                 return values;
             }
             var parent = null;
@@ -1865,6 +1878,71 @@
             }
             appendWhenChecks(values, when, opts);
             return values;
+        }
+
+        function appendPortalSelect(values, when, opts) {
+            var select = document.createElement('select');
+            select.className = 'select sdf-portal-choice';
+            select.setAttribute('data-role', 'when-portal-select');
+            var placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.chooseValue')));
+            select.appendChild(placeholder);
+            var any = document.createElement('option');
+            any.value = '__any__';
+            any.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny')));
+            if (when._mode === 'any') {
+                any.selected = true;
+            }
+            select.appendChild(any);
+            var chosen = (when._mode === 'any' ? [] : (when.values || []));
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var option = document.createElement('option');
+                option.value = opts[i];
+                option.selected = chosen.length && chosen[0] === opts[i];
+                option.appendChild(document.createTextNode(opts[i]));
+                select.appendChild(option);
+            }
+            if (!any.selected && !(chosen.length && contains(opts, chosen[0]))) {
+                placeholder.selected = true;
+            }
+            values.appendChild(select);
+        }
+
+        function appendPortalRadios(values, block, index, when, opts) {
+            values.appendChild(portalRadio(block, index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), when._mode === 'any'));
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var picked = when._mode !== 'any' && contains(when.values, opts[i]);
+                values.appendChild(portalRadio(block, index, opts[i], opts[i], picked));
+            }
+        }
+
+        function portalRadio(block, index, value, text, checked) {
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'sdf-portal-radio-' + block.id + '-' + index;
+            input.setAttribute('data-role', 'when-portal-radio');
+            input.value = value;
+            input.checked = checked;
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(' ' + text));
+            return label;
+        }
+
+        function appendPortalAny(values, when) {
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.setAttribute('data-role', 'when-portal-any');
+            input.checked = when._mode === 'any';
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny')));
+            values.appendChild(label);
         }
 
         function appendWhenModes(values, block, index, when) {
@@ -2651,16 +2729,48 @@
                         knownName = field.when.fieldName;
                     }
                     var optionCount = catalog && catalog.values ? catalog.values.length : 0;
+                    var choice = catalog && (catalog.control === 'select' || catalog.control === 'checkboxes' || catalog.control === 'radio');
                     field.when = {
                         fieldId: portalId,
                         fieldName: knownName,
                         source: 'portal',
                         values: [],
                         negate: false,
-                        _mode: optionCount ? 'selected' : 'any'
+                        _mode: (choice && optionCount) || optionCount ? 'selected' : 'any'
                     };
                 } else {
                     field.when = {fieldId: chosen, values: [], negate: false, _mode: 'any', source: ''};
+                }
+                refresh();
+            } else if (role === 'when-portal-select' && field.when) {
+                if (!e.target.value) {
+                    field.when._mode = 'selected';
+                    field.when.values = [];
+                } else if (e.target.value === '__any__') {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
+                    field.when.values = [e.target.value];
+                }
+                sync();
+                renderPreview();
+            } else if (role === 'when-portal-radio' && field.when) {
+                if (!e.target.value) {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
+                    field.when.values = [e.target.value];
+                }
+                sync();
+                renderPreview();
+            } else if (role === 'when-portal-any' && field.when) {
+                if (e.target.checked) {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
                 }
                 refresh();
             } else if (role === 'when-mode' && field.when) {
@@ -2683,8 +2793,12 @@
                 }
                 field.when.values = next;
                 field.when._mode = 'selected';
-                sync();
-                renderPreview();
+                if (field.when.source === 'portal') {
+                    refresh();
+                } else {
+                    sync();
+                    renderPreview();
+                }
             }
         }
 
@@ -3306,6 +3420,7 @@
                 list.push({
                     id: when.fieldId,
                     name: (catalog && catalog.name) || when.fieldName || when.fieldId,
+                    control: catalog && catalog.control,
                     values: values
                 });
             }
@@ -3318,7 +3433,23 @@
             wrap.setAttribute('data-sdf-field', item.id);
             wrap.setAttribute('data-sdf-shown', '1');
             wrap.appendChild(el('div', 'sdf-label', item.name));
-            if (item.values.length) {
+            var control = item.control || (item.values.length ? 'select' : 'text');
+            if ((control === 'checkboxes' || control === 'radio') && item.values.length) {
+                wrap.setAttribute('data-sdf-type', control === 'radio' ? 'radio' : 'checkbox');
+                var n;
+                for (n = 0; n < item.values.length; n++) {
+                    var line = el('label', 'sdf-option');
+                    var input = document.createElement('input');
+                    input.type = control === 'radio' ? 'radio' : 'checkbox';
+                    input.value = item.values[n];
+                    if (control === 'radio') {
+                        input.name = 'sdf-external-' + item.id;
+                    }
+                    line.appendChild(input);
+                    line.appendChild(document.createTextNode(' ' + item.values[n]));
+                    wrap.appendChild(line);
+                }
+            } else if (item.values.length) {
                 wrap.setAttribute('data-sdf-type', 'select');
                 var select = document.createElement('select');
                 select.className = 'sdf-select';
