@@ -33,6 +33,10 @@
         var NODE_ROW = 28;
         var portalFields = null;
         var portalFieldsFor = 0;
+        var projectFields = null;
+        var projectFieldsLoading = false;
+        var projectFieldQuery = '';
+        var rebuildingWhenOptions = false;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
@@ -133,6 +137,8 @@
                     }
                     when = {
                         fieldId: String(src.when.fieldId),
+                        fieldName: src.when.fieldName ? String(src.when.fieldName) : '',
+                        source: src.when.source === 'portal' ? 'portal' : '',
                         values: values,
                         negate: !!src.when.negate,
                         _mode: values.length ? 'selected' : 'any'
@@ -186,7 +192,7 @@
                 if (!field.id || seen[field.id]) {
                     field.id = nextId(fields);
                 }
-                if (field.when && !seen[field.when.fieldId]) {
+                if (field.when && field.when.source !== 'portal' && !seen[field.when.fieldId]) {
                     field.when = null;
                 } else if (field.when && !field.when._mode) {
                     field.when._mode = (field.when.values && field.when.values.length) ? 'selected' : 'any';
@@ -256,8 +262,10 @@
             if (!when || !when.fieldId) {
                 return null;
             }
+            var portal = when.source === 'portal';
             var values = [];
-            if (parent && isChoice(parent.type) && when._mode !== 'any') {
+            var keepValues = portal ? when._mode !== 'any' : (parent && isChoice(parent.type) && when._mode !== 'any');
+            if (keepValues) {
                 var v;
                 for (v = 0; v < (when.values || []).length; v++) {
                     var item = trim(when.values[v]);
@@ -266,7 +274,14 @@
                     }
                 }
             }
-            return {fieldId: when.fieldId, values: values, negate: false};
+            var out = {fieldId: when.fieldId, values: values, negate: false};
+            if (portal) {
+                out.source = 'portal';
+                if (trim(when.fieldName)) {
+                    out.fieldName = trim(when.fieldName);
+                }
+            }
+            return out;
         }
 
         function exportFields(fields, keepBlank) {
@@ -448,6 +463,7 @@
             renderTypeNav();
             renderPreview();
             loadPortalFields();
+            loadProjectFields();
         }
 
         function renderBlock(block, blockIndex) {
@@ -911,6 +927,62 @@
             });
         }
 
+        function projectFieldById(id) {
+            var list = projectFields || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (list[i].id === id) {
+                    return list[i];
+                }
+            }
+            return null;
+        }
+
+        function loadProjectFields() {
+            if (projectFieldsLoading || projectFields) {
+                return;
+            }
+            projectFieldsLoading = true;
+            AJS.$.ajax({
+                url: contextPath + '/rest/dynamic-fields/1.0/project-fields',
+                type: 'GET',
+                dataType: 'json',
+                cache: false
+            }).done(function (data) {
+                var payload = asJson(data);
+                var raw = payload.fields || [];
+                var list = [];
+                var i;
+                for (i = 0; i < raw.length; i++) {
+                    var item = raw[i] || {};
+                    if (!item.id) {
+                        continue;
+                    }
+                    var values = [];
+                    var incoming = item.values || [];
+                    var v;
+                    for (v = 0; v < incoming.length; v++) {
+                        if (incoming[v] != null && String(incoming[v])) {
+                            values.push(String(incoming[v]));
+                        }
+                    }
+                    list.push({
+                        id: String(item.id),
+                        name: String(item.name || item.id),
+                        project: item.project ? String(item.project) : '',
+                        values: values
+                    });
+                }
+                projectFields = list;
+                projectFieldsLoading = false;
+                renderKeepingFocus();
+            }).fail(function () {
+                projectFields = [];
+                projectFieldsLoading = false;
+                renderKeepingFocus();
+            });
+        }
+
         function placeSelect(current) {
             var select = document.createElement('select');
             select.className = 'select';
@@ -1275,7 +1347,11 @@
             }
             var question = el('div', 'sdf-node-question');
             question.setAttribute('data-role', 'pick-node');
-            question.appendChild(el('span', 'sdf-node-kicker', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
+            var kicker = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name');
+            if (field.when && field.when.source === 'portal') {
+                kicker = portalKicker(field.when);
+            }
+            question.appendChild(el('span', 'sdf-node-kicker', kicker));
             var title = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
             question.appendChild(el('span', 'sdf-node-title', title));
             node.appendChild(question);
@@ -1594,67 +1670,226 @@
             return box;
         }
 
+        function portalKicker(when) {
+            var name = trim(when.fieldName) || when.fieldId;
+            var bits = [];
+            if (when._mode !== 'any') {
+                var i;
+                for (i = 0; i < (when.values || []).length; i++) {
+                    if (trim(when.values[i])) {
+                        bits.push(trim(when.values[i]));
+                    }
+                }
+            }
+            if (!bits.length) {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalKicker', name);
+            }
+            return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalKickerValues', name, bits.join(', '));
+        }
+
+        function projectQueryMatches(item) {
+            var query = trim(projectFieldQuery).toLowerCase();
+            if (!query) {
+                return true;
+            }
+            var name = String(item.name || '').toLowerCase();
+            var id = String(item.id || '').toLowerCase();
+            var project = String(item.project || '').toLowerCase();
+            return name.indexOf(query) >= 0 || id.indexOf(query) >= 0 || project.indexOf(query) >= 0;
+        }
+
+        function portalChoiceList(when) {
+            var out = [];
+            var seen = {};
+            function add(text) {
+                var item = trim(text);
+                if (!item || seen[item]) {
+                    return;
+                }
+                seen[item] = true;
+                out.push(item);
+            }
+            var catalog = projectFieldById(when.fieldId);
+            var list = catalog && catalog.values ? catalog.values : [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                add(list[i]);
+            }
+            var saved = when.values || [];
+            for (i = 0; i < saved.length; i++) {
+                add(saved[i]);
+            }
+            return out;
+        }
+
+        function fillWhenOptions(select, block, field, index) {
+            rebuildingWhenOptions = true;
+            try {
+            while (select.firstChild) {
+                select.removeChild(select.firstChild);
+            }
+            var selectedKey = '';
+            if (field.when && field.when.source === 'portal') {
+                selectedKey = 'portal:' + field.when.fieldId;
+            } else if (field.when && field.when.fieldId) {
+                selectedKey = field.when.fieldId;
+            }
+            var always = document.createElement('option');
+            always.value = '';
+            always.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.always')));
+            if (!selectedKey) {
+                always.selected = true;
+            }
+            select.appendChild(always);
+            if (index > 0) {
+                var own = document.createElement('optgroup');
+                own.label = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.ownQuestions');
+                var i;
+                for (i = 0; i < index; i++) {
+                    var earlier = block.fields[i];
+                    var option = document.createElement('option');
+                    option.value = earlier.id;
+                    option.appendChild(document.createTextNode(earlier.label || earlier.id));
+                    if (selectedKey === earlier.id) {
+                        option.selected = true;
+                    }
+                    own.appendChild(option);
+                }
+                select.appendChild(own);
+            }
+            var catalog = projectFields || [];
+            var projectGroup = document.createElement('optgroup');
+            projectGroup.label = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFields');
+            var added = {};
+            var n;
+            for (n = 0; n < catalog.length; n++) {
+                if (!projectQueryMatches(catalog[n])) {
+                    continue;
+                }
+                appendProjectOption(projectGroup, catalog[n], selectedKey);
+                added[catalog[n].id] = true;
+            }
+            if (field.when && field.when.source === 'portal' && field.when.fieldId && !added[field.when.fieldId]) {
+                var current = projectFieldById(field.when.fieldId);
+                appendProjectOption(projectGroup, current || {
+                    id: field.when.fieldId,
+                    name: field.when.fieldName || field.when.fieldId,
+                    project: ''
+                }, selectedKey);
+            }
+            if (projectGroup.firstChild) {
+                select.appendChild(projectGroup);
+            }
+            } finally {
+                rebuildingWhenOptions = false;
+            }
+        }
+
+        function appendProjectOption(parent, item, selectedKey) {
+            var option = document.createElement('option');
+            option.value = 'portal:' + item.id;
+            var label = item.name || item.id;
+            if (item.project) {
+                label += ' (' + item.project + ')';
+            }
+            option.appendChild(document.createTextNode(label));
+            if (option.value === selectedKey) {
+                option.selected = true;
+            }
+            parent.appendChild(option);
+        }
+
         function renderWhen(block, field, index) {
             var box = el('div', 'field-group');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
             var value = el('div', 'sdf-field-value');
+            if (projectFields && projectFields.length) {
+                var filter = document.createElement('input');
+                filter.type = 'text';
+                filter.className = 'text sdf-project-filter';
+                filter.setAttribute('data-role', 'project-field-filter');
+                filter.setAttribute('autocomplete', 'off');
+                filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldFilter'));
+                filter.value = projectFieldQuery;
+                value.appendChild(filter);
+            }
             var select = document.createElement('select');
             select.className = 'select';
             select.setAttribute('data-role', 'when-field');
-            var always = document.createElement('option');
-            always.value = '';
-            always.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.always')));
-            select.appendChild(always);
-            var i;
-            for (i = 0; i < index; i++) {
-                var earlier = block.fields[i];
-                var option = document.createElement('option');
-                option.value = earlier.id;
-                option.appendChild(document.createTextNode(earlier.label || earlier.id));
-                if (field.when && field.when.fieldId === earlier.id) {
-                    option.selected = true;
-                }
-                select.appendChild(option);
-            }
+            fillWhenOptions(select, block, field, index);
             value.appendChild(select);
+            if (projectFields === null) {
+                value.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFieldsLoading')));
+            } else if (!projectFields.length) {
+                value.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFieldsEmpty')));
+            }
             if (field.when && field.when.fieldId) {
-                var parent = null;
-                for (i = 0; i < index; i++) {
-                    if (block.fields[i].id === field.when.fieldId) {
-                        parent = block.fields[i];
-                    }
-                }
-                var values = el('div', 'sdf-when-values');
-                if (!parent || !isChoice(parent.type)) {
-                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
-                } else {
-                    var mode = field.when._mode === 'selected' || (field.when.values && field.when.values.length) ? 'selected' : 'any';
-                    if (field.when._mode === 'any') {
-                        mode = 'any';
-                    }
-                    values.appendChild(modeRadio(block, index, 'any', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), mode === 'any'));
-                    values.appendChild(modeRadio(block, index, 'selected', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenSelected'), mode === 'selected'));
-                    var opts = parent.options || [];
-                    for (i = 0; i < opts.length; i++) {
-                        if (!trim(opts[i])) {
-                            continue;
-                        }
-                        var label = document.createElement('label');
-                        label.className = 'sdf-inline-check';
-                        var check = document.createElement('input');
-                        check.type = 'checkbox';
-                        check.setAttribute('data-role', 'when-value');
-                        check.value = opts[i];
-                        check.checked = contains(field.when.values, opts[i]);
-                        label.appendChild(check);
-                        label.appendChild(document.createTextNode(' ' + opts[i]));
-                        values.appendChild(label);
-                    }
-                }
-                value.appendChild(values);
+                value.appendChild(renderWhenValues(block, field, index));
             }
             box.appendChild(value);
             return box;
+        }
+
+        function renderWhenValues(block, field, index) {
+            var values = el('div', 'sdf-when-values');
+            var when = field.when;
+            if (when.source === 'portal') {
+                var portalOptions = portalChoiceList(when);
+                if (portalOptions.length) {
+                    appendWhenModes(values, block, index, when);
+                    appendWhenChecks(values, when, portalOptions);
+                } else {
+                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
+                }
+                values.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalHint')));
+                return values;
+            }
+            var parent = null;
+            var i;
+            for (i = 0; i < index; i++) {
+                if (block.fields[i].id === when.fieldId) {
+                    parent = block.fields[i];
+                }
+            }
+            if (!parent || !isChoice(parent.type)) {
+                values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
+                return values;
+            }
+            appendWhenModes(values, block, index, when);
+            var opts = [];
+            var raw = parent.options || [];
+            for (i = 0; i < raw.length; i++) {
+                if (trim(raw[i])) {
+                    opts.push(raw[i]);
+                }
+            }
+            appendWhenChecks(values, when, opts);
+            return values;
+        }
+
+        function appendWhenModes(values, block, index, when) {
+            var mode = when._mode === 'selected' || (when.values && when.values.length) ? 'selected' : 'any';
+            if (when._mode === 'any') {
+                mode = 'any';
+            }
+            values.appendChild(modeRadio(block, index, 'any', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), mode === 'any'));
+            values.appendChild(modeRadio(block, index, 'selected', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenSelected'), mode === 'selected'));
+        }
+
+        function appendWhenChecks(values, when, opts) {
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var label = document.createElement('label');
+                label.className = 'sdf-inline-check';
+                var check = document.createElement('input');
+                check.type = 'checkbox';
+                check.setAttribute('data-role', 'when-value');
+                check.value = opts[i];
+                check.checked = contains(when.values, opts[i]);
+                label.appendChild(check);
+                label.appendChild(document.createTextNode(' ' + opts[i]));
+                values.appendChild(label);
+            }
         }
 
         function modeRadio(block, index, value, text, checked) {
@@ -2213,6 +2448,15 @@
                 return;
             }
             var block = config.blocks[loc.blockIndex];
+            if (role === 'project-field-filter' && loc.fieldIndex >= 0) {
+                projectFieldQuery = e.target.value;
+                var holder = e.target.parentNode;
+                var whenSelect = holder ? holder.querySelector('select[data-role="when-field"]') : null;
+                if (whenSelect) {
+                    fillWhenOptions(whenSelect, block, block.fields[loc.fieldIndex], loc.fieldIndex);
+                }
+                return;
+            }
             if (role === 'block-title') {
                 block.title = e.target.value;
                 sync();
@@ -2393,10 +2637,30 @@
                 sync();
                 renderPreview();
             } else if (role === 'when-field') {
-                if (!e.target.value) {
+                if (rebuildingWhenOptions) {
+                    return;
+                }
+                var chosen = e.target.value || '';
+                if (!chosen) {
                     field.when = null;
+                } else if (chosen.indexOf('portal:') === 0) {
+                    var portalId = chosen.substring('portal:'.length);
+                    var catalog = projectFieldById(portalId);
+                    var knownName = catalog && catalog.name ? catalog.name : '';
+                    if (!knownName && field.when && field.when.fieldId === portalId && field.when.fieldName) {
+                        knownName = field.when.fieldName;
+                    }
+                    var optionCount = catalog && catalog.values ? catalog.values.length : 0;
+                    field.when = {
+                        fieldId: portalId,
+                        fieldName: knownName,
+                        source: 'portal',
+                        values: [],
+                        negate: false,
+                        _mode: optionCount ? 'selected' : 'any'
+                    };
                 } else {
-                    field.when = {fieldId: e.target.value, values: [], negate: false, _mode: 'any'};
+                    field.when = {fieldId: chosen, values: [], negate: false, _mode: 'any', source: ''};
                 }
                 refresh();
             } else if (role === 'when-mode' && field.when) {
@@ -2741,8 +3005,18 @@
             var i;
             for (i = 0; i < fields.length; i++) {
                 if (fields[i].when && fields[i].when.fieldId === removed.id) {
-                    if (parentId) {
+                    if (removed.when && removed.when.source === 'portal') {
+                        fields[i].when = {
+                            fieldId: removed.when.fieldId,
+                            fieldName: removed.when.fieldName || '',
+                            source: 'portal',
+                            values: (removed.when.values || []).slice(),
+                            negate: !!removed.when.negate,
+                            _mode: removed.when._mode || 'any'
+                        };
+                    } else if (parentId) {
                         fields[i].when.fieldId = parentId;
+                        fields[i].when.source = '';
                     } else {
                         fields[i].when = null;
                     }
@@ -2977,6 +3251,11 @@
                 if (trim(block.title)) {
                     section.appendChild(el('h3', 'sdf-title', trim(block.title)));
                 }
+                var parents = externalParents(block);
+                var p;
+                for (p = 0; p < parents.length; p++) {
+                    section.appendChild(buildExternal(parents[p]));
+                }
                 var visible = visibility(block.fields, {});
                 var i;
                 for (i = 0; i < block.fields.length; i++) {
@@ -2994,6 +3273,75 @@
                 root.appendChild(el('p', 'sdf-preview-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewEmpty')));
             }
             return root;
+        }
+
+        function externalParents(block) {
+            var list = [];
+            var seen = {};
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var when = block.fields[i].when;
+                if (!when || when.source !== 'portal' || !when.fieldId || seen[when.fieldId]) {
+                    continue;
+                }
+                seen[when.fieldId] = true;
+                var catalog = projectFieldById(when.fieldId);
+                var values = [];
+                var known = {};
+                var source = catalog && catalog.values ? catalog.values : [];
+                var v;
+                for (v = 0; v < source.length; v++) {
+                    if (trim(source[v]) && !known[source[v]]) {
+                        known[source[v]] = true;
+                        values.push(source[v]);
+                    }
+                }
+                var saved = when.values || [];
+                for (v = 0; v < saved.length; v++) {
+                    if (trim(saved[v]) && !known[saved[v]]) {
+                        known[saved[v]] = true;
+                        values.push(saved[v]);
+                    }
+                }
+                list.push({
+                    id: when.fieldId,
+                    name: (catalog && catalog.name) || when.fieldName || when.fieldId,
+                    values: values
+                });
+            }
+            return list;
+        }
+
+        function buildExternal(item) {
+            var wrap = el('div', 'sdf-field sdf-external');
+            wrap.setAttribute('data-sdf-external', '1');
+            wrap.setAttribute('data-sdf-field', item.id);
+            wrap.setAttribute('data-sdf-shown', '1');
+            wrap.appendChild(el('div', 'sdf-label', item.name));
+            if (item.values.length) {
+                wrap.setAttribute('data-sdf-type', 'select');
+                var select = document.createElement('select');
+                select.className = 'sdf-select';
+                var empty = document.createElement('option');
+                empty.value = '';
+                empty.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.portal.blank')));
+                select.appendChild(empty);
+                var i;
+                for (i = 0; i < item.values.length; i++) {
+                    var option = document.createElement('option');
+                    option.value = item.values[i];
+                    option.appendChild(document.createTextNode(item.values[i]));
+                    select.appendChild(option);
+                }
+                wrap.appendChild(select);
+            } else {
+                wrap.setAttribute('data-sdf-type', 'text');
+                var text = document.createElement('input');
+                text.type = 'text';
+                text.className = 'sdf-input';
+                wrap.appendChild(text);
+            }
+            return wrap;
         }
 
         function buildField(field, blockId) {
@@ -3208,6 +3556,11 @@
             var i;
             for (i = 0; i < nodes.length; i++) {
                 var node = nodes[i];
+                if (node.getAttribute('data-sdf-external') === '1') {
+                    node.setAttribute('data-sdf-shown', '1');
+                    node.className = (' ' + node.className + ' ').replace(' sdf-hidden ', ' ').replace(/^\s+|\s+$/g, '');
+                    continue;
+                }
                 var show = !!visible[node.getAttribute('data-sdf-field')];
                 var was = node.getAttribute('data-sdf-shown') === '1';
                 if (!show && was && block.clearOnHide !== false) {
@@ -3259,12 +3612,17 @@
             return visible;
         }
 
+        function flatText(value) {
+            return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+        }
+
         function shown(field, visible, values) {
             var when = field.when;
             if (!when || !when.fieldId) {
                 return true;
             }
-            if (!visible[when.fieldId]) {
+            var portal = when.source === 'portal';
+            if (!portal && !visible[when.fieldId]) {
                 return false;
             }
             var current = values[when.fieldId] || [];
@@ -3275,14 +3633,18 @@
             var b;
             if (!expected.length) {
                 for (i = 0; i < current.length; i++) {
-                    if (trim(current[i])) {
+                    if (portal ? flatText(current[i]) : trim(current[i])) {
                         match = true;
                     }
                 }
             } else {
                 for (a = 0; a < current.length; a++) {
                     for (b = 0; b < expected.length; b++) {
-                        if (String(current[a]) === String(expected[b])) {
+                        if (portal) {
+                            if (flatText(current[a]) && flatText(current[a]) === flatText(expected[b])) {
+                                match = true;
+                            }
+                        } else if (String(current[a]) === String(expected[b])) {
                             match = true;
                         }
                     }

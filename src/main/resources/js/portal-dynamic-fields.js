@@ -67,12 +67,17 @@
         return visible;
     }
 
+    function flatText(value) {
+        return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    }
+
     function shown(field, visible, values) {
         var when = field.when;
         if (!when || !when.fieldId) {
             return true;
         }
-        if (!visible[when.fieldId]) {
+        var portal = when.source === 'portal';
+        if (!portal && !visible[when.fieldId]) {
             return false;
         }
         var current = values[when.fieldId] || [];
@@ -83,14 +88,18 @@
         var b;
         if (!expected.length) {
             for (i = 0; i < current.length; i++) {
-                if (trim(current[i])) {
+                if (portal ? flatText(current[i]) : trim(current[i])) {
                     match = true;
                 }
             }
         } else {
             for (a = 0; a < current.length; a++) {
                 for (b = 0; b < expected.length; b++) {
-                    if (String(current[a]) === String(expected[b])) {
+                    if (portal) {
+                        if (flatText(current[a]) && flatText(current[a]) === flatText(expected[b])) {
+                            match = true;
+                        }
+                    } else if (String(current[a]) === String(expected[b])) {
                         match = true;
                     }
                 }
@@ -184,6 +193,7 @@
             return;
         }
         var values = readValues(root, false);
+        mergePortalAnswers(root, cfg, values);
         var visible = visibility(cfg.fields, values);
         var nodes = root.querySelectorAll('[data-sdf-field]');
         for (var i = 0; i < nodes.length; i++) {
@@ -501,6 +511,14 @@
                 }
                 node = node.parentNode;
             }
+            var sections = formEl.querySelectorAll('[data-sdf-block]');
+            var i;
+            for (i = 0; i < sections.length; i++) {
+                var outside = findBlock(sections[i].getAttribute('data-sdf-block'));
+                if (outside) {
+                    applyVisibility(sections[i], outside);
+                }
+            }
         }
         formEl.addEventListener('change', onEvent);
         formEl.addEventListener('input', onEvent);
@@ -751,6 +769,160 @@
                 }
             }
             return null;
+        }
+
+        function insideOwn(node) {
+            var current = node;
+            while (current) {
+                if (current.getAttribute && (current.getAttribute('data-sdf-field') || current.getAttribute('data-sdf-block'))) {
+                    return true;
+                }
+                current = current.parentNode;
+            }
+            return false;
+        }
+
+        function isOwnGroup(group) {
+            return !!(group && group.querySelector && group.querySelector('.sdf-cf-form, .sdf-portal-block, [data-sdf-field]'));
+        }
+
+        function findPortalGroup(scope, fieldId, fieldName) {
+            var i;
+            if (fieldId && /^[A-Za-z0-9_]+$/.test(fieldId) && scope.querySelectorAll) {
+                var named = scope.querySelectorAll('[name="' + fieldId + '"], [data-field-id="' + fieldId + '"]');
+                for (i = 0; i < named.length; i++) {
+                    if (insideOwn(named[i])) {
+                        continue;
+                    }
+                    var group = fieldGroupOf(named[i], scope);
+                    if (group && !isOwnGroup(group)) {
+                        return group;
+                    }
+                }
+            }
+            var wanted = normalizeLabel(fieldName);
+            if (!wanted || !scope.querySelectorAll) {
+                return null;
+            }
+            var groups = scope.querySelectorAll('.field-group');
+            for (i = 0; i < groups.length; i++) {
+                if (isOwnGroup(groups[i])) {
+                    continue;
+                }
+                var label = groups[i].querySelector('label');
+                if (label && normalizeLabel(label.textContent) === wanted) {
+                    return groups[i];
+                }
+            }
+            return null;
+        }
+
+        function pushTexts(out, nodes) {
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                var text = nodes[i].textContent;
+                if (trim(text)) {
+                    out.push(text);
+                }
+            }
+        }
+
+        function readControl(node, out) {
+            if (!node || !node.tagName) {
+                return;
+            }
+            var type = String(node.type || '').toLowerCase();
+            if (type === 'submit' || type === 'button') {
+                return;
+            }
+            if (type === 'hidden') {
+                if (node.value) {
+                    out.push(node.value);
+                }
+                return;
+            }
+            if (type === 'checkbox' || type === 'radio') {
+                if (!node.checked) {
+                    return;
+                }
+                if (node.value) {
+                    out.push(node.value);
+                }
+                if (node.parentNode && node.parentNode.textContent) {
+                    out.push(node.parentNode.textContent);
+                }
+                return;
+            }
+            if (node.tagName === 'SELECT') {
+                var option = node.options[node.selectedIndex];
+                if (!option) {
+                    return;
+                }
+                if (option.value) {
+                    out.push(option.value);
+                }
+                if (option.text) {
+                    out.push(option.text);
+                }
+                return;
+            }
+            if (node.value) {
+                out.push(node.value);
+            }
+        }
+
+        function readPortalField(scope, fieldId, fieldName) {
+            var out = [];
+            if (!scope || !scope.querySelectorAll) {
+                return out;
+            }
+            var group = findPortalGroup(scope, fieldId, fieldName);
+            var current = readGroupValues(group);
+            var i;
+            for (i = 0; i < current.length; i++) {
+                out.push(current[i]);
+            }
+            if (group) {
+                pushTexts(out, group.querySelectorAll('.react-select__single-value, .react-select__multi-value__label'));
+            } else if (fieldId && /^[A-Za-z0-9_]+$/.test(fieldId)) {
+                var named = scope.querySelectorAll('[name="' + fieldId + '"]');
+                for (i = 0; i < named.length; i++) {
+                    if (!insideOwn(named[i])) {
+                        readControl(named[i], out);
+                    }
+                }
+            }
+            if (fieldId && /^[A-Za-z0-9_]+$/.test(fieldId)) {
+                var hidden = scope.querySelectorAll('input[type="hidden"][name="' + fieldId + '"]');
+                for (i = 0; i < hidden.length; i++) {
+                    if (insideOwn(hidden[i])) {
+                        continue;
+                    }
+                    if (hidden[i].value) {
+                        out.push(hidden[i].value);
+                    }
+                }
+            }
+            return out;
+        }
+
+        function mergePortalAnswers(root, cfg, values) {
+            var fields = (cfg && cfg.fields) || [];
+            var scope = formOf(root) || document;
+            var i;
+            for (i = 0; i < fields.length; i++) {
+                var when = fields[i].when;
+                if (!when || when.source !== 'portal' || !when.fieldId) {
+                    continue;
+                }
+                if (values[when.fieldId] && values[when.fieldId].length) {
+                    continue;
+                }
+                var read = readPortalField(scope, when.fieldId, when.fieldName);
+                if (read.length) {
+                    values[when.fieldId] = read;
+                }
+            }
         }
 
         function readGroupValues(group) {

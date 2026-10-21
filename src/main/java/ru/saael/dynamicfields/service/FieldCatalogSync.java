@@ -213,7 +213,7 @@ public final class FieldCatalogSync {
                 continue;
             }
             Condition when = field.getWhen();
-            if (when != null && from.equals(when.getFieldId())) {
+            if (when != null && !"portal".equals(when.getSource()) && from.equals(when.getFieldId())) {
                 when.setFieldId(to);
             }
         }
