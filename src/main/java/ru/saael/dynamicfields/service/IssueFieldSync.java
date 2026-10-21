@@ -111,7 +111,7 @@ public class IssueFieldSync {
      * Writes each answer into its Jira field and publishes an issue-updated event
      * so an automation rule can see the values.
      */
-    public void writeAnswers(Issue issue, RulesConfig form, Map<String, List<String>> values, ApplicationUser user) {
+    public void writeAnswers(Issue issue, RulesConfig form, Map<String, Map<String, List<String>>> blocks, ApplicationUser user) {
         if (issue == null || form == null || form.getBlocks() == null) {
             return;
         }
@@ -121,6 +121,7 @@ public class IssueFieldSync {
             if (block == null || block.getFields() == null) {
                 continue;
             }
+            Map<String, List<String>> values = blocks == null || block.getId() == null ? null : blocks.get(block.getId());
             for (int i = 0; i < block.getFields().size(); i++) {
                 FormField field = block.getFields().get(i);
                 if (field == null) {

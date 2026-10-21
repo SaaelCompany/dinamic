@@ -902,11 +902,11 @@
                     }
                 }
                 portalFields = list;
-                render();
+                renderKeepingFocus();
             }).fail(function () {
                 if (portalFieldsFor === Number(type.id)) {
                     portalFields = [];
-                    render();
+                    renderKeepingFocus();
                 }
             });
         }
@@ -963,7 +963,7 @@
                 var left = desks.length;
                 if (!left) {
                     requestTypes = [];
-                    render();
+                    renderKeepingFocus();
                     return;
                 }
                 function finish() {
@@ -977,7 +977,7 @@
                         return ap < bp ? -1 : (ap > bp ? 1 : 0);
                     });
                     requestTypes = acc;
-                    render();
+                    renderKeepingFocus();
                 }
                 var d;
                 for (d = 0; d < desks.length; d++) {
@@ -1003,7 +1003,7 @@
                 }
             }).fail(function () {
                 requestTypes = [];
-                render();
+                renderKeepingFocus();
             });
         }
 
@@ -1467,6 +1467,7 @@
 
         function renderDefault(field) {
             var box = el('div', 'field-group');
+            box.setAttribute('data-part', 'defaults');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultValue')));
             var value = el('div', 'sdf-field-value');
             if (isChoice(field.type)) {
@@ -1579,6 +1580,7 @@
                 input.className = 'text';
                 input.setAttribute('data-role', 'option');
                 input.setAttribute('data-option-index', String(i));
+                input.setAttribute('autocomplete', 'off');
                 input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.optionPlaceholder'));
                 input.value = options[i];
                 row.appendChild(input);
@@ -1772,6 +1774,9 @@
             var i;
             for (i = 0; i < chunk.length; i++) {
                 fields.splice(insertAt + i, 0, chunk[i]);
+            }
+            if (selectedField.blockIndex === blockIndex && selectedField.index === index) {
+                selectedField = {blockIndex: blockIndex, index: insertAt};
             }
             refresh();
         }
@@ -2217,17 +2222,28 @@
                 sync();
             } else if (role === 'label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].label = e.target.value;
-                refreshKeepingFocus();
+                // The question box stays in the page. Rebuilding it here removed the
+                // focused input, and the browser then left the new box without a caret.
+                sync();
+                patchQuestionTitle(loc.blockIndex, loc.fieldIndex);
+                patchIssueName(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
             } else if (role === 'issue-name' && loc.fieldIndex >= 0) {
                 applyIssueName(block.fields[loc.fieldIndex], e.target.value);
                 sync();
             } else if (role === 'option' && loc.fieldIndex >= 0) {
                 var optIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
                 var field = block.fields[loc.fieldIndex];
+                if (!field || !field.options || isNaN(optIndex) || optIndex < 0 || optIndex >= field.options.length) {
+                    return;
+                }
                 var old = field.options[optIndex];
                 field.options[optIndex] = e.target.value;
                 renameOption(block, field.id, old, e.target.value);
-                refreshKeepingFocus();
+                sync();
+                replaceCanvas(loc.blockIndex);
+                replaceDefaults(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
             } else if (role === 'blank-label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].blankLabel = e.target.value;
                 sync();
@@ -2425,24 +2441,32 @@
                 return;
             }
             var i;
-            var v;
             for (i = 0; i < block.fields.length; i++) {
-                var when = block.fields[i].when;
-                if (!when || when.fieldId !== fieldId) {
-                    continue;
+                var field = block.fields[i];
+                if (field.id === fieldId) {
+                    field.defaults = renameList(field.defaults, oldValue, newValue);
                 }
-                var next = [];
-                for (v = 0; v < when.values.length; v++) {
-                    if (when.values[v] === oldValue) {
-                        if (newValue) {
-                            next.push(newValue);
-                        }
-                    } else {
-                        next.push(when.values[v]);
-                    }
+                var when = field.when;
+                if (when && when.fieldId === fieldId) {
+                    when.values = renameList(when.values, oldValue, newValue);
                 }
-                when.values = next;
             }
+        }
+
+        function renameList(list, oldValue, newValue) {
+            var next = [];
+            var source = list || [];
+            var v;
+            for (v = 0; v < source.length; v++) {
+                if (source[v] === oldValue) {
+                    if (newValue) {
+                        next.push(newValue);
+                    }
+                } else {
+                    next.push(source[v]);
+                }
+            }
+            return next;
         }
 
         function relaxDependents(block, id) {
@@ -2467,6 +2491,100 @@
             restoreFocus(snap);
         }
 
+        function renderKeepingFocus() {
+            var snap = snapshotFocus();
+            render();
+            restoreFocus(snap);
+        }
+
+        function blockCard(blockIndex) {
+            return host.querySelector('.sdf-block-card[data-block-index="' + blockIndex + '"]');
+        }
+
+        function fieldCard(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            if (!scope) {
+                return null;
+            }
+            var cards = scope.querySelectorAll('.sdf-card');
+            var i;
+            for (i = 0; i < cards.length; i++) {
+                if (parseInt(cards[i].getAttribute('data-field-index'), 10) === fieldIndex) {
+                    return cards[i];
+                }
+            }
+            return null;
+        }
+
+        function patchQuestionTitle(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!scope || !field) {
+                return;
+            }
+            var nodes = scope.querySelectorAll('.sdf-node');
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                if (parseInt(nodes[i].getAttribute('data-field-index'), 10) !== fieldIndex) {
+                    continue;
+                }
+                var title = nodes[i].querySelector('.sdf-node-title');
+                if (title) {
+                    title.textContent = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+                }
+                return;
+            }
+        }
+
+        function patchIssueName(blockIndex, fieldIndex) {
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            var card = fieldCard(blockIndex, fieldIndex);
+            if (!field || !card || trim(field.issueName)) {
+                return;
+            }
+            var input = card.querySelector('input[data-role="issue-name"]');
+            if (!input || document.activeElement === input) {
+                return;
+            }
+            var auto = automaticIssueName(field);
+            input.value = auto;
+            input.setAttribute('placeholder', auto || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldPending'));
+        }
+
+        function replaceCanvas(blockIndex) {
+            var card = blockCard(blockIndex);
+            if (!card || !config.blocks[blockIndex]) {
+                return;
+            }
+            var current = card.querySelector('.sdf-canvas-wrap');
+            if (!current || !current.parentNode) {
+                return;
+            }
+            var scrolled = current.querySelector('.sdf-canvas');
+            var top = scrolled ? scrolled.scrollTop : 0;
+            var left = scrolled ? scrolled.scrollLeft : 0;
+            var fresh = renderCanvas(config.blocks[blockIndex], blockIndex);
+            current.parentNode.replaceChild(fresh, current);
+            var next = fresh.querySelector('.sdf-canvas');
+            if (next) {
+                next.scrollTop = top;
+                next.scrollLeft = left;
+            }
+        }
+
+        function replaceDefaults(blockIndex, fieldIndex) {
+            var card = fieldCard(blockIndex, fieldIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!card || !field) {
+                return;
+            }
+            var current = card.querySelector('[data-part="defaults"]');
+            if (!current || !current.parentNode) {
+                return;
+            }
+            current.parentNode.replaceChild(renderDefault(field), current);
+        }
+
         function snapshotFocus() {
             var active = document.activeElement;
             if (!active || !active.getAttribute || !app.contains(active)) {
@@ -2484,10 +2602,10 @@
         }
 
         function restoreFocus(snap) {
-            if (!snap || snap.blockIndex < 0 || !snap.role) {
+            if (!snap || snap.blockIndex < 0 || snap.blockIndex !== snap.blockIndex || !snap.role) {
                 return;
             }
-            var scope = host.querySelectorAll('.sdf-block-card')[snap.blockIndex];
+            var scope = blockCard(snap.blockIndex);
             if (!scope) {
                 return;
             }
@@ -2513,14 +2631,25 @@
             if (!found) {
                 return;
             }
-            found.focus();
-            if (snap.start != null && found.setSelectionRange) {
-                try {
-                    found.setSelectionRange(snap.start, snap.end);
-                } catch (err) {
-                    // some input types reject a range
+            focusLater(found, snap.start, snap.end);
+        }
+
+        function focusLater(node, start, end) {
+            function apply() {
+                if (!node || !node.focus || !document.documentElement || !document.documentElement.contains(node)) {
+                    return;
+                }
+                node.focus();
+                if (start != null && node.setSelectionRange) {
+                    try {
+                        node.setSelectionRange(start, end);
+                    } catch (err) {
+                        // some input types reject a range
+                    }
                 }
             }
+            apply();
+            setTimeout(apply, 0);
         }
 
         function focusField(blockIndex, fieldIndex) {
@@ -2544,7 +2673,7 @@
             }
             var input = card.querySelector('input[data-role="label"]');
             if (input) {
-                input.focus();
+                focusLater(input, null, null);
             }
         }
 
@@ -3109,7 +3238,15 @@
             }
             var selects = node.getElementsByTagName('select');
             for (i = 0; i < selects.length; i++) {
-                selects[i].selectedIndex = 0;
+                if (selects[i].multiple) {
+                    var opts = selects[i].options;
+                    var n;
+                    for (n = 0; n < opts.length; n++) {
+                        opts[n].selected = false;
+                    }
+                } else {
+                    selects[i].selectedIndex = 0;
+                }
             }
         }
 
