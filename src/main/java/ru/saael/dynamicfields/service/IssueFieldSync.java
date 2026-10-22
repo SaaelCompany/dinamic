@@ -3,6 +3,7 @@ package ru.saael.dynamicfields.service;
 import com.atlassian.event.api.EventPublisher;
 import com.atlassian.jira.event.issue.IssueEvent;
 import com.atlassian.jira.event.type.EventDispatchOption;
+import com.atlassian.jira.exception.RemoveException;
 import com.atlassian.jira.issue.CustomFieldManager;
 import com.atlassian.jira.issue.Issue;
 import com.atlassian.jira.issue.IssueManager;
@@ -35,7 +36,8 @@ import java.util.Set;
 
 /**
  * Turns each portal question into a Jira text field named after the question,
- * then copies the customer's answer into that field.
+ * copies the customer's answer into that field, and deletes the Jira field
+ * when the question is removed from the saved form.
  */
 @Named
 public class IssueFieldSync {
@@ -65,7 +67,8 @@ public class IssueFieldSync {
     }
 
     /**
-     * Creates or renames the Jira field for every question and stores its id on the question.
+     * Creates or renames the Jira field for every question, stores its id on the question,
+     * then removes Jira fields whose questions are no longer in the form.
      */
     public void ensureFields(RulesConfig config) throws InvalidRulesException {
         CustomFieldType type = customFieldManager.getCustomFieldType(TYPE_KEY);
@@ -103,8 +106,90 @@ public class IssueFieldSync {
         if (!errors.isEmpty()) {
             throw new InvalidRulesException(errors);
         }
+        removeGoneFields(config, errors);
         customFieldManager.refresh();
         fieldManager.refresh();
+        if (!errors.isEmpty()) {
+            throw new InvalidRulesException(errors);
+        }
+    }
+
+    /**
+     * Deletes textarea fields this plugin created for questions that are not in {@code config}.
+     * A field is ours when its description is {@code sdf:blockId:fieldId}. Other custom fields stay.
+     */
+    private void removeGoneFields(RulesConfig config, List<String> errors) {
+        if (config == null || config.getBlocks() == null) {
+            return;
+        }
+        Set<String> kept = keptMarkers(config);
+        List<CustomField> existing = customFieldManager.getCustomFieldObjects();
+        if (existing == null || existing.isEmpty()) {
+            return;
+        }
+        List<CustomField> snapshot = new ArrayList<CustomField>(existing);
+        for (int i = 0; i < snapshot.size(); i++) {
+            CustomField candidate = snapshot.get(i);
+            if (candidate == null || !ownedByPlugin(candidate) || !orphan(candidate.getDescription(), kept)) {
+                continue;
+            }
+            try {
+                customFieldManager.removeCustomField(candidate);
+                log.info("Removed Jira field {} ({}) because its portal question was deleted",
+                        candidate.getId(), candidate.getName());
+            } catch (RemoveException e) {
+                errors.add(deleteError(candidate, e.getMessage()));
+            } catch (RuntimeException e) {
+                errors.add(deleteError(candidate, e.getMessage()));
+            }
+        }
+    }
+
+    private static boolean ownedByPlugin(CustomField field) {
+        if (field.getCustomFieldType() == null || field.getCustomFieldType().getKey() == null) {
+            return false;
+        }
+        return TYPE_KEY.equals(field.getCustomFieldType().getKey());
+    }
+
+    private static String deleteError(CustomField field, String message) {
+        String name = field.getName() == null || field.getName().trim().isEmpty() ? field.getId() : field.getName();
+        return "Cannot delete the Jira field \"" + name + "\": " + message;
+    }
+
+    /**
+     * Markers of questions that must keep their Jira field. A blank question id was never bound.
+     */
+    static Set<String> keptMarkers(RulesConfig config) {
+        Set<String> kept = new HashSet<String>();
+        if (config == null || config.getBlocks() == null) {
+            return kept;
+        }
+        for (int b = 0; b < config.getBlocks().size(); b++) {
+            FormBlock block = config.getBlocks().get(b);
+            if (block == null || block.getFields() == null) {
+                continue;
+            }
+            for (int i = 0; i < block.getFields().size(); i++) {
+                FormField field = block.getFields().get(i);
+                if (field == null || field.getId() == null || field.getId().trim().isEmpty()) {
+                    continue;
+                }
+                kept.add(marker(block.getId(), field.getId()));
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * True when {@code description} is a marker of a question that is no longer saved.
+     * Descriptions this plugin did not write are never orphans.
+     */
+    static boolean orphan(String description, Set<String> kept) {
+        if (description == null || !description.startsWith("sdf:")) {
+            return false;
+        }
+        return kept == null || !kept.contains(description);
     }
 
     /**
