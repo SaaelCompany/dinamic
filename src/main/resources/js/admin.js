@@ -28,10 +28,10 @@
         var ignorePickUntil = 0;
         var dragLink = null;
         var dragMove = null;
-        var NODE_W = 360;
-        var NODE_HEAD = 42;
-        var NODE_ROW = 28;
-        var NODE_EDITOR = 372;
+        var NODE_W = 250;
+        var NODE_HEAD = 40;
+        var NODE_ROW = 32;
+        var NODE_COLORS = ['#1d7afc', '#6554c0', '#ff8b00', '#00875a', '#00b8d9', '#e3497a'];
         var portalFields = null;
         var portalFieldsFor = 0;
         var projectFields = null;
@@ -44,6 +44,8 @@
         app.addEventListener('change', onChange);
         app.addEventListener('mousedown', onPortDown);
         app.addEventListener('mousedown', onQuestionDown);
+        app.addEventListener('contextmenu', onContextMenu);
+        app.addEventListener('scroll', onCanvasScroll, true);
 
         refresh();
         loadRequestTypes();
@@ -401,7 +403,37 @@
 
         function insideEditor(node) {
             while (node && node !== app) {
-                if (hasClass(node, 'sdf-node-editor')) {
+                if (hasClass(node, 'sdf-node-editor') || hasClass(node, 'sdf-float')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideFloat(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-float') || hasClass(node, 'sdf-menu')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideMenu(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-menu')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideCanvas(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-canvas') || hasClass(node, 'sdf-board') || hasClass(node, 'sdf-node')) {
                     return true;
                 }
                 node = node.parentNode;
@@ -474,6 +506,7 @@
             for (i = 0; i < visible.length; i++) {
                 host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
             }
+            placeFloats();
             syncProject();
             renderTypeNav();
             renderPreview();
@@ -492,6 +525,10 @@
             card.appendChild(bar);
             card.appendChild(renderScope(block));
             card.appendChild(renderCanvas(block, blockIndex));
+            var editIndex = editedIndex(block, blockIndex);
+            if (editIndex >= 0) {
+                card.appendChild(renderFloat(block, blockIndex, editIndex));
+            }
             return card;
         }
 
@@ -502,11 +539,122 @@
             if (selectedField.blockIndex === blockIndex && selectedField.index >= 0 && selectedField.index < block.fields.length) {
                 return selectedField.index;
             }
-            if (selectedField.blockIndex < 0) {
-                selectedField = {blockIndex: blockIndex, index: 0};
-                return 0;
-            }
             return -1;
+        }
+
+        function renderFloat(block, blockIndex, index) {
+            var field = block.fields[index];
+            var panel = el('div', 'sdf-float');
+            panel.setAttribute('data-block-index', String(blockIndex));
+            panel.setAttribute('data-field-index', String(index));
+            var head = el('div', 'sdf-float-head');
+            var title = el('strong', 'sdf-float-title');
+            title.appendChild(document.createTextNode(trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional')));
+            if (field.required) {
+                title.appendChild(el('span', 'sdf-req', ' *'));
+            }
+            head.appendChild(title);
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'sdf-float-close';
+            close.setAttribute('data-role', 'close-field');
+            close.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.closeSettings'));
+            close.appendChild(document.createTextNode('\u00d7'));
+            head.appendChild(close);
+            panel.appendChild(head);
+            panel.appendChild(renderCard(block, blockIndex, index));
+            return panel;
+        }
+
+        function placeFloats() {
+            var panels = host.querySelectorAll('.sdf-float');
+            var i;
+            for (i = 0; i < panels.length; i++) {
+                var panel = panels[i];
+                var card = panel.parentNode;
+                var node = null;
+                var nodes = card.querySelectorAll('.sdf-node');
+                var n;
+                for (n = 0; n < nodes.length; n++) {
+                    if (nodes[n].getAttribute('data-field-index') === panel.getAttribute('data-field-index')) {
+                        node = nodes[n];
+                    }
+                }
+                if (!node) {
+                    continue;
+                }
+                var nodeBox = node.getBoundingClientRect();
+                var cardBox = card.getBoundingClientRect();
+                var width = panel.offsetWidth || 480;
+                var left = nodeBox.right - cardBox.left + 18;
+                var top = nodeBox.top - cardBox.top;
+                if (left + width > card.clientWidth - 8) {
+                    var leftSide = nodeBox.left - cardBox.left - width - 18;
+                    if (leftSide >= 8) {
+                        left = leftSide;
+                    } else {
+                        left = Math.max(8, card.clientWidth - width - 8);
+                        top = nodeBox.bottom - cardBox.top + 12;
+                    }
+                }
+                var minTop = 8;
+                if (top < minTop) {
+                    top = minTop;
+                }
+                panel.style.left = Math.round(left) + 'px';
+                panel.style.top = Math.round(top) + 'px';
+            }
+        }
+
+        function onCanvasScroll(e) {
+            if (e.target && hasClass(e.target, 'sdf-canvas')) {
+                placeFloats();
+            }
+        }
+
+        function closeMenu() {
+            var menus = app.querySelectorAll('.sdf-menu');
+            var i;
+            for (i = 0; i < menus.length; i++) {
+                if (menus[i].parentNode) {
+                    menus[i].parentNode.removeChild(menus[i]);
+                }
+            }
+        }
+
+        function openMenu(x, y, blockIndex) {
+            closeMenu();
+            var menu = el('div', 'sdf-menu');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            var item = button('context-add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false);
+            item.setAttribute('data-block-index', String(blockIndex));
+            menu.appendChild(item);
+            app.appendChild(menu);
+            var box = menu.getBoundingClientRect();
+            if (box.right > window.innerWidth - 8) {
+                menu.style.left = Math.max(8, window.innerWidth - box.width - 8) + 'px';
+            }
+            if (box.bottom > window.innerHeight - 8) {
+                menu.style.top = Math.max(8, window.innerHeight - box.height - 8) + 'px';
+            }
+        }
+
+        function onContextMenu(e) {
+            if (insideFloat(e.target) || !insideCanvas(e.target)) {
+                return;
+            }
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            var card = e.target;
+            while (card && card !== app && !hasClass(card, 'sdf-block-card')) {
+                card = card.parentNode;
+            }
+            if (!card || card === app) {
+                return;
+            }
+            openMenu(e.clientX, e.clientY, parseInt(card.getAttribute('data-block-index'), 10) || 0);
         }
 
         function renderScope(block) {
@@ -1185,8 +1333,8 @@
             var maxY = 80;
             var i;
             for (i = 0; i < laid.length; i++) {
-                if (laid[i].x + NODE_W + 24 > maxX) {
-                    maxX = laid[i].x + NODE_W + 24;
+                if (laid[i].x + NODE_W + 40 > maxX) {
+                    maxX = laid[i].x + NODE_W + 40;
                 }
                 if (laid[i].y + laid[i].h + 16 > maxY) {
                     maxY = laid[i].y + laid[i].h + 16;
@@ -1218,16 +1366,20 @@
             return out;
         }
 
-        function nodeBoxHeight(field, blockIndex, fieldIndex) {
+        function nodeExtra(field) {
+            return field.when && field.when.source === 'portal' ? 22 : 0;
+        }
+
+        function nodeAccent(index) {
+            return NODE_COLORS[index % NODE_COLORS.length];
+        }
+
+        function nodeBoxHeight(field) {
             var rows = isChoice(field.type) ? filledOptions(field).length : 1;
             if (!rows) {
                 rows = 1;
             }
-            var height = 8 + NODE_HEAD + rows * NODE_ROW + 8;
-            if (selectedField.blockIndex === blockIndex && selectedField.index === fieldIndex) {
-                height += NODE_EDITOR;
-            }
-            return height;
+            return NODE_HEAD + nodeExtra(field) + rows * NODE_ROW + 6;
         }
 
         function layoutNodes(block, blockIndex) {
@@ -1257,14 +1409,14 @@
                         index: index,
                         x: 16 + col * (NODE_W + 88),
                         y: y,
-                        h: nodeBoxHeight(field, blockIndex, index),
+                        h: nodeBoxHeight(field),
                         ports: []
                     };
                     var p;
                     for (p = 0; p < options.length; p++) {
                         item.ports.push({
                             option: options[p],
-                            y: 8 + NODE_HEAD + p * NODE_ROW + NODE_ROW / 2
+                            y: NODE_HEAD + nodeExtra(field) + p * NODE_ROW + NODE_ROW / 2
                         });
                     }
                     laid.push(item);
@@ -1295,7 +1447,7 @@
                         return {x: item.x + NODE_W, y: item.y + ports[n].y};
                     }
                 }
-                return {x: item.x + NODE_W, y: item.y + 22};
+                return {x: item.x + NODE_W, y: item.y + item.h / 2};
             }
             function line(from, to, childIndex) {
                 var mid = (from.x + to.x) / 2;
@@ -1338,7 +1490,7 @@
                 var when = block.fields[i].when;
                 var values = when.values || [];
                 if (!values.length || when._mode === 'any') {
-                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + 22}, leftOf(indexAt[i]), i);
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[i]), i);
                 } else {
                     var v;
                     for (v = 0; v < values.length; v++) {
@@ -1351,57 +1503,54 @@
 
         function nodeButton(block, blockIndex, laid) {
             var field = block.fields[laid.index];
+            var color = nodeAccent(laid.index);
             var node = el('div', 'sdf-node');
             node.style.left = laid.x + 'px';
             node.style.top = laid.y + 'px';
             node.style.width = NODE_W + 'px';
             node.style.height = laid.h + 'px';
+            node.style.setProperty('--sdf-accent', color);
             node.setAttribute('data-role', 'pick-node');
             node.setAttribute('data-block-index', String(blockIndex));
             node.setAttribute('data-field-index', String(laid.index));
             if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
                 node.className += ' sdf-node-selected';
             }
-            var question = el('div', 'sdf-node-question');
-            question.setAttribute('data-role', 'pick-node');
-            var kicker = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name');
-            if (field.when && field.when.source === 'portal') {
-                kicker = portalKicker(field.when);
-            }
-            question.appendChild(el('span', 'sdf-node-kicker', kicker));
+            var head = el('div', 'sdf-node-head');
+            head.style.background = color;
+            head.setAttribute('data-role', 'pick-node');
             var title = el('span', 'sdf-node-title');
             title.appendChild(document.createTextNode(trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional')));
             if (field.required) {
                 title.appendChild(el('span', 'sdf-node-req', ' *'));
             }
-            question.appendChild(title);
-            node.appendChild(question);
-            var answers = el('div', 'sdf-node-answers');
-            if (isChoice(field.type)) {
-                var opts = filledOptions(field);
-                var o;
-                if (!opts.length) {
-                    answers.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
-                }
-                for (o = 0; o < opts.length; o++) {
-                    answers.appendChild(portRow(blockIndex, laid.index, opts[o], opts[o]));
-                }
-            } else {
-                answers.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
-            }
-            node.appendChild(answers);
-            if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
-                var editor = el('div', 'sdf-node-editor');
-                editor.appendChild(renderCard(block, blockIndex, laid.index));
-                node.appendChild(editor);
-            }
+            head.appendChild(title);
+            head.appendChild(el('span', 'sdf-node-kind', typeName(field.type)));
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-node-del';
             remove.setAttribute('data-role', 'remove');
             remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeRemove'));
             remove.appendChild(document.createTextNode('\u00d7'));
-            node.appendChild(remove);
+            head.appendChild(remove);
+            node.appendChild(head);
+            var body = el('div', 'sdf-node-body');
+            if (field.when && field.when.source === 'portal') {
+                body.appendChild(el('div', 'sdf-node-when', portalKicker(field.when)));
+            }
+            if (isChoice(field.type)) {
+                var opts = filledOptions(field);
+                var o;
+                if (!opts.length) {
+                    body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
+                }
+                for (o = 0; o < opts.length; o++) {
+                    body.appendChild(portRow(blockIndex, laid.index, opts[o], opts[o]));
+                }
+            } else {
+                body.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
+            }
+            node.appendChild(body);
             return node;
         }
 
@@ -2385,8 +2534,32 @@
         }
 
         function onClick(e) {
+            var inMenu = insideMenu(e.target);
+            if (!inMenu) {
+                closeMenu();
+            }
             var role = roleOf(e.target);
+            if (role === 'close-field') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                selectedField = {blockIndex: -1, index: -1};
+                refresh();
+                return;
+            }
+            if (role === 'context-add-field') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                closeMenu();
+                addField(parseInt(e.target.getAttribute('data-block-index'), 10) || 0, null);
+                return;
+            }
             if (!role) {
+                if (!insideFloat(e.target) && insideCanvas(e.target) && selectedField.blockIndex >= 0) {
+                    selectedField = {blockIndex: -1, index: -1};
+                    refresh();
+                }
                 return;
             }
             if (role === 'link-from') {
@@ -2961,6 +3134,16 @@
                         title.appendChild(el('span', 'sdf-node-req', ' *'));
                     }
                 }
+                var panel = scope.querySelector('.sdf-float');
+                if (panel && panel.getAttribute('data-field-index') === String(fieldIndex)) {
+                    var floatTitle = panel.querySelector('.sdf-float-title');
+                    if (floatTitle) {
+                        floatTitle.textContent = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+                        if (field.required) {
+                            floatTitle.appendChild(el('span', 'sdf-req', ' *'));
+                        }
+                    }
+                }
                 return;
             }
         }
@@ -3013,6 +3196,7 @@
                 kept.scrollTop = editorScroll;
             }
             restoreFocus(snap);
+            placeFloats();
         }
 
         function replaceDefaults(blockIndex, fieldIndex) {
@@ -3181,6 +3365,13 @@
             var removed = fields[fieldIndex];
             var parentId = removed.when && removed.when.fieldId;
             fields.splice(fieldIndex, 1);
+            if (selectedField.blockIndex === blockIndex) {
+                if (selectedField.index === fieldIndex) {
+                    selectedField = {blockIndex: -1, index: -1};
+                } else if (selectedField.index > fieldIndex) {
+                    selectedField.index -= 1;
+                }
+            }
             var i;
             for (i = 0; i < fields.length; i++) {
                 if (fields[i].when && fields[i].when.fieldId === removed.id) {
