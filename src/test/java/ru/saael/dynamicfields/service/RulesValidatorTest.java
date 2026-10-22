@@ -218,6 +218,17 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void nodeColorRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Врач\",\"type\":\"text\",\"color\":\"#ff8b00\"}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField field = loaded.getBlocks().get(0).getFields().get(0);
+        assertEquals("#ff8b00", field.getColor());
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"color\":\"#ff8b00\""));
+    }
+
+    @Test
     public void invalidProjectFieldIsReported() {
         FormField first = field("field1", "Первый вопрос", FormField.TEXT);
         Condition condition = new Condition();

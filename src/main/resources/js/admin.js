@@ -157,6 +157,7 @@
                     blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
                     hideBlank: !!src.hideBlank,
                     required: !!src.required,
+                    color: normalizeColor(src.color),
                     defaults: stringList(src.defaults),
                     when: when
                 });
@@ -243,6 +244,20 @@
             return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
         }
 
+        function normalizeColor(value) {
+            var text = trim(value);
+            var match = /^#([0-9a-fA-F]{6})$/.exec(text);
+            if (match) {
+                return '#' + match[1].toLowerCase();
+            }
+            var short = /^#([0-9a-fA-F]{3})$/.exec(text);
+            if (!short) {
+                return '';
+            }
+            var hex = short[1];
+            return ('#' + hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2)).toLowerCase();
+        }
+
         function fieldCount() {
             var n = 0;
             var i;
@@ -322,6 +337,10 @@
                 };
                 if (src.required) {
                     field.required = true;
+                }
+                var color = normalizeColor(src.color);
+                if (color) {
+                    field.color = color;
                 }
                 if (src.jiraFieldId) {
                     field.jiraFieldId = src.jiraFieldId;
@@ -1374,6 +1393,10 @@
             return NODE_COLORS[index % NODE_COLORS.length];
         }
 
+        function nodeColor(field, index) {
+            return normalizeColor(field && field.color) || nodeAccent(index);
+        }
+
         function nodeBoxHeight(field) {
             var rows = isChoice(field.type) ? filledOptions(field).length : 1;
             if (!rows) {
@@ -1503,7 +1526,7 @@
 
         function nodeButton(block, blockIndex, laid) {
             var field = block.fields[laid.index];
-            var color = nodeAccent(laid.index);
+            var color = nodeColor(field, laid.index);
             var node = el('div', 'sdf-node');
             node.style.left = laid.x + 'px';
             node.style.top = laid.y + 'px';
@@ -1623,6 +1646,7 @@
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
             card.appendChild(renderRequired(field));
+            card.appendChild(renderColor(field, index));
             if (isChoice(field.type)) {
                 card.appendChild(renderOptions(field));
             }
@@ -1659,6 +1683,60 @@
             box.appendChild(label);
             box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requiredHint')));
             return box;
+        }
+
+        function renderColor(field, index) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColor')));
+            var value = el('div', 'sdf-field-value sdf-colors');
+            var current = normalizeColor(field.color);
+            var auto = document.createElement('button');
+            auto.type = 'button';
+            auto.className = 'sdf-swatch sdf-swatch-auto' + (current ? '' : ' sdf-swatch-on');
+            auto.setAttribute('data-role', 'node-color');
+            auto.setAttribute('data-color', '');
+            auto.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColorAuto'));
+            auto.style.background = nodeAccent(index);
+            value.appendChild(auto);
+            var i;
+            for (i = 0; i < NODE_COLORS.length; i++) {
+                var swatch = document.createElement('button');
+                swatch.type = 'button';
+                swatch.className = 'sdf-swatch' + (current === NODE_COLORS[i] ? ' sdf-swatch-on' : '');
+                swatch.setAttribute('data-role', 'node-color');
+                swatch.setAttribute('data-color', NODE_COLORS[i]);
+                swatch.style.background = NODE_COLORS[i];
+                value.appendChild(swatch);
+            }
+            var picker = document.createElement('input');
+            picker.type = 'color';
+            picker.setAttribute('data-role', 'node-color-picker');
+            picker.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColorCustom'));
+            picker.value = current || nodeAccent(index);
+            value.appendChild(picker);
+            box.appendChild(value);
+            return box;
+        }
+
+        function paintSwatches(origin, color) {
+            var box = origin;
+            while (box && box !== app && !hasClass(box, 'sdf-colors')) {
+                box = box.parentNode;
+            }
+            if (!box || box === app) {
+                return;
+            }
+            var saved = color || '';
+            var swatches = box.querySelectorAll('.sdf-swatch');
+            var i;
+            for (i = 0; i < swatches.length; i++) {
+                var chosen = swatches[i].getAttribute('data-color') || '';
+                var name = 'sdf-swatch' + (chosen ? '' : ' sdf-swatch-auto');
+                if (chosen === saved) {
+                    name += ' sdf-swatch-on';
+                }
+                swatches[i].className = name;
+            }
         }
 
         function group(labelText, control, description) {
@@ -2555,6 +2633,21 @@
                 addField(parseInt(e.target.getAttribute('data-block-index'), 10) || 0, null);
                 return;
             }
+            if (role === 'node-color') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var colorLoc = locate(e.target);
+                if (colorLoc.blockIndex < 0 || colorLoc.fieldIndex < 0) {
+                    return;
+                }
+                var pickedColor = normalizeColor(e.target.getAttribute('data-color'));
+                config.blocks[colorLoc.blockIndex].fields[colorLoc.fieldIndex].color = pickedColor;
+                sync();
+                patchNodeColor(colorLoc.blockIndex, colorLoc.fieldIndex);
+                paintSwatches(e.target, pickedColor);
+                return;
+            }
             if (!role) {
                 if (!insideFloat(e.target) && insideCanvas(e.target) && selectedField.blockIndex >= 0) {
                     selectedField = {blockIndex: -1, index: -1};
@@ -2788,6 +2881,12 @@
                 block.fields[loc.fieldIndex].defaults = trim(e.target.value) ? [e.target.value] : [];
                 sync();
                 renderPreview();
+            } else if (role === 'node-color-picker' && loc.fieldIndex >= 0) {
+                var picked = normalizeColor(e.target.value);
+                block.fields[loc.fieldIndex].color = picked;
+                sync();
+                patchNodeColor(loc.blockIndex, loc.fieldIndex);
+                paintSwatches(e.target, picked);
             }
         }
 
@@ -3113,6 +3212,28 @@
                 }
             }
             return null;
+        }
+
+        function patchNodeColor(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!scope || !field) {
+                return;
+            }
+            var color = nodeColor(field, fieldIndex);
+            var nodes = scope.querySelectorAll('.sdf-node');
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                if (parseInt(nodes[i].getAttribute('data-field-index'), 10) !== fieldIndex) {
+                    continue;
+                }
+                nodes[i].style.setProperty('--sdf-accent', color);
+                var head = nodes[i].querySelector('.sdf-node-head');
+                if (head) {
+                    head.style.background = color;
+                }
+                return;
+            }
         }
 
         function patchQuestionTitle(blockIndex, fieldIndex) {
