@@ -39,6 +39,10 @@ public class FormField {
     private String blankLabel = "";
     /** When true and a default exists, the dropdown has no empty row. */
     private boolean hideBlank;
+    /** The customer cannot send the request while this visible question is empty. */
+    private boolean required;
+    /** Header color on the builder canvas, {@code #rrggbb}. Empty keeps the automatic color. */
+    private String color;
     private List<String> defaults = new ArrayList<String>();
     /** {@code null} — the field is always visible. Otherwise it is visible only while the condition holds. */
     private Condition when;
@@ -105,6 +109,26 @@ public class FormField {
 
     public void setHideBlank(boolean hideBlank) {
         this.hideBlank = hideBlank;
+    }
+
+    @JsonSerialize(include = JsonSerialize.Inclusion.NON_DEFAULT)
+    public boolean isRequired() {
+        return required;
+    }
+
+    public void setRequired(boolean required) {
+        this.required = required;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color == null ? null : color.trim();
+        if (this.color != null && this.color.length() == 0) {
+            this.color = null;
+        }
     }
 
     public List<String> getDefaults() {

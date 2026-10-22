@@ -28,17 +28,24 @@
         var ignorePickUntil = 0;
         var dragLink = null;
         var dragMove = null;
-        var NODE_W = 280;
-        var NODE_HEAD = 42;
-        var NODE_ROW = 28;
+        var NODE_W = 250;
+        var NODE_HEAD = 40;
+        var NODE_ROW = 32;
+        var NODE_COLORS = ['#1d7afc', '#6554c0', '#ff8b00', '#00875a', '#00b8d9', '#e3497a'];
         var portalFields = null;
         var portalFieldsFor = 0;
+        var projectFields = null;
+        var projectFieldsLoading = false;
+        var projectFieldQuery = '';
+        var rebuildingWhenOptions = false;
 
         app.addEventListener('click', onClick);
         app.addEventListener('input', onInput);
         app.addEventListener('change', onChange);
         app.addEventListener('mousedown', onPortDown);
         app.addEventListener('mousedown', onQuestionDown);
+        app.addEventListener('contextmenu', onContextMenu);
+        app.addEventListener('scroll', onCanvasScroll, true);
 
         refresh();
         loadRequestTypes();
@@ -133,6 +140,8 @@
                     }
                     when = {
                         fieldId: String(src.when.fieldId),
+                        fieldName: src.when.fieldName ? String(src.when.fieldName) : '',
+                        source: src.when.source === 'portal' ? 'portal' : '',
                         values: values,
                         negate: !!src.when.negate,
                         _mode: values.length ? 'selected' : 'any'
@@ -147,6 +156,8 @@
                     options: options,
                     blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
                     hideBlank: !!src.hideBlank,
+                    required: !!src.required,
+                    color: normalizeColor(src.color),
                     defaults: stringList(src.defaults),
                     when: when
                 });
@@ -186,7 +197,7 @@
                 if (!field.id || seen[field.id]) {
                     field.id = nextId(fields);
                 }
-                if (field.when && !seen[field.when.fieldId]) {
+                if (field.when && field.when.source !== 'portal' && !seen[field.when.fieldId]) {
                     field.when = null;
                 } else if (field.when && !field.when._mode) {
                     field.when._mode = (field.when.values && field.when.values.length) ? 'selected' : 'any';
@@ -233,6 +244,20 @@
             return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
         }
 
+        function normalizeColor(value) {
+            var text = trim(value);
+            var match = /^#([0-9a-fA-F]{6})$/.exec(text);
+            if (match) {
+                return '#' + match[1].toLowerCase();
+            }
+            var short = /^#([0-9a-fA-F]{3})$/.exec(text);
+            if (!short) {
+                return '';
+            }
+            var hex = short[1];
+            return ('#' + hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2)).toLowerCase();
+        }
+
         function fieldCount() {
             var n = 0;
             var i;
@@ -256,8 +281,10 @@
             if (!when || !when.fieldId) {
                 return null;
             }
+            var portal = when.source === 'portal';
             var values = [];
-            if (parent && isChoice(parent.type) && when._mode !== 'any') {
+            var keepValues = portal ? when._mode !== 'any' : (parent && isChoice(parent.type) && when._mode !== 'any');
+            if (keepValues) {
                 var v;
                 for (v = 0; v < (when.values || []).length; v++) {
                     var item = trim(when.values[v]);
@@ -266,7 +293,14 @@
                     }
                 }
             }
-            return {fieldId: when.fieldId, values: values, negate: false};
+            var out = {fieldId: when.fieldId, values: values, negate: false};
+            if (portal) {
+                out.source = 'portal';
+                if (trim(when.fieldName)) {
+                    out.fieldName = trim(when.fieldName);
+                }
+            }
+            return out;
         }
 
         function exportFields(fields, keepBlank) {
@@ -301,6 +335,13 @@
                     hideBlank: !!src.hideBlank,
                     defaults: defaults
                 };
+                if (src.required) {
+                    field.required = true;
+                }
+                var color = normalizeColor(src.color);
+                if (color) {
+                    field.color = color;
+                }
                 if (src.jiraFieldId) {
                     field.jiraFieldId = src.jiraFieldId;
                 }
@@ -379,6 +420,46 @@
             return !!node && (' ' + node.className + ' ').indexOf(' ' + name + ' ') !== -1;
         }
 
+        function insideEditor(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-node-editor') || hasClass(node, 'sdf-float')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideFloat(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-float') || hasClass(node, 'sdf-menu')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideMenu(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-menu')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
+        function insideCanvas(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-canvas') || hasClass(node, 'sdf-board') || hasClass(node, 'sdf-node')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
+        }
+
         function button(role, text, disabled) {
             var node = document.createElement('button');
             node.type = 'button';
@@ -444,10 +525,12 @@
             for (i = 0; i < visible.length; i++) {
                 host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
             }
+            placeFloats();
             syncProject();
             renderTypeNav();
             renderPreview();
             loadPortalFields();
+            loadProjectFields();
         }
 
         function renderBlock(block, blockIndex) {
@@ -463,7 +546,7 @@
             card.appendChild(renderCanvas(block, blockIndex));
             var editIndex = editedIndex(block, blockIndex);
             if (editIndex >= 0) {
-                card.appendChild(renderCard(block, blockIndex, editIndex));
+                card.appendChild(renderFloat(block, blockIndex, editIndex));
             }
             return card;
         }
@@ -475,11 +558,122 @@
             if (selectedField.blockIndex === blockIndex && selectedField.index >= 0 && selectedField.index < block.fields.length) {
                 return selectedField.index;
             }
-            if (selectedField.blockIndex < 0) {
-                selectedField = {blockIndex: blockIndex, index: 0};
-                return 0;
-            }
             return -1;
+        }
+
+        function renderFloat(block, blockIndex, index) {
+            var field = block.fields[index];
+            var panel = el('div', 'sdf-float');
+            panel.setAttribute('data-block-index', String(blockIndex));
+            panel.setAttribute('data-field-index', String(index));
+            var head = el('div', 'sdf-float-head');
+            var title = el('strong', 'sdf-float-title');
+            title.appendChild(document.createTextNode(trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional')));
+            if (field.required) {
+                title.appendChild(el('span', 'sdf-req', ' *'));
+            }
+            head.appendChild(title);
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'sdf-float-close';
+            close.setAttribute('data-role', 'close-field');
+            close.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.closeSettings'));
+            close.appendChild(document.createTextNode('\u00d7'));
+            head.appendChild(close);
+            panel.appendChild(head);
+            panel.appendChild(renderCard(block, blockIndex, index));
+            return panel;
+        }
+
+        function placeFloats() {
+            var panels = host.querySelectorAll('.sdf-float');
+            var i;
+            for (i = 0; i < panels.length; i++) {
+                var panel = panels[i];
+                var card = panel.parentNode;
+                var node = null;
+                var nodes = card.querySelectorAll('.sdf-node');
+                var n;
+                for (n = 0; n < nodes.length; n++) {
+                    if (nodes[n].getAttribute('data-field-index') === panel.getAttribute('data-field-index')) {
+                        node = nodes[n];
+                    }
+                }
+                if (!node) {
+                    continue;
+                }
+                var nodeBox = node.getBoundingClientRect();
+                var cardBox = card.getBoundingClientRect();
+                var width = panel.offsetWidth || 480;
+                var left = nodeBox.right - cardBox.left + 18;
+                var top = nodeBox.top - cardBox.top;
+                if (left + width > card.clientWidth - 8) {
+                    var leftSide = nodeBox.left - cardBox.left - width - 18;
+                    if (leftSide >= 8) {
+                        left = leftSide;
+                    } else {
+                        left = Math.max(8, card.clientWidth - width - 8);
+                        top = nodeBox.bottom - cardBox.top + 12;
+                    }
+                }
+                var minTop = 8;
+                if (top < minTop) {
+                    top = minTop;
+                }
+                panel.style.left = Math.round(left) + 'px';
+                panel.style.top = Math.round(top) + 'px';
+            }
+        }
+
+        function onCanvasScroll(e) {
+            if (e.target && hasClass(e.target, 'sdf-canvas')) {
+                placeFloats();
+            }
+        }
+
+        function closeMenu() {
+            var menus = app.querySelectorAll('.sdf-menu');
+            var i;
+            for (i = 0; i < menus.length; i++) {
+                if (menus[i].parentNode) {
+                    menus[i].parentNode.removeChild(menus[i]);
+                }
+            }
+        }
+
+        function openMenu(x, y, blockIndex) {
+            closeMenu();
+            var menu = el('div', 'sdf-menu');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            var item = button('context-add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false);
+            item.setAttribute('data-block-index', String(blockIndex));
+            menu.appendChild(item);
+            app.appendChild(menu);
+            var box = menu.getBoundingClientRect();
+            if (box.right > window.innerWidth - 8) {
+                menu.style.left = Math.max(8, window.innerWidth - box.width - 8) + 'px';
+            }
+            if (box.bottom > window.innerHeight - 8) {
+                menu.style.top = Math.max(8, window.innerHeight - box.height - 8) + 'px';
+            }
+        }
+
+        function onContextMenu(e) {
+            if (insideFloat(e.target) || !insideCanvas(e.target)) {
+                return;
+            }
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            var card = e.target;
+            while (card && card !== app && !hasClass(card, 'sdf-block-card')) {
+                card = card.parentNode;
+            }
+            if (!card || card === app) {
+                return;
+            }
+            openMenu(e.clientX, e.clientY, parseInt(card.getAttribute('data-block-index'), 10) || 0);
         }
 
         function renderScope(block) {
@@ -902,12 +1096,69 @@
                     }
                 }
                 portalFields = list;
-                render();
+                renderKeepingFocus();
             }).fail(function () {
                 if (portalFieldsFor === Number(type.id)) {
                     portalFields = [];
-                    render();
+                    renderKeepingFocus();
                 }
+            });
+        }
+
+        function projectFieldById(id) {
+            var list = projectFields || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                if (list[i].id === id) {
+                    return list[i];
+                }
+            }
+            return null;
+        }
+
+        function loadProjectFields() {
+            if (projectFieldsLoading || projectFields) {
+                return;
+            }
+            projectFieldsLoading = true;
+            AJS.$.ajax({
+                url: contextPath + '/rest/dynamic-fields/1.0/project-fields',
+                type: 'GET',
+                dataType: 'json',
+                cache: false
+            }).done(function (data) {
+                var payload = asJson(data);
+                var raw = payload.fields || [];
+                var list = [];
+                var i;
+                for (i = 0; i < raw.length; i++) {
+                    var item = raw[i] || {};
+                    if (!item.id) {
+                        continue;
+                    }
+                    var values = [];
+                    var incoming = item.values || [];
+                    var v;
+                    for (v = 0; v < incoming.length; v++) {
+                        if (incoming[v] != null && String(incoming[v])) {
+                            values.push(String(incoming[v]));
+                        }
+                    }
+                    list.push({
+                        id: String(item.id),
+                        name: String(item.name || item.id),
+                        project: item.project ? String(item.project) : '',
+                        control: item.control || (values.length ? 'select' : 'text'),
+                        values: values
+                    });
+                }
+                projectFields = list;
+                projectFieldsLoading = false;
+                renderKeepingFocus();
+            }).fail(function () {
+                projectFields = [];
+                projectFieldsLoading = false;
+                renderKeepingFocus();
             });
         }
 
@@ -963,7 +1214,7 @@
                 var left = desks.length;
                 if (!left) {
                     requestTypes = [];
-                    render();
+                    renderKeepingFocus();
                     return;
                 }
                 function finish() {
@@ -977,7 +1228,7 @@
                         return ap < bp ? -1 : (ap > bp ? 1 : 0);
                     });
                     requestTypes = acc;
-                    render();
+                    renderKeepingFocus();
                 }
                 var d;
                 for (d = 0; d < desks.length; d++) {
@@ -1003,7 +1254,7 @@
                 }
             }).fail(function () {
                 requestTypes = [];
-                render();
+                renderKeepingFocus();
             });
         }
 
@@ -1084,13 +1335,14 @@
         }
 
         function renderCanvas(block, blockIndex) {
+            editedIndex(block, blockIndex);
             var wrap = el('div', 'sdf-canvas-wrap');
             wrap.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeHint')));
             if (pendingLink && pendingLink.blockIndex === blockIndex) {
                 wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeLinking')));
             }
             var canvas = el('div', 'sdf-canvas');
-            var laid = layoutNodes(block);
+            var laid = layoutNodes(block, blockIndex);
             if (!laid.length) {
                 canvas.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
                 wrap.appendChild(canvas);
@@ -1100,8 +1352,8 @@
             var maxY = 80;
             var i;
             for (i = 0; i < laid.length; i++) {
-                if (laid[i].x + NODE_W + 24 > maxX) {
-                    maxX = laid[i].x + NODE_W + 24;
+                if (laid[i].x + NODE_W + 40 > maxX) {
+                    maxX = laid[i].x + NODE_W + 40;
                 }
                 if (laid[i].y + laid[i].h + 16 > maxY) {
                     maxY = laid[i].y + laid[i].h + 16;
@@ -1133,15 +1385,27 @@
             return out;
         }
 
+        function nodeExtra(field) {
+            return field.when && field.when.source === 'portal' ? 22 : 0;
+        }
+
+        function nodeAccent(index) {
+            return NODE_COLORS[index % NODE_COLORS.length];
+        }
+
+        function nodeColor(field, index) {
+            return normalizeColor(field && field.color) || nodeAccent(index);
+        }
+
         function nodeBoxHeight(field) {
             var rows = isChoice(field.type) ? filledOptions(field).length : 1;
             if (!rows) {
                 rows = 1;
             }
-            return 8 + NODE_HEAD + rows * NODE_ROW + 8;
+            return NODE_HEAD + nodeExtra(field) + rows * NODE_ROW + 6;
         }
 
-        function layoutNodes(block) {
+        function layoutNodes(block, blockIndex) {
             var columns = [];
             var i;
             for (i = 0; i < block.fields.length; i++) {
@@ -1175,7 +1439,7 @@
                     for (p = 0; p < options.length; p++) {
                         item.ports.push({
                             option: options[p],
-                            y: 8 + NODE_HEAD + p * NODE_ROW + NODE_ROW / 2
+                            y: NODE_HEAD + nodeExtra(field) + p * NODE_ROW + NODE_ROW / 2
                         });
                     }
                     laid.push(item);
@@ -1206,7 +1470,7 @@
                         return {x: item.x + NODE_W, y: item.y + ports[n].y};
                     }
                 }
-                return {x: item.x + NODE_W, y: item.y + 22};
+                return {x: item.x + NODE_W, y: item.y + item.h / 2};
             }
             function line(from, to, childIndex) {
                 var mid = (from.x + to.x) / 2;
@@ -1249,7 +1513,7 @@
                 var when = block.fields[i].when;
                 var values = when.values || [];
                 if (!values.length || when._mode === 'any') {
-                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + 22}, leftOf(indexAt[i]), i);
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[i]), i);
                 } else {
                     var v;
                     for (v = 0; v < values.length; v++) {
@@ -1262,44 +1526,54 @@
 
         function nodeButton(block, blockIndex, laid) {
             var field = block.fields[laid.index];
+            var color = nodeColor(field, laid.index);
             var node = el('div', 'sdf-node');
             node.style.left = laid.x + 'px';
             node.style.top = laid.y + 'px';
             node.style.width = NODE_W + 'px';
             node.style.height = laid.h + 'px';
+            node.style.setProperty('--sdf-accent', color);
             node.setAttribute('data-role', 'pick-node');
             node.setAttribute('data-block-index', String(blockIndex));
             node.setAttribute('data-field-index', String(laid.index));
             if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
                 node.className += ' sdf-node-selected';
             }
-            var question = el('div', 'sdf-node-question');
-            question.setAttribute('data-role', 'pick-node');
-            question.appendChild(el('span', 'sdf-node-kicker', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name')));
-            var title = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
-            question.appendChild(el('span', 'sdf-node-title', title));
-            node.appendChild(question);
-            var answers = el('div', 'sdf-node-answers');
-            if (isChoice(field.type)) {
-                var opts = filledOptions(field);
-                var o;
-                if (!opts.length) {
-                    answers.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
-                }
-                for (o = 0; o < opts.length; o++) {
-                    answers.appendChild(portRow(blockIndex, laid.index, opts[o], opts[o]));
-                }
-            } else {
-                answers.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
+            var head = el('div', 'sdf-node-head');
+            head.style.background = color;
+            head.setAttribute('data-role', 'pick-node');
+            var title = el('span', 'sdf-node-title');
+            title.appendChild(document.createTextNode(trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional')));
+            if (field.required) {
+                title.appendChild(el('span', 'sdf-node-req', ' *'));
             }
-            node.appendChild(answers);
+            head.appendChild(title);
+            head.appendChild(el('span', 'sdf-node-kind', typeName(field.type)));
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-node-del';
             remove.setAttribute('data-role', 'remove');
             remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeRemove'));
             remove.appendChild(document.createTextNode('\u00d7'));
-            node.appendChild(remove);
+            head.appendChild(remove);
+            node.appendChild(head);
+            var body = el('div', 'sdf-node-body');
+            if (field.when && field.when.source === 'portal') {
+                body.appendChild(el('div', 'sdf-node-when', portalKicker(field.when)));
+            }
+            if (isChoice(field.type)) {
+                var opts = filledOptions(field);
+                var o;
+                if (!opts.length) {
+                    body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
+                }
+                for (o = 0; o < opts.length; o++) {
+                    body.appendChild(portRow(blockIndex, laid.index, opts[o], opts[o]));
+                }
+            } else {
+                body.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
+            }
+            node.appendChild(body);
             return node;
         }
 
@@ -1371,6 +1645,8 @@
             };
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
+            card.appendChild(renderRequired(field));
+            card.appendChild(renderColor(field, index));
             if (isChoice(field.type)) {
                 card.appendChild(renderOptions(field));
             }
@@ -1392,6 +1668,75 @@
             buttons.appendChild(row);
             card.appendChild(buttons);
             return card;
+        }
+
+        function renderRequired(field) {
+            var box = el('div', 'field-group');
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var check = document.createElement('input');
+            check.type = 'checkbox';
+            check.setAttribute('data-role', 'field-required');
+            check.checked = !!field.required;
+            label.appendChild(check);
+            label.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.required')));
+            box.appendChild(label);
+            box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requiredHint')));
+            return box;
+        }
+
+        function renderColor(field, index) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColor')));
+            var value = el('div', 'sdf-field-value sdf-colors');
+            var current = normalizeColor(field.color);
+            var auto = document.createElement('button');
+            auto.type = 'button';
+            auto.className = 'sdf-swatch sdf-swatch-auto' + (current ? '' : ' sdf-swatch-on');
+            auto.setAttribute('data-role', 'node-color');
+            auto.setAttribute('data-color', '');
+            auto.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColorAuto'));
+            auto.style.background = nodeAccent(index);
+            value.appendChild(auto);
+            var i;
+            for (i = 0; i < NODE_COLORS.length; i++) {
+                var swatch = document.createElement('button');
+                swatch.type = 'button';
+                swatch.className = 'sdf-swatch' + (current === NODE_COLORS[i] ? ' sdf-swatch-on' : '');
+                swatch.setAttribute('data-role', 'node-color');
+                swatch.setAttribute('data-color', NODE_COLORS[i]);
+                swatch.style.background = NODE_COLORS[i];
+                value.appendChild(swatch);
+            }
+            var picker = document.createElement('input');
+            picker.type = 'color';
+            picker.setAttribute('data-role', 'node-color-picker');
+            picker.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeColorCustom'));
+            picker.value = current || nodeAccent(index);
+            value.appendChild(picker);
+            box.appendChild(value);
+            return box;
+        }
+
+        function paintSwatches(origin, color) {
+            var box = origin;
+            while (box && box !== app && !hasClass(box, 'sdf-colors')) {
+                box = box.parentNode;
+            }
+            if (!box || box === app) {
+                return;
+            }
+            var saved = color || '';
+            var swatches = box.querySelectorAll('.sdf-swatch');
+            var i;
+            for (i = 0; i < swatches.length; i++) {
+                var chosen = swatches[i].getAttribute('data-color') || '';
+                var name = 'sdf-swatch' + (chosen ? '' : ' sdf-swatch-auto');
+                if (chosen === saved) {
+                    name += ' sdf-swatch-on';
+                }
+                swatches[i].className = name;
+            }
         }
 
         function group(labelText, control, description) {
@@ -1467,6 +1812,7 @@
 
         function renderDefault(field) {
             var box = el('div', 'field-group');
+            box.setAttribute('data-part', 'defaults');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.defaultValue')));
             var value = el('div', 'sdf-field-value');
             if (isChoice(field.type)) {
@@ -1579,11 +1925,17 @@
                 input.className = 'text';
                 input.setAttribute('data-role', 'option');
                 input.setAttribute('data-option-index', String(i));
+                input.setAttribute('autocomplete', 'off');
                 input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.optionPlaceholder'));
                 input.value = options[i];
                 row.appendChild(input);
-                var remove = button('remove-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'sdf-option-del';
+                remove.setAttribute('data-role', 'remove-option');
                 remove.setAttribute('data-option-index', String(i));
+                remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'));
+                remove.appendChild(document.createTextNode('\u00d7'));
                 row.appendChild(remove);
                 value.appendChild(row);
             }
@@ -1592,67 +1944,303 @@
             return box;
         }
 
-        function renderWhen(block, field, index) {
-            var box = el('div', 'field-group');
-            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
-            var value = el('div', 'sdf-field-value');
-            var select = document.createElement('select');
-            select.className = 'select';
-            select.setAttribute('data-role', 'when-field');
+        function portalKicker(when) {
+            var name = trim(when.fieldName) || when.fieldId;
+            var bits = [];
+            if (when._mode !== 'any') {
+                var i;
+                for (i = 0; i < (when.values || []).length; i++) {
+                    if (trim(when.values[i])) {
+                        bits.push(trim(when.values[i]));
+                    }
+                }
+            }
+            if (!bits.length) {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalKicker', name);
+            }
+            return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalKickerValues', name, bits.join(', '));
+        }
+
+        function projectQueryMatches(item) {
+            var query = trim(projectFieldQuery).toLowerCase();
+            if (!query) {
+                return true;
+            }
+            var name = String(item.name || '').toLowerCase();
+            var id = String(item.id || '').toLowerCase();
+            var project = String(item.project || '').toLowerCase();
+            return name.indexOf(query) >= 0 || id.indexOf(query) >= 0 || project.indexOf(query) >= 0;
+        }
+
+        function portalChoiceList(when) {
+            var out = [];
+            var seen = {};
+            function add(text) {
+                var item = trim(text);
+                if (!item || seen[item]) {
+                    return;
+                }
+                seen[item] = true;
+                out.push(item);
+            }
+            var catalog = projectFieldById(when.fieldId);
+            var list = catalog && catalog.values ? catalog.values : [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                add(list[i]);
+            }
+            var saved = when.values || [];
+            for (i = 0; i < saved.length; i++) {
+                add(saved[i]);
+            }
+            return out;
+        }
+
+        function fillWhenOptions(select, block, field, index) {
+            rebuildingWhenOptions = true;
+            try {
+            while (select.firstChild) {
+                select.removeChild(select.firstChild);
+            }
+            var selectedKey = '';
+            if (field.when && field.when.source === 'portal') {
+                selectedKey = 'portal:' + field.when.fieldId;
+            } else if (field.when && field.when.fieldId) {
+                selectedKey = field.when.fieldId;
+            }
             var always = document.createElement('option');
             always.value = '';
             always.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.always')));
-            select.appendChild(always);
-            var i;
-            for (i = 0; i < index; i++) {
-                var earlier = block.fields[i];
-                var option = document.createElement('option');
-                option.value = earlier.id;
-                option.appendChild(document.createTextNode(earlier.label || earlier.id));
-                if (field.when && field.when.fieldId === earlier.id) {
-                    option.selected = true;
-                }
-                select.appendChild(option);
+            if (!selectedKey) {
+                always.selected = true;
             }
-            value.appendChild(select);
-            if (field.when && field.when.fieldId) {
-                var parent = null;
+            select.appendChild(always);
+            if (index > 0) {
+                var own = document.createElement('optgroup');
+                own.label = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.ownQuestions');
+                var i;
                 for (i = 0; i < index; i++) {
-                    if (block.fields[i].id === field.when.fieldId) {
-                        parent = block.fields[i];
+                    var earlier = block.fields[i];
+                    var option = document.createElement('option');
+                    option.value = earlier.id;
+                    option.appendChild(document.createTextNode(earlier.label || earlier.id));
+                    if (selectedKey === earlier.id) {
+                        option.selected = true;
                     }
+                    own.appendChild(option);
                 }
-                var values = el('div', 'sdf-when-values');
-                if (!parent || !isChoice(parent.type)) {
-                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
-                } else {
-                    var mode = field.when._mode === 'selected' || (field.when.values && field.when.values.length) ? 'selected' : 'any';
-                    if (field.when._mode === 'any') {
-                        mode = 'any';
-                    }
-                    values.appendChild(modeRadio(block, index, 'any', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), mode === 'any'));
-                    values.appendChild(modeRadio(block, index, 'selected', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenSelected'), mode === 'selected'));
-                    var opts = parent.options || [];
-                    for (i = 0; i < opts.length; i++) {
-                        if (!trim(opts[i])) {
-                            continue;
-                        }
-                        var label = document.createElement('label');
-                        label.className = 'sdf-inline-check';
-                        var check = document.createElement('input');
-                        check.type = 'checkbox';
-                        check.setAttribute('data-role', 'when-value');
-                        check.value = opts[i];
-                        check.checked = contains(field.when.values, opts[i]);
-                        label.appendChild(check);
-                        label.appendChild(document.createTextNode(' ' + opts[i]));
-                        values.appendChild(label);
-                    }
+                select.appendChild(own);
+            }
+            var catalog = projectFields || [];
+            var projectGroup = document.createElement('optgroup');
+            projectGroup.label = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFields');
+            var added = {};
+            var n;
+            for (n = 0; n < catalog.length; n++) {
+                if (!projectQueryMatches(catalog[n])) {
+                    continue;
                 }
-                value.appendChild(values);
+                appendProjectOption(projectGroup, catalog[n], selectedKey);
+                added[catalog[n].id] = true;
+            }
+            if (field.when && field.when.source === 'portal' && field.when.fieldId && !added[field.when.fieldId]) {
+                var current = projectFieldById(field.when.fieldId);
+                appendProjectOption(projectGroup, current || {
+                    id: field.when.fieldId,
+                    name: field.when.fieldName || field.when.fieldId,
+                    project: ''
+                }, selectedKey);
+            }
+            if (projectGroup.firstChild) {
+                select.appendChild(projectGroup);
+            }
+            } finally {
+                rebuildingWhenOptions = false;
+            }
+        }
+
+        function appendProjectOption(parent, item, selectedKey) {
+            var option = document.createElement('option');
+            option.value = 'portal:' + item.id;
+            var label = item.name || item.id;
+            if (item.project) {
+                label += ' (' + item.project + ')';
+            }
+            option.appendChild(document.createTextNode(label));
+            if (option.value === selectedKey) {
+                option.selected = true;
+            }
+            parent.appendChild(option);
+        }
+
+        function renderWhen(block, field, index) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.showIf')));
+            var value = el('div', 'sdf-field-value sdf-when-value');
+            if (projectFields && projectFields.length) {
+                var filter = document.createElement('input');
+                filter.type = 'text';
+                filter.className = 'text sdf-project-filter';
+                filter.setAttribute('data-role', 'project-field-filter');
+                filter.setAttribute('autocomplete', 'off');
+                filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldFilter'));
+                filter.value = projectFieldQuery;
+                value.appendChild(filter);
+            }
+            var select = document.createElement('select');
+            select.className = 'select';
+            select.setAttribute('data-role', 'when-field');
+            fillWhenOptions(select, block, field, index);
+            value.appendChild(select);
+            if (projectFields === null) {
+                value.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFieldsLoading')));
+            } else if (!projectFields.length) {
+                value.appendChild(el('div', 'sdf-when-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.projectFieldsEmpty')));
+            }
+            if (field.when && field.when.fieldId) {
+                value.appendChild(renderWhenValues(block, field, index));
             }
             box.appendChild(value);
             return box;
+        }
+
+        function portalControl(when) {
+            var catalog = projectFieldById(when.fieldId);
+            if (catalog && catalog.control) {
+                return catalog.control;
+            }
+            return portalChoiceList(when).length ? 'select' : 'text';
+        }
+
+        function renderWhenValues(block, field, index) {
+            var values = el('div', 'sdf-when-values');
+            var when = field.when;
+            if (when.source === 'portal') {
+                var portalOptions = portalChoiceList(when);
+                var control = portalControl(when);
+                if (control === 'select' && portalOptions.length) {
+                    appendPortalSelect(values, when, portalOptions);
+                } else if (control === 'radio' && portalOptions.length) {
+                    appendPortalRadios(values, block, index, when, portalOptions);
+                } else if ((control === 'checkboxes' || portalOptions.length) && portalOptions.length) {
+                    appendPortalAny(values, when);
+                    appendWhenChecks(values, when, portalOptions);
+                } else {
+                    values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.portalFilled')));
+                }
+                return values;
+            }
+            var parent = null;
+            var i;
+            for (i = 0; i < index; i++) {
+                if (block.fields[i].id === when.fieldId) {
+                    parent = block.fields[i];
+                }
+            }
+            if (!parent || !isChoice(parent.type)) {
+                values.appendChild(el('span', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenFilled')));
+                return values;
+            }
+            appendWhenModes(values, block, index, when);
+            var opts = [];
+            var raw = parent.options || [];
+            for (i = 0; i < raw.length; i++) {
+                if (trim(raw[i])) {
+                    opts.push(raw[i]);
+                }
+            }
+            appendWhenChecks(values, when, opts);
+            return values;
+        }
+
+        function appendPortalSelect(values, when, opts) {
+            var select = document.createElement('select');
+            select.className = 'select sdf-portal-choice';
+            select.setAttribute('data-role', 'when-portal-select');
+            var placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.chooseValue')));
+            select.appendChild(placeholder);
+            var any = document.createElement('option');
+            any.value = '__any__';
+            any.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny')));
+            if (when._mode === 'any') {
+                any.selected = true;
+            }
+            select.appendChild(any);
+            var chosen = (when._mode === 'any' ? [] : (when.values || []));
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var option = document.createElement('option');
+                option.value = opts[i];
+                option.selected = chosen.length && chosen[0] === opts[i];
+                option.appendChild(document.createTextNode(opts[i]));
+                select.appendChild(option);
+            }
+            if (!any.selected && !(chosen.length && contains(opts, chosen[0]))) {
+                placeholder.selected = true;
+            }
+            values.appendChild(select);
+        }
+
+        function appendPortalRadios(values, block, index, when, opts) {
+            values.appendChild(portalRadio(block, index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), when._mode === 'any'));
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var picked = when._mode !== 'any' && contains(when.values, opts[i]);
+                values.appendChild(portalRadio(block, index, opts[i], opts[i], picked));
+            }
+        }
+
+        function portalRadio(block, index, value, text, checked) {
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'sdf-portal-radio-' + block.id + '-' + index;
+            input.setAttribute('data-role', 'when-portal-radio');
+            input.value = value;
+            input.checked = checked;
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(' ' + text));
+            return label;
+        }
+
+        function appendPortalAny(values, when) {
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.setAttribute('data-role', 'when-portal-any');
+            input.checked = when._mode === 'any';
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny')));
+            values.appendChild(label);
+        }
+
+        function appendWhenModes(values, block, index, when) {
+            var mode = when._mode === 'selected' || (when.values && when.values.length) ? 'selected' : 'any';
+            if (when._mode === 'any') {
+                mode = 'any';
+            }
+            values.appendChild(modeRadio(block, index, 'any', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenAny'), mode === 'any'));
+            values.appendChild(modeRadio(block, index, 'selected', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.whenSelected'), mode === 'selected'));
+        }
+
+        function appendWhenChecks(values, when, opts) {
+            var i;
+            for (i = 0; i < opts.length; i++) {
+                var label = document.createElement('label');
+                label.className = 'sdf-inline-check';
+                var check = document.createElement('input');
+                check.type = 'checkbox';
+                check.setAttribute('data-role', 'when-value');
+                check.value = opts[i];
+                check.checked = contains(when.values, opts[i]);
+                label.appendChild(check);
+                label.appendChild(document.createTextNode(' ' + opts[i]));
+                values.appendChild(label);
+            }
         }
 
         function modeRadio(block, index, value, text, checked) {
@@ -1772,6 +2360,9 @@
             var i;
             for (i = 0; i < chunk.length; i++) {
                 fields.splice(insertAt + i, 0, chunk[i]);
+            }
+            if (selectedField.blockIndex === blockIndex && selectedField.index === index) {
+                selectedField = {blockIndex: blockIndex, index: insertAt};
             }
             refresh();
         }
@@ -1917,7 +2508,7 @@
         }
 
         function onQuestionDown(e) {
-            if (e.button || roleOf(e.target) !== 'pick-node') {
+            if (e.button || roleOf(e.target) !== 'pick-node' || insideEditor(e.target)) {
                 return;
             }
             var tag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
@@ -2026,8 +2617,47 @@
         }
 
         function onClick(e) {
+            var inMenu = insideMenu(e.target);
+            if (!inMenu) {
+                closeMenu();
+            }
             var role = roleOf(e.target);
+            if (role === 'close-field') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                selectedField = {blockIndex: -1, index: -1};
+                refresh();
+                return;
+            }
+            if (role === 'context-add-field') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                closeMenu();
+                addField(parseInt(e.target.getAttribute('data-block-index'), 10) || 0, null);
+                return;
+            }
+            if (role === 'node-color') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var colorLoc = locate(e.target);
+                if (colorLoc.blockIndex < 0 || colorLoc.fieldIndex < 0) {
+                    return;
+                }
+                var pickedColor = normalizeColor(e.target.getAttribute('data-color'));
+                config.blocks[colorLoc.blockIndex].fields[colorLoc.fieldIndex].color = pickedColor;
+                sync();
+                patchNodeColor(colorLoc.blockIndex, colorLoc.fieldIndex);
+                paintSwatches(e.target, pickedColor);
+                return;
+            }
             if (!role) {
+                if (!insideFloat(e.target) && insideCanvas(e.target) && selectedField.blockIndex >= 0) {
+                    selectedField = {blockIndex: -1, index: -1};
+                    refresh();
+                }
                 return;
             }
             if (role === 'link-from') {
@@ -2111,7 +2741,7 @@
                 return;
             }
             if (role === 'pick-node') {
-                if (new Date().getTime() < ignorePickUntil) {
+                if (insideEditor(e.target) || new Date().getTime() < ignorePickUntil) {
                     return;
                 }
                 if (e.preventDefault) {
@@ -2208,6 +2838,15 @@
                 return;
             }
             var block = config.blocks[loc.blockIndex];
+            if (role === 'project-field-filter' && loc.fieldIndex >= 0) {
+                projectFieldQuery = e.target.value;
+                var holder = e.target.parentNode;
+                var whenSelect = holder ? holder.querySelector('select[data-role="when-field"]') : null;
+                if (whenSelect) {
+                    fillWhenOptions(whenSelect, block, block.fields[loc.fieldIndex], loc.fieldIndex);
+                }
+                return;
+            }
             if (role === 'block-title') {
                 block.title = e.target.value;
                 sync();
@@ -2217,17 +2856,28 @@
                 sync();
             } else if (role === 'label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].label = e.target.value;
-                refreshKeepingFocus();
+                // The question box stays in the page. Rebuilding it here removed the
+                // focused input, and the browser then left the new box without a caret.
+                sync();
+                patchQuestionTitle(loc.blockIndex, loc.fieldIndex);
+                patchIssueName(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
             } else if (role === 'issue-name' && loc.fieldIndex >= 0) {
                 applyIssueName(block.fields[loc.fieldIndex], e.target.value);
                 sync();
             } else if (role === 'option' && loc.fieldIndex >= 0) {
                 var optIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
                 var field = block.fields[loc.fieldIndex];
+                if (!field || !field.options || isNaN(optIndex) || optIndex < 0 || optIndex >= field.options.length) {
+                    return;
+                }
                 var old = field.options[optIndex];
                 field.options[optIndex] = e.target.value;
                 renameOption(block, field.id, old, e.target.value);
-                refreshKeepingFocus();
+                sync();
+                replaceCanvas(loc.blockIndex);
+                replaceDefaults(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
             } else if (role === 'blank-label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].blankLabel = e.target.value;
                 sync();
@@ -2236,6 +2886,12 @@
                 block.fields[loc.fieldIndex].defaults = trim(e.target.value) ? [e.target.value] : [];
                 sync();
                 renderPreview();
+            } else if (role === 'node-color-picker' && loc.fieldIndex >= 0) {
+                var picked = normalizeColor(e.target.value);
+                block.fields[loc.fieldIndex].color = picked;
+                sync();
+                patchNodeColor(loc.blockIndex, loc.fieldIndex);
+                paintSwatches(e.target, picked);
             }
         }
 
@@ -2343,6 +2999,13 @@
                 }
                 return;
             }
+            if (role === 'field-required') {
+                field.required = !!e.target.checked;
+                sync();
+                patchQuestionTitle(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
+                return;
+            }
             if (role === 'type') {
                 field.type = e.target.value;
                 if (isChoice(field.type)) {
@@ -2377,10 +3040,62 @@
                 sync();
                 renderPreview();
             } else if (role === 'when-field') {
-                if (!e.target.value) {
+                if (rebuildingWhenOptions) {
+                    return;
+                }
+                var chosen = e.target.value || '';
+                if (!chosen) {
                     field.when = null;
+                } else if (chosen.indexOf('portal:') === 0) {
+                    var portalId = chosen.substring('portal:'.length);
+                    var catalog = projectFieldById(portalId);
+                    var knownName = catalog && catalog.name ? catalog.name : '';
+                    if (!knownName && field.when && field.when.fieldId === portalId && field.when.fieldName) {
+                        knownName = field.when.fieldName;
+                    }
+                    var optionCount = catalog && catalog.values ? catalog.values.length : 0;
+                    var choice = catalog && (catalog.control === 'select' || catalog.control === 'checkboxes' || catalog.control === 'radio');
+                    field.when = {
+                        fieldId: portalId,
+                        fieldName: knownName,
+                        source: 'portal',
+                        values: [],
+                        negate: false,
+                        _mode: (choice && optionCount) || optionCount ? 'selected' : 'any'
+                    };
                 } else {
-                    field.when = {fieldId: e.target.value, values: [], negate: false, _mode: 'any'};
+                    field.when = {fieldId: chosen, values: [], negate: false, _mode: 'any', source: ''};
+                }
+                refresh();
+            } else if (role === 'when-portal-select' && field.when) {
+                if (!e.target.value) {
+                    field.when._mode = 'selected';
+                    field.when.values = [];
+                } else if (e.target.value === '__any__') {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
+                    field.when.values = [e.target.value];
+                }
+                sync();
+                renderPreview();
+            } else if (role === 'when-portal-radio' && field.when) {
+                if (!e.target.value) {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
+                    field.when.values = [e.target.value];
+                }
+                sync();
+                renderPreview();
+            } else if (role === 'when-portal-any' && field.when) {
+                if (e.target.checked) {
+                    field.when._mode = 'any';
+                    field.when.values = [];
+                } else {
+                    field.when._mode = 'selected';
                 }
                 refresh();
             } else if (role === 'when-mode' && field.when) {
@@ -2403,8 +3118,12 @@
                 }
                 field.when.values = next;
                 field.when._mode = 'selected';
-                sync();
-                renderPreview();
+                if (field.when.source === 'portal') {
+                    refresh();
+                } else {
+                    sync();
+                    renderPreview();
+                }
             }
         }
 
@@ -2425,24 +3144,32 @@
                 return;
             }
             var i;
-            var v;
             for (i = 0; i < block.fields.length; i++) {
-                var when = block.fields[i].when;
-                if (!when || when.fieldId !== fieldId) {
-                    continue;
+                var field = block.fields[i];
+                if (field.id === fieldId) {
+                    field.defaults = renameList(field.defaults, oldValue, newValue);
                 }
-                var next = [];
-                for (v = 0; v < when.values.length; v++) {
-                    if (when.values[v] === oldValue) {
-                        if (newValue) {
-                            next.push(newValue);
-                        }
-                    } else {
-                        next.push(when.values[v]);
-                    }
+                var when = field.when;
+                if (when && when.fieldId === fieldId) {
+                    when.values = renameList(when.values, oldValue, newValue);
                 }
-                when.values = next;
             }
+        }
+
+        function renameList(list, oldValue, newValue) {
+            var next = [];
+            var source = list || [];
+            var v;
+            for (v = 0; v < source.length; v++) {
+                if (source[v] === oldValue) {
+                    if (newValue) {
+                        next.push(newValue);
+                    }
+                } else {
+                    next.push(source[v]);
+                }
+            }
+            return next;
         }
 
         function relaxDependents(block, id) {
@@ -2467,6 +3194,150 @@
             restoreFocus(snap);
         }
 
+        function renderKeepingFocus() {
+            var snap = snapshotFocus();
+            render();
+            restoreFocus(snap);
+        }
+
+        function blockCard(blockIndex) {
+            return host.querySelector('.sdf-block-card[data-block-index="' + blockIndex + '"]');
+        }
+
+        function fieldCard(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            if (!scope) {
+                return null;
+            }
+            var cards = scope.querySelectorAll('.sdf-card');
+            var i;
+            for (i = 0; i < cards.length; i++) {
+                if (parseInt(cards[i].getAttribute('data-field-index'), 10) === fieldIndex) {
+                    return cards[i];
+                }
+            }
+            return null;
+        }
+
+        function patchNodeColor(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!scope || !field) {
+                return;
+            }
+            var color = nodeColor(field, fieldIndex);
+            var nodes = scope.querySelectorAll('.sdf-node');
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                if (parseInt(nodes[i].getAttribute('data-field-index'), 10) !== fieldIndex) {
+                    continue;
+                }
+                nodes[i].style.setProperty('--sdf-accent', color);
+                var head = nodes[i].querySelector('.sdf-node-head');
+                if (head) {
+                    head.style.background = color;
+                }
+                return;
+            }
+        }
+
+        function patchQuestionTitle(blockIndex, fieldIndex) {
+            var scope = blockCard(blockIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!scope || !field) {
+                return;
+            }
+            var nodes = scope.querySelectorAll('.sdf-node');
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                if (parseInt(nodes[i].getAttribute('data-field-index'), 10) !== fieldIndex) {
+                    continue;
+                }
+                var title = nodes[i].querySelector('.sdf-node-title');
+                if (title) {
+                    title.textContent = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+                    if (field.required) {
+                        title.appendChild(el('span', 'sdf-node-req', ' *'));
+                    }
+                }
+                var panel = scope.querySelector('.sdf-float');
+                if (panel && panel.getAttribute('data-field-index') === String(fieldIndex)) {
+                    var floatTitle = panel.querySelector('.sdf-float-title');
+                    if (floatTitle) {
+                        floatTitle.textContent = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+                        if (field.required) {
+                            floatTitle.appendChild(el('span', 'sdf-req', ' *'));
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        function patchIssueName(blockIndex, fieldIndex) {
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            var card = fieldCard(blockIndex, fieldIndex);
+            if (!field || !card || trim(field.issueName)) {
+                return;
+            }
+            var input = card.querySelector('input[data-role="issue-name"]');
+            if (!input || document.activeElement === input) {
+                return;
+            }
+            var auto = automaticIssueName(field);
+            input.value = auto;
+            input.setAttribute('placeholder', auto || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldPending'));
+        }
+
+        function replaceCanvas(blockIndex) {
+            var card = blockCard(blockIndex);
+            if (!card || !config.blocks[blockIndex]) {
+                return;
+            }
+            var current = card.querySelector('.sdf-canvas-wrap');
+            if (!current || !current.parentNode) {
+                return;
+            }
+            var snap = snapshotFocus();
+            var kept = current.querySelector('.sdf-node-editor');
+            var editorScroll = kept ? kept.scrollTop : 0;
+            if (kept && kept.parentNode) {
+                kept.parentNode.removeChild(kept);
+            }
+            var scrolled = current.querySelector('.sdf-canvas');
+            var top = scrolled ? scrolled.scrollTop : 0;
+            var left = scrolled ? scrolled.scrollLeft : 0;
+            var fresh = renderCanvas(config.blocks[blockIndex], blockIndex);
+            var freshEditor = fresh.querySelector('.sdf-node-editor');
+            if (kept && freshEditor && freshEditor.parentNode) {
+                freshEditor.parentNode.replaceChild(kept, freshEditor);
+            }
+            current.parentNode.replaceChild(fresh, current);
+            var next = fresh.querySelector('.sdf-canvas');
+            if (next) {
+                next.scrollTop = top;
+                next.scrollLeft = left;
+            }
+            if (kept) {
+                kept.scrollTop = editorScroll;
+            }
+            restoreFocus(snap);
+            placeFloats();
+        }
+
+        function replaceDefaults(blockIndex, fieldIndex) {
+            var card = fieldCard(blockIndex, fieldIndex);
+            var field = config.blocks[blockIndex] && config.blocks[blockIndex].fields[fieldIndex];
+            if (!card || !field) {
+                return;
+            }
+            var current = card.querySelector('[data-part="defaults"]');
+            if (!current || !current.parentNode) {
+                return;
+            }
+            current.parentNode.replaceChild(renderDefault(field), current);
+        }
+
         function snapshotFocus() {
             var active = document.activeElement;
             if (!active || !active.getAttribute || !app.contains(active)) {
@@ -2484,10 +3355,10 @@
         }
 
         function restoreFocus(snap) {
-            if (!snap || snap.blockIndex < 0 || !snap.role) {
+            if (!snap || snap.blockIndex < 0 || snap.blockIndex !== snap.blockIndex || !snap.role) {
                 return;
             }
-            var scope = host.querySelectorAll('.sdf-block-card')[snap.blockIndex];
+            var scope = blockCard(snap.blockIndex);
             if (!scope) {
                 return;
             }
@@ -2513,14 +3384,25 @@
             if (!found) {
                 return;
             }
-            found.focus();
-            if (snap.start != null && found.setSelectionRange) {
-                try {
-                    found.setSelectionRange(snap.start, snap.end);
-                } catch (err) {
-                    // some input types reject a range
+            focusLater(found, snap.start, snap.end);
+        }
+
+        function focusLater(node, start, end) {
+            function apply() {
+                if (!node || !node.focus || !document.documentElement || !document.documentElement.contains(node)) {
+                    return;
+                }
+                node.focus();
+                if (start != null && node.setSelectionRange) {
+                    try {
+                        node.setSelectionRange(start, end);
+                    } catch (err) {
+                        // some input types reject a range
+                    }
                 }
             }
+            apply();
+            setTimeout(apply, 0);
         }
 
         function focusField(blockIndex, fieldIndex) {
@@ -2544,7 +3426,7 @@
             }
             var input = card.querySelector('input[data-role="label"]');
             if (input) {
-                input.focus();
+                focusLater(input, null, null);
             }
         }
 
@@ -2609,11 +3491,28 @@
             var removed = fields[fieldIndex];
             var parentId = removed.when && removed.when.fieldId;
             fields.splice(fieldIndex, 1);
+            if (selectedField.blockIndex === blockIndex) {
+                if (selectedField.index === fieldIndex) {
+                    selectedField = {blockIndex: -1, index: -1};
+                } else if (selectedField.index > fieldIndex) {
+                    selectedField.index -= 1;
+                }
+            }
             var i;
             for (i = 0; i < fields.length; i++) {
                 if (fields[i].when && fields[i].when.fieldId === removed.id) {
-                    if (parentId) {
+                    if (removed.when && removed.when.source === 'portal') {
+                        fields[i].when = {
+                            fieldId: removed.when.fieldId,
+                            fieldName: removed.when.fieldName || '',
+                            source: 'portal',
+                            values: (removed.when.values || []).slice(),
+                            negate: !!removed.when.negate,
+                            _mode: removed.when._mode || 'any'
+                        };
+                    } else if (parentId) {
                         fields[i].when.fieldId = parentId;
+                        fields[i].when.source = '';
                     } else {
                         fields[i].when = null;
                     }
@@ -2848,6 +3747,11 @@
                 if (trim(block.title)) {
                     section.appendChild(el('h3', 'sdf-title', trim(block.title)));
                 }
+                var parents = externalParents(block);
+                var p;
+                for (p = 0; p < parents.length; p++) {
+                    section.appendChild(buildExternal(parents[p]));
+                }
                 var visible = visibility(block.fields, {});
                 var i;
                 for (i = 0; i < block.fields.length; i++) {
@@ -2867,12 +3771,106 @@
             return root;
         }
 
+        function externalParents(block) {
+            var list = [];
+            var seen = {};
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var when = block.fields[i].when;
+                if (!when || when.source !== 'portal' || !when.fieldId || seen[when.fieldId]) {
+                    continue;
+                }
+                seen[when.fieldId] = true;
+                var catalog = projectFieldById(when.fieldId);
+                var values = [];
+                var known = {};
+                var source = catalog && catalog.values ? catalog.values : [];
+                var v;
+                for (v = 0; v < source.length; v++) {
+                    if (trim(source[v]) && !known[source[v]]) {
+                        known[source[v]] = true;
+                        values.push(source[v]);
+                    }
+                }
+                var saved = when.values || [];
+                for (v = 0; v < saved.length; v++) {
+                    if (trim(saved[v]) && !known[saved[v]]) {
+                        known[saved[v]] = true;
+                        values.push(saved[v]);
+                    }
+                }
+                list.push({
+                    id: when.fieldId,
+                    name: (catalog && catalog.name) || when.fieldName || when.fieldId,
+                    control: catalog && catalog.control,
+                    values: values
+                });
+            }
+            return list;
+        }
+
+        function buildExternal(item) {
+            var wrap = el('div', 'sdf-field sdf-external');
+            wrap.setAttribute('data-sdf-external', '1');
+            wrap.setAttribute('data-sdf-field', item.id);
+            wrap.setAttribute('data-sdf-shown', '1');
+            wrap.appendChild(el('div', 'sdf-label', item.name));
+            var control = item.control || (item.values.length ? 'select' : 'text');
+            if ((control === 'checkboxes' || control === 'radio') && item.values.length) {
+                wrap.setAttribute('data-sdf-type', control === 'radio' ? 'radio' : 'checkbox');
+                var n;
+                for (n = 0; n < item.values.length; n++) {
+                    var line = el('label', 'sdf-option');
+                    var input = document.createElement('input');
+                    input.type = control === 'radio' ? 'radio' : 'checkbox';
+                    input.value = item.values[n];
+                    if (control === 'radio') {
+                        input.name = 'sdf-external-' + item.id;
+                    }
+                    line.appendChild(input);
+                    line.appendChild(document.createTextNode(' ' + item.values[n]));
+                    wrap.appendChild(line);
+                }
+            } else if (item.values.length) {
+                wrap.setAttribute('data-sdf-type', 'select');
+                var select = document.createElement('select');
+                select.className = 'sdf-select';
+                var empty = document.createElement('option');
+                empty.value = '';
+                empty.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.portal.blank')));
+                select.appendChild(empty);
+                var i;
+                for (i = 0; i < item.values.length; i++) {
+                    var option = document.createElement('option');
+                    option.value = item.values[i];
+                    option.appendChild(document.createTextNode(item.values[i]));
+                    select.appendChild(option);
+                }
+                wrap.appendChild(select);
+            } else {
+                wrap.setAttribute('data-sdf-type', 'text');
+                var text = document.createElement('input');
+                text.type = 'text';
+                text.className = 'sdf-input';
+                wrap.appendChild(text);
+            }
+            return wrap;
+        }
+
         function buildField(field, blockId) {
             var wrap = el('div', 'sdf-field');
             wrap.setAttribute('data-sdf-field', field.id);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
-            if (trim(field.label)) {
-                wrap.appendChild(el('div', 'sdf-label', trim(field.label)));
+            if (field.required) {
+                wrap.setAttribute('data-sdf-required', '1');
+            }
+            if (trim(field.label) || field.required) {
+                var caption = el('div', 'sdf-label');
+                caption.appendChild(document.createTextNode(trim(field.label)));
+                if (field.required) {
+                    caption.appendChild(el('span', 'sdf-req', ' *'));
+                }
+                wrap.appendChild(caption);
             }
             var options = field.options || [];
             var i;
@@ -3079,6 +4077,11 @@
             var i;
             for (i = 0; i < nodes.length; i++) {
                 var node = nodes[i];
+                if (node.getAttribute('data-sdf-external') === '1') {
+                    node.setAttribute('data-sdf-shown', '1');
+                    node.className = (' ' + node.className + ' ').replace(' sdf-hidden ', ' ').replace(/^\s+|\s+$/g, '');
+                    continue;
+                }
                 var show = !!visible[node.getAttribute('data-sdf-field')];
                 var was = node.getAttribute('data-sdf-shown') === '1';
                 if (!show && was && block.clearOnHide !== false) {
@@ -3109,7 +4112,15 @@
             }
             var selects = node.getElementsByTagName('select');
             for (i = 0; i < selects.length; i++) {
-                selects[i].selectedIndex = 0;
+                if (selects[i].multiple) {
+                    var opts = selects[i].options;
+                    var n;
+                    for (n = 0; n < opts.length; n++) {
+                        opts[n].selected = false;
+                    }
+                } else {
+                    selects[i].selectedIndex = 0;
+                }
             }
         }
 
@@ -3122,12 +4133,17 @@
             return visible;
         }
 
+        function flatText(value) {
+            return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+        }
+
         function shown(field, visible, values) {
             var when = field.when;
             if (!when || !when.fieldId) {
                 return true;
             }
-            if (!visible[when.fieldId]) {
+            var portal = when.source === 'portal';
+            if (!portal && !visible[when.fieldId]) {
                 return false;
             }
             var current = values[when.fieldId] || [];
@@ -3138,14 +4154,18 @@
             var b;
             if (!expected.length) {
                 for (i = 0; i < current.length; i++) {
-                    if (trim(current[i])) {
+                    if (portal ? flatText(current[i]) : trim(current[i])) {
                         match = true;
                     }
                 }
             } else {
                 for (a = 0; a < current.length; a++) {
                     for (b = 0; b < expected.length; b++) {
-                        if (String(current[a]) === String(expected[b])) {
+                        if (portal) {
+                            if (flatText(current[a]) && flatText(current[a]) === flatText(expected[b])) {
+                                match = true;
+                            }
+                        } else if (String(current[a]) === String(expected[b])) {
                             match = true;
                         }
                     }

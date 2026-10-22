@@ -107,7 +107,7 @@ public class AnswersServiceImpl implements AnswersService {
         }
         publishProperty(issue, document, form);
         portalFormFields.writeOwned(issue, form, rows);
-        issueFieldSync.writeAnswers(issue, form, document.getValues(), adminAccess.currentUser());
+        issueFieldSync.writeAnswers(issue, form, document.getBlocks(), adminAccess.currentUser());
         log.info("Stored {} portal answer(s) on {}", rows.size(), issue.getKey());
     }
 

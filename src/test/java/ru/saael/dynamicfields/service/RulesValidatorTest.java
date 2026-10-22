@@ -178,6 +178,71 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void portalFieldOnTheFirstQuestionIsValid() throws Exception {
+        FormField first = field("field1", "Первый вопрос", FormField.TEXT);
+        Condition condition = new Condition();
+        condition.setSource("portal");
+        condition.setFieldId("customfield_10201");
+        condition.setFieldName("Доступ");
+        condition.setValues(Collections.singletonList("Открытый"));
+        first.setWhen(condition);
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(first)));
+
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Первый вопрос\",\"type\":\"text\","
+                + "\"when\":{\"fieldId\":\"customfield_10201\",\"fieldName\":\"Доступ\","
+                + "\"source\":\"portal\",\"values\":[\"Открытый\"]}}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        Condition when = loaded.getBlocks().get(0).getFields().get(0).getWhen();
+        assertEquals("portal", when.getSource());
+        assertEquals("Доступ", when.getFieldName());
+        assertEquals("customfield_10201", when.getFieldId());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        String stored = mapper.writeValueAsString(loaded);
+        assertTrue(stored, stored.contains("\"source\":\"portal\""));
+        assertTrue(stored, stored.contains("Доступ"));
+    }
+
+    @Test
+    public void requiredFlagRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Организации\",\"type\":\"checkbox\",\"required\":true,"
+                + "\"options\":[\"Медицинский сотрудник\"]}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField field = loaded.getBlocks().get(0).getFields().get(0);
+        assertTrue(field.isRequired());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"required\":true"));
+    }
+
+    @Test
+    public void nodeColorRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Врач\",\"type\":\"text\",\"color\":\"#ff8b00\"}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField field = loaded.getBlocks().get(0).getFields().get(0);
+        assertEquals("#ff8b00", field.getColor());
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"color\":\"#ff8b00\""));
+    }
+
+    @Test
+    public void invalidProjectFieldIsReported() {
+        FormField first = field("field1", "Первый вопрос", FormField.TEXT);
+        Condition condition = new Condition();
+        condition.setSource("portal");
+        condition.setFieldId("not a field");
+        condition.setFieldName("Доступ");
+        condition.setValues(Collections.singletonList("Открытый"));
+        first.setWhen(condition);
+        List<String> errors = RulesValidator.validate(config(first));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("project"));
+    }
+
+    @Test
     public void placeAfterRequiresAFieldName() {
         RulesConfig config = config(field("note", "Note", FormField.TEXT));
         config.getBlocks().get(0).setPlace("after");

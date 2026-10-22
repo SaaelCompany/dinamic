@@ -13,12 +13,16 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Structural validation of portal blocks. A field may depend only on a field listed above it
- * in the same block, which makes cycles impossible. Field ids are unique inside one block.
+ * Structural validation of portal blocks. A question may depend on a question listed above it
+ * in the same block, which makes cycles impossible, or on a field that already exists in Jira.
+ * Field ids are unique inside one block.
  */
 public final class RulesValidator {
 
     private static final Pattern FIELD_ID = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]{0,40}$");
+    /** Jira custom field id, or a short system field id such as priority. */
+    private static final Pattern PROJECT_FIELD_ID = Pattern.compile(
+            "^(?:customfield_\\d+|[A-Za-z][A-Za-z0-9_]{0,40})$");
     private static final List<String> TYPES = Arrays.asList(
             FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.MULTISELECT,
             FormField.TEXT, FormField.TEXTAREA, FormField.NUMBER,
@@ -118,6 +122,10 @@ public final class RulesValidator {
                     errors.add(label + ": \"when.fieldId\" is required");
                 } else if (when.getFieldId().equals(field.getId())) {
                     errors.add(label + ": a field cannot depend on itself");
+                } else if ("portal".equals(when.getSource())) {
+                    if (!PROJECT_FIELD_ID.matcher(when.getFieldId()).matches()) {
+                        errors.add(label + ": project field \"" + when.getFieldId() + "\" is not a Jira field");
+                    }
                 } else if (!earlier.contains(when.getFieldId())) {
                     errors.add(label + ": condition refers to unknown or later field \"" + when.getFieldId() + "\"");
                 }
