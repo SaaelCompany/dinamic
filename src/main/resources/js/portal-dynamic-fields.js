@@ -217,10 +217,19 @@
         wrap.className = 'field-group sdf-field';
         wrap.setAttribute('data-sdf-field', field.id);
         wrap.setAttribute('data-sdf-type', field.type || 'text');
-        if (trim(field.label)) {
+        if (field.required) {
+            wrap.setAttribute('data-sdf-required', '1');
+        }
+        if (trim(field.label) || field.required) {
             var label = document.createElement('label');
             label.className = 'field-label';
             label.appendChild(document.createTextNode(trim(field.label)));
+            if (field.required) {
+                var mark = document.createElement('span');
+                mark.className = 'sdf-req';
+                mark.appendChild(document.createTextNode(' *'));
+                label.appendChild(mark);
+            }
             wrap.appendChild(label);
         }
         var options = field.options || [];
@@ -1574,7 +1583,85 @@
         return null;
     }
 
-    function onActivate(target) {
+    function fieldBox(node) {
+        while (node && node !== document) {
+            if (node.getAttribute && node.getAttribute('data-sdf-field')) {
+                return node;
+            }
+            node = node.parentNode;
+        }
+        return null;
+    }
+
+    function clearRequiredMark(node) {
+        removeClass(node, 'sdf-invalid');
+        var notes = node.getElementsByClassName ? node.getElementsByClassName('sdf-required-error') : [];
+        var copy = [];
+        var i;
+        for (i = 0; i < notes.length; i++) {
+            copy.push(notes[i]);
+        }
+        for (i = 0; i < copy.length; i++) {
+            if (copy[i].parentNode) {
+                copy[i].parentNode.removeChild(copy[i]);
+            }
+        }
+    }
+
+    function missingRequired() {
+        var sections = portalSections();
+        var missing = [];
+        var s;
+        var i;
+        for (s = 0; s < sections.length; s++) {
+            if (hasClass(sections[s], 'sdf-hidden')) {
+                continue;
+            }
+            var nodes = sections[s].querySelectorAll('[data-sdf-required="1"]');
+            for (i = 0; i < nodes.length; i++) {
+                if (hasClass(nodes[i], 'sdf-hidden') || nodes[i].getAttribute('data-sdf-shown') === '0') {
+                    clearRequiredMark(nodes[i]);
+                    continue;
+                }
+                clearRequiredMark(nodes[i]);
+                if (!readField(nodes[i]).length) {
+                    missing.push(nodes[i]);
+                }
+            }
+        }
+        return missing;
+    }
+
+    function showRequired(nodes) {
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+            addClass(nodes[i], 'sdf-invalid');
+            var note = document.createElement('div');
+            note.className = 'error sdf-required-error';
+            note.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.portal.required')));
+            nodes[i].appendChild(note);
+        }
+        if (nodes.length && nodes[0].scrollIntoView) {
+            nodes[0].scrollIntoView(true);
+        }
+    }
+
+    function blockRequired(e) {
+        var missing = missingRequired();
+        if (!missing.length) {
+            return false;
+        }
+        showRequired(missing);
+        if (e && e.preventDefault) {
+            e.preventDefault();
+        }
+        if (e && e.stopPropagation) {
+            e.stopPropagation();
+        }
+        return true;
+    }
+
+    function onActivate(target, e) {
         var node = target;
         if (node && node.nodeType !== 1) {
             node = node.parentNode;
@@ -1591,6 +1678,9 @@
         }
         var formEl = formOf(control);
         if (!formEl || !formEl.querySelector || !formEl.querySelector('[data-sdf-block]')) {
+            return;
+        }
+        if (blockRequired(e)) {
             return;
         }
         syncFieldValue();
@@ -1652,11 +1742,26 @@
         }
         hookTransport();
         document.addEventListener('click', function (e) {
-            onActivate(e.target);
+            onActivate(e.target, e);
+        }, true);
+        document.addEventListener('input', function (e) {
+            var box = fieldBox(e.target);
+            if (box) {
+                clearRequiredMark(box);
+            }
+        }, true);
+        document.addEventListener('change', function (e) {
+            var box = fieldBox(e.target);
+            if (box) {
+                clearRequiredMark(box);
+            }
         }, true);
         document.addEventListener('submit', function (e) {
             var formEl = e.target;
             if (formEl && formEl.querySelector && formEl.querySelector('[data-sdf-block]')) {
+                if (blockRequired(e)) {
+                    return;
+                }
                 syncFieldValue();
                 remember();
                 stripPortalNames();

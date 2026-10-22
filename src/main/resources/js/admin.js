@@ -28,9 +28,10 @@
         var ignorePickUntil = 0;
         var dragLink = null;
         var dragMove = null;
-        var NODE_W = 280;
+        var NODE_W = 360;
         var NODE_HEAD = 42;
         var NODE_ROW = 28;
+        var NODE_EDITOR = 372;
         var portalFields = null;
         var portalFieldsFor = 0;
         var projectFields = null;
@@ -153,6 +154,7 @@
                     options: options,
                     blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
                     hideBlank: !!src.hideBlank,
+                    required: !!src.required,
                     defaults: stringList(src.defaults),
                     when: when
                 });
@@ -316,6 +318,9 @@
                     hideBlank: !!src.hideBlank,
                     defaults: defaults
                 };
+                if (src.required) {
+                    field.required = true;
+                }
                 if (src.jiraFieldId) {
                     field.jiraFieldId = src.jiraFieldId;
                 }
@@ -392,6 +397,16 @@
 
         function hasClass(node, name) {
             return !!node && (' ' + node.className + ' ').indexOf(' ' + name + ' ') !== -1;
+        }
+
+        function insideEditor(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-node-editor')) {
+                    return true;
+                }
+                node = node.parentNode;
+            }
+            return false;
         }
 
         function button(role, text, disabled) {
@@ -477,10 +492,6 @@
             card.appendChild(bar);
             card.appendChild(renderScope(block));
             card.appendChild(renderCanvas(block, blockIndex));
-            var editIndex = editedIndex(block, blockIndex);
-            if (editIndex >= 0) {
-                card.appendChild(renderCard(block, blockIndex, editIndex));
-            }
             return card;
         }
 
@@ -1157,13 +1168,14 @@
         }
 
         function renderCanvas(block, blockIndex) {
+            editedIndex(block, blockIndex);
             var wrap = el('div', 'sdf-canvas-wrap');
             wrap.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeHint')));
             if (pendingLink && pendingLink.blockIndex === blockIndex) {
                 wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeLinking')));
             }
             var canvas = el('div', 'sdf-canvas');
-            var laid = layoutNodes(block);
+            var laid = layoutNodes(block, blockIndex);
             if (!laid.length) {
                 canvas.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
                 wrap.appendChild(canvas);
@@ -1206,15 +1218,19 @@
             return out;
         }
 
-        function nodeBoxHeight(field) {
+        function nodeBoxHeight(field, blockIndex, fieldIndex) {
             var rows = isChoice(field.type) ? filledOptions(field).length : 1;
             if (!rows) {
                 rows = 1;
             }
-            return 8 + NODE_HEAD + rows * NODE_ROW + 8;
+            var height = 8 + NODE_HEAD + rows * NODE_ROW + 8;
+            if (selectedField.blockIndex === blockIndex && selectedField.index === fieldIndex) {
+                height += NODE_EDITOR;
+            }
+            return height;
         }
 
-        function layoutNodes(block) {
+        function layoutNodes(block, blockIndex) {
             var columns = [];
             var i;
             for (i = 0; i < block.fields.length; i++) {
@@ -1241,7 +1257,7 @@
                         index: index,
                         x: 16 + col * (NODE_W + 88),
                         y: y,
-                        h: nodeBoxHeight(field),
+                        h: nodeBoxHeight(field, blockIndex, index),
                         ports: []
                     };
                     var p;
@@ -1353,8 +1369,12 @@
                 kicker = portalKicker(field.when);
             }
             question.appendChild(el('span', 'sdf-node-kicker', kicker));
-            var title = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
-            question.appendChild(el('span', 'sdf-node-title', title));
+            var title = el('span', 'sdf-node-title');
+            title.appendChild(document.createTextNode(trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional')));
+            if (field.required) {
+                title.appendChild(el('span', 'sdf-node-req', ' *'));
+            }
+            question.appendChild(title);
             node.appendChild(question);
             var answers = el('div', 'sdf-node-answers');
             if (isChoice(field.type)) {
@@ -1370,6 +1390,11 @@
                 answers.appendChild(portRow(blockIndex, laid.index, '', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext')));
             }
             node.appendChild(answers);
+            if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
+                var editor = el('div', 'sdf-node-editor');
+                editor.appendChild(renderCard(block, blockIndex, laid.index));
+                node.appendChild(editor);
+            }
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-node-del';
@@ -1448,6 +1473,7 @@
             };
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
+            card.appendChild(renderRequired(field));
             if (isChoice(field.type)) {
                 card.appendChild(renderOptions(field));
             }
@@ -1469,6 +1495,21 @@
             buttons.appendChild(row);
             card.appendChild(buttons);
             return card;
+        }
+
+        function renderRequired(field) {
+            var box = el('div', 'field-group');
+            var label = document.createElement('label');
+            label.className = 'sdf-inline-check';
+            var check = document.createElement('input');
+            check.type = 'checkbox';
+            check.setAttribute('data-role', 'field-required');
+            check.checked = !!field.required;
+            label.appendChild(check);
+            label.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.required')));
+            box.appendChild(label);
+            box.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.requiredHint')));
+            return box;
         }
 
         function group(labelText, control, description) {
@@ -2235,7 +2276,7 @@
         }
 
         function onQuestionDown(e) {
-            if (e.button || roleOf(e.target) !== 'pick-node') {
+            if (e.button || roleOf(e.target) !== 'pick-node' || insideEditor(e.target)) {
                 return;
             }
             var tag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
@@ -2429,7 +2470,7 @@
                 return;
             }
             if (role === 'pick-node') {
-                if (new Date().getTime() < ignorePickUntil) {
+                if (insideEditor(e.target) || new Date().getTime() < ignorePickUntil) {
                     return;
                 }
                 if (e.preventDefault) {
@@ -2681,6 +2722,13 @@
                 }
                 return;
             }
+            if (role === 'field-required') {
+                field.required = !!e.target.checked;
+                sync();
+                patchQuestionTitle(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
+                return;
+            }
             if (role === 'type') {
                 field.type = e.target.value;
                 if (isChoice(field.type)) {
@@ -2909,6 +2957,9 @@
                 var title = nodes[i].querySelector('.sdf-node-title');
                 if (title) {
                     title.textContent = trim(field.label) || AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionOptional');
+                    if (field.required) {
+                        title.appendChild(el('span', 'sdf-node-req', ' *'));
+                    }
                 }
                 return;
             }
@@ -2938,16 +2989,30 @@
             if (!current || !current.parentNode) {
                 return;
             }
+            var snap = snapshotFocus();
+            var kept = current.querySelector('.sdf-node-editor');
+            var editorScroll = kept ? kept.scrollTop : 0;
+            if (kept && kept.parentNode) {
+                kept.parentNode.removeChild(kept);
+            }
             var scrolled = current.querySelector('.sdf-canvas');
             var top = scrolled ? scrolled.scrollTop : 0;
             var left = scrolled ? scrolled.scrollLeft : 0;
             var fresh = renderCanvas(config.blocks[blockIndex], blockIndex);
+            var freshEditor = fresh.querySelector('.sdf-node-editor');
+            if (kept && freshEditor && freshEditor.parentNode) {
+                freshEditor.parentNode.replaceChild(kept, freshEditor);
+            }
             current.parentNode.replaceChild(fresh, current);
             var next = fresh.querySelector('.sdf-canvas');
             if (next) {
                 next.scrollTop = top;
                 next.scrollLeft = left;
             }
+            if (kept) {
+                kept.scrollTop = editorScroll;
+            }
+            restoreFocus(snap);
         }
 
         function replaceDefaults(blockIndex, fieldIndex) {
@@ -3479,8 +3544,16 @@
             var wrap = el('div', 'sdf-field');
             wrap.setAttribute('data-sdf-field', field.id);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
-            if (trim(field.label)) {
-                wrap.appendChild(el('div', 'sdf-label', trim(field.label)));
+            if (field.required) {
+                wrap.setAttribute('data-sdf-required', '1');
+            }
+            if (trim(field.label) || field.required) {
+                var caption = el('div', 'sdf-label');
+                caption.appendChild(document.createTextNode(trim(field.label)));
+                if (field.required) {
+                    caption.appendChild(el('span', 'sdf-req', ' *'));
+                }
+                wrap.appendChild(caption);
             }
             var options = field.options || [];
             var i;

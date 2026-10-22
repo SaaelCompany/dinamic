@@ -88,3 +88,17 @@ form.aui .field-group.sdf-field textarea.textarea,
 .sdf-cf-value {
     display: none !important;
 }
+
+.sdf-req {
+    color: #de350b;
+    font-weight: 700;
+}
+
+.sdf-field.sdf-invalid .field-label,
+.sdf-field.sdf-invalid .sdf-label {
+    color: #de350b;
+}
+
+.sdf-required-error {
+    margin-top: 4px;
+}
