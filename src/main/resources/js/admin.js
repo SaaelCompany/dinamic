@@ -1929,8 +1929,13 @@
                 input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.optionPlaceholder'));
                 input.value = options[i];
                 row.appendChild(input);
-                var remove = button('remove-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'sdf-option-del';
+                remove.setAttribute('data-role', 'remove-option');
                 remove.setAttribute('data-option-index', String(i));
+                remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'));
+                remove.appendChild(document.createTextNode('\u00d7'));
                 row.appendChild(remove);
                 value.appendChild(row);
             }

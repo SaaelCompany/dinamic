@@ -722,11 +722,36 @@ form.aui.sdf-card .buttons-container {
 }
 
 .sdf-option-row {
+    flex-wrap: nowrap;
     margin: 0 0 4px;
 }
 
 .sdf-option-row input[type="text"] {
-    flex: 1 1 160px;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto !important;
+    max-width: none !important;
+}
+
+.sdf-option-del {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    background: #fff;
+    color: #6b778c;
+    font-size: 16px;
+    line-height: 26px;
+    cursor: pointer;
+}
+
+.sdf-option-del:hover {
+    border-color: #de350b;
+    background: #ffebe6;
+    color: #de350b;
 }
 
 .sdf-when-value > .sdf-project-filter,
