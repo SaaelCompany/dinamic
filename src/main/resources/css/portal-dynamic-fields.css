@@ -102,3 +102,181 @@ form.aui .field-group.sdf-field textarea.textarea,
 .sdf-required-error {
     margin-top: 4px;
 }
+
+.sdf-field {
+    overflow: visible;
+}
+
+.sdf-picker {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    font-family: inherit;
+    font-size: 14px;
+    color: #172b4d;
+}
+
+.sdf-field select.sdf-native {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+}
+
+.sdf-picker-trigger {
+    position: relative;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    height: 32px;
+    margin: 0;
+    padding: 0 28px 0 8px;
+    border: 1px solid #eceef0;
+    border-radius: 3px;
+    background: #eceef0;
+    color: #172b4d;
+    font: inherit;
+    font-size: 14px;
+    line-height: 30px;
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+}
+
+.sdf-picker-trigger:focus-visible {
+    outline: 2px solid #4c9aff;
+    outline-offset: 1px;
+}
+
+.sdf-picker-value {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.sdf-picker-caret {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    margin-top: -5px;
+    border-right: 2px solid #344563;
+    border-bottom: 2px solid #344563;
+    transform: rotate(45deg);
+}
+
+.sdf-picker.is-open .sdf-picker-trigger {
+    background: #344563;
+    border-color: #344563;
+    color: #fff;
+    border-radius: 3px 3px 0 0;
+}
+
+.sdf-picker.is-open .sdf-picker-caret {
+    border-color: #fff;
+    margin-top: -2px;
+}
+
+.sdf-picker-menu {
+    display: none;
+    position: fixed;
+    z-index: 4000;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 8px 0 4px;
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 0 0 3px 3px;
+    box-shadow: 0 8px 16px rgba(9, 30, 66, 0.18);
+}
+
+.sdf-picker.is-open .sdf-picker-menu {
+    display: block;
+}
+
+.sdf-picker-search {
+    padding: 0 8px 6px;
+}
+
+form.aui .sdf-picker input.sdf-picker-query,
+.sdf-picker input.sdf-picker-query {
+    box-sizing: border-box;
+    display: block;
+    width: 100% !important;
+    height: 32px !important;
+    max-width: none;
+    margin: 0;
+    padding: 0 32px 0 8px;
+    border: 2px solid #dfe1e6;
+    border-radius: 3px;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.25' fill='none' stroke='%236B778C' stroke-width='1.6'/%3E%3Cpath d='M9.6 9.6 L13 13' stroke='%236B778C' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px 16px;
+    box-shadow: none;
+    color: #172b4d;
+    font: inherit;
+    font-size: 14px;
+    line-height: 28px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+form.aui .sdf-picker.is-open input.sdf-picker-query,
+.sdf-picker.is-open input.sdf-picker-query,
+form.aui .sdf-picker input.sdf-picker-query:focus,
+.sdf-picker input.sdf-picker-query:focus {
+    border-color: #4c9aff;
+}
+
+.sdf-picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 224px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.sdf-picker-option,
+.sdf-picker-empty {
+    margin: 0;
+    padding: 6px 12px;
+    color: #172b4d;
+    font-size: 14px;
+    line-height: 20px;
+    cursor: pointer;
+}
+
+.sdf-picker-option.is-active {
+    background: #eceef0;
+}
+
+.sdf-picker-empty {
+    color: #6b778c;
+    cursor: default;
+}
+
+.sdf-field.sdf-invalid .sdf-picker-trigger {
+    box-shadow: inset 0 0 0 1px #de350b;
+}
+
+.sdf-picker-list::-webkit-scrollbar {
+    width: 12px;
+}
+
+.sdf-picker-list::-webkit-scrollbar-thumb {
+    background: #97a0af;
+    border-radius: 8px;
+    border: 3px solid #fff;
+}
