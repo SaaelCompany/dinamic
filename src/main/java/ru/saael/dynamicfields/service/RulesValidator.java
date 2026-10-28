@@ -1,6 +1,7 @@
 package ru.saael.dynamicfields.service;
 
 import ru.saael.dynamicfields.model.Condition;
+import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
@@ -121,6 +122,7 @@ public final class RulesValidator {
                 }
             }
             checkCondition(errors, label, field.getWhen(), field.getId(), earlier, "when");
+            checkAfter(errors, label, field.getAfter(), field.getId(), list, i);
             if (!isBlank(field.getId())) {
                 earlier.add(field.getId());
             }
@@ -148,6 +150,51 @@ public final class RulesValidator {
         }
         for (int i = 0; i < when.getAlso().size(); i++) {
             checkCondition(errors, label, when.getAlso().get(i), selfId, earlier, path + ".also[" + i + "]");
+        }
+    }
+
+    private static void checkAfter(List<String> errors, String label, FieldAfter after, String selfId,
+            List<FormField> fields, int index) {
+        if (after == null) {
+            return;
+        }
+        if (isBlank(after.getFieldId())) {
+            errors.add(label + ": \"after.fieldId\" is required");
+            return;
+        }
+        if (after.getFieldId().equals(selfId)) {
+            errors.add(label + ": a field cannot be placed after itself");
+            return;
+        }
+        FormField host = null;
+        for (int i = 0; i < index; i++) {
+            FormField candidate = fields.get(i);
+            if (candidate != null && after.getFieldId().equals(candidate.getId())) {
+                host = candidate;
+            }
+        }
+        if (host == null) {
+            errors.add(label + ": placement refers to unknown or later field \"" + after.getFieldId() + "\"");
+            return;
+        }
+        if (!FormField.CHECKBOX.equals(host.getType()) && !FormField.RADIO.equals(host.getType())) {
+            errors.add(label + ": a question can sit between the rows of a checkbox or radio field only");
+            return;
+        }
+        if (isBlank(after.getOption())) {
+            errors.add(label + ": \"after.option\" is required");
+            return;
+        }
+        boolean found = false;
+        if (host.getOptions() != null) {
+            for (String option : host.getOptions()) {
+                if (after.getOption().equals(option)) {
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            errors.add(label + ": placement option \"" + after.getOption() + "\" is not on the field");
         }
     }
 

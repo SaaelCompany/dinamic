@@ -352,6 +352,10 @@
     }
 
     function followAnchor(field, byId) {
+        var placed = placedAfter(field, byId);
+        if (placed) {
+            return placed;
+        }
         var seen = {};
         var current = field;
         while (current && current.when && current.when.fieldId) {
@@ -383,6 +387,17 @@
             current = parent;
         }
         return null;
+    }
+
+    function placedAfter(field, byId) {
+        if (!field || !field.after || !field.after.fieldId || !trim(field.after.option)) {
+            return null;
+        }
+        var host = byId[field.after.fieldId];
+        if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
+            return null;
+        }
+        return {portal: false, fieldId: host.id, values: [trim(field.after.option)]};
     }
 
     function anchorHost(section, anchor) {

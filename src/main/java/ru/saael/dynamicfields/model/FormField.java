@@ -48,6 +48,8 @@ public class FormField {
     private List<String> defaults = new ArrayList<String>();
     /** {@code null} — the field is always visible. Otherwise it is visible only while the condition holds. */
     private Condition when;
+    /** {@code null} — the question stays in the block order. Otherwise it is drawn after that answer and stays visible. */
+    private FieldAfter after;
 
     public String getId() {
         return id;
@@ -160,6 +162,14 @@ public class FormField {
 
     public void setWhen(Condition when) {
         this.when = when;
+    }
+
+    public FieldAfter getAfter() {
+        return after;
+    }
+
+    public void setAfter(FieldAfter after) {
+        this.after = after;
     }
 
     @JsonIgnore
