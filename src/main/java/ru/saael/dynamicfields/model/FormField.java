@@ -56,6 +56,8 @@ public class FormField {
     private Condition when;
     /** {@code null} — the question stays in the block order. Otherwise it is drawn after that answer and stays visible. */
     private FieldAfter after;
+    /** {@code null} — the question stays in the block order. Otherwise it is drawn between the rows of that field. */
+    private FieldAmong among;
 
     public String getId() {
         return id;
@@ -184,6 +186,14 @@ public class FormField {
 
     public void setAfter(FieldAfter after) {
         this.after = after;
+    }
+
+    public FieldAmong getAmong() {
+        return among;
+    }
+
+    public void setAmong(FieldAmong among) {
+        this.among = among;
     }
 
     @JsonIgnore

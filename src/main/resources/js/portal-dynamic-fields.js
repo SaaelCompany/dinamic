@@ -306,6 +306,97 @@
         }
         placeBetween(root, cfg.fields);
         placeNests(root);
+        placeAmong(root, cfg.fields);
+    }
+
+    function amongSlot(fieldId, option) {
+        var slot = document.createElement('div');
+        slot.className = 'sdf-under';
+        slot.setAttribute('data-sdf-among', fieldId);
+        slot.setAttribute('data-sdf-among-at', option || '');
+        return slot;
+    }
+
+    function placeAmong(section, fields) {
+        if (!section || !section.querySelectorAll || !fields) {
+            return;
+        }
+        var i;
+        for (i = 0; i < fields.length; i++) {
+            var among = fields[i].among;
+            if (!among || !among.fieldId) {
+                continue;
+            }
+            var node = nodeByHome(section, fields[i].id);
+            var slots = section.querySelectorAll('[data-sdf-among]');
+            var slot = null;
+            var s;
+            for (s = 0; s < slots.length; s++) {
+                if (slots[s].getAttribute('data-sdf-among') !== among.fieldId) {
+                    continue;
+                }
+                var at = slots[s].getAttribute('data-sdf-among-at') || '';
+                if (among.before ? !at : at === trim(among.option || '')) {
+                    slot = slots[s];
+                }
+            }
+            if (!node || !slot || node === slot || nodeContains(node, slot)) {
+                continue;
+            }
+            if (node.parentNode !== slot) {
+                slot.appendChild(node);
+            }
+        }
+    }
+
+    function liftNests(fields) {
+        var i;
+        var o;
+        for (i = 0; i < fields.length; i++) {
+            var host = fields[i];
+            var nests = host.nests || [];
+            var options = host.options || [];
+            var hadNest = false;
+            var previous = '';
+            var before = true;
+            var kept = [];
+            for (o = 0; o < options.length; o++) {
+                var nest = trim(nests[o] || '');
+                var text = trim(options[o] || '');
+                if (nest) {
+                    hadNest = true;
+                    var child = null;
+                    var c;
+                    for (c = 0; c < fields.length; c++) {
+                        if (fields[c].id === nest) {
+                            child = fields[c];
+                        }
+                    }
+                    if (child && !child.among) {
+                        child.among = before
+                            ? {fieldId: host.id, option: '', before: true}
+                            : {fieldId: host.id, option: previous, before: false};
+                    }
+                }
+                if (text) {
+                    kept.push(options[o]);
+                    previous = text;
+                    before = false;
+                }
+            }
+            if (hadNest && (host.type === 'checkbox' || host.type === 'radio')) {
+                host.options = kept.length ? kept : [''];
+                host.nests = [];
+            }
+        }
+    }
+
+    function migrateAmong(cfg) {
+        var blocks = blocksOf(cfg);
+        var b;
+        for (b = 0; b < blocks.length; b++) {
+            liftNests(blocks[b].fields || []);
+        }
     }
 
     function placeNests(section) {
@@ -1137,15 +1228,8 @@
         if (field.type === 'checkbox' || field.type === 'radio') {
             var choices = document.createElement('div');
             choices.className = 'sdf-choices';
-            var nests = field.nests || [];
+            choices.appendChild(amongSlot(field.id, ''));
             for (i = 0; i < options.length; i++) {
-                if (trim(nests[i] || '')) {
-                    var slot = document.createElement('div');
-                    slot.className = 'sdf-under';
-                    slot.setAttribute('data-sdf-nest', trim(nests[i]));
-                    choices.appendChild(slot);
-                    continue;
-                }
                 if (!trim(options[i])) {
                     continue;
                 }
@@ -1168,6 +1252,7 @@
                 line.appendChild(input);
                 line.appendChild(caption);
                 choices.appendChild(line);
+                choices.appendChild(amongSlot(field.id, trim(options[i])));
             }
             wrap.appendChild(choices);
         } else if (field.type === 'select' || field.type === 'multiselect') {
@@ -2846,6 +2931,7 @@
                 } catch (e) {
                     config = null;
                 }
+                migrateAmong(config);
             }
             debug('config', status, blocksOf(config).length);
             onTick();
@@ -2872,6 +2958,7 @@
                         } catch (e) {
                             config = null;
                         }
+                        migrateAmong(config);
                     }
                     removeForm();
                     onTick();
