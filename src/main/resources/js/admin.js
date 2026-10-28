@@ -1522,7 +1522,10 @@
             var wrap = el('div', 'sdf-canvas-wrap');
             wrap.appendChild(el('p', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeHint')));
             if (pendingLink && pendingLink.blockIndex === blockIndex) {
-                wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeLinking')));
+                var bannerKey = pendingLink.kind === 'nest'
+                    ? 'ru.saael.dynamicfields.admin.builder.nestLinking'
+                    : 'ru.saael.dynamicfields.admin.builder.nodeLinking';
+                wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText(bannerKey)));
             }
             var canvas = el('div', 'sdf-canvas');
             var laid = layoutNodes(block, blockIndex);
@@ -1608,12 +1611,13 @@
                 var nest = trim(nests[i] || '');
                 if (nest) {
                     rows.push({
+                        index: i,
                         option: '',
                         nest: nest,
                         text: AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField') + ': ' + nestedTitle(block, nest)
                     });
                 } else if (trim(options[i])) {
-                    rows.push({option: trim(options[i]), nest: '', text: trim(options[i])});
+                    rows.push({index: i, option: trim(options[i]), nest: '', text: trim(options[i])});
                 }
             }
             return rows;
@@ -1638,6 +1642,7 @@
             var y = NODE_HEAD + nodeExtra(field);
             for (i = 0; i < rows.length; i++) {
                 bands.push({
+                    index: rows[i].index,
                     option: rows[i].option,
                     nest: rows[i].nest,
                     text: rows[i].text,
@@ -1874,7 +1879,8 @@
                         body.appendChild(nestPortRow(blockIndex, laid.index, nestIndexOf(field, band.nest), band.text));
                     } else {
                         var caption = isChoice(field.type) ? band.option : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext');
-                        body.appendChild(portRow(blockIndex, laid.index, isChoice(field.type) ? band.option : '', caption));
+                        var insertAfter = (field.type === 'checkbox' || field.type === 'radio') ? band.index : -1;
+                        body.appendChild(portRow(blockIndex, laid.index, isChoice(field.type) ? band.option : '', caption, insertAfter));
                     }
                 }
             }
@@ -1902,16 +1908,42 @@
             port.setAttribute('data-role', 'link-nest');
             port.setAttribute('data-nest-index', String(nestIndex));
             port.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestLink'));
-            if (pendingLink && pendingLink.kind === 'nest' && pendingLink.blockIndex === blockIndex && pendingLink.fieldIndex === fieldIndex && pendingLink.nestIndex === nestIndex) {
+            if (nestArmed(blockIndex, fieldIndex, nestIndex, -1)) {
                 port.className += ' sdf-port-armed';
             }
             row.appendChild(port);
             return row;
         }
 
-        function portRow(blockIndex, fieldIndex, option, text) {
+        function nestArmed(blockIndex, fieldIndex, nestIndex, insertAfter) {
+            if (!pendingLink || pendingLink.kind !== 'nest') {
+                return false;
+            }
+            if (pendingLink.blockIndex !== blockIndex || pendingLink.fieldIndex !== fieldIndex) {
+                return false;
+            }
+            var pendingNest = pendingLink.nestIndex == null ? -1 : pendingLink.nestIndex;
+            var pendingInsert = pendingLink.insertAfter == null ? -1 : pendingLink.insertAfter;
+            var wantedInsert = insertAfter == null ? -1 : insertAfter;
+            return pendingNest === nestIndex && pendingInsert === wantedInsert;
+        }
+
+        function portRow(blockIndex, fieldIndex, option, text, insertAfter) {
             var row = el('div', 'sdf-port-row');
             row.appendChild(el('span', 'sdf-port-text', text));
+            if (insertAfter != null && insertAfter >= 0) {
+                var nest = document.createElement('button');
+                nest.type = 'button';
+                nest.className = 'sdf-port sdf-port-field sdf-port-insert';
+                nest.setAttribute('data-role', 'link-nest');
+                nest.setAttribute('data-nest-index', '-1');
+                nest.setAttribute('data-insert-after', String(insertAfter));
+                nest.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestInsert'));
+                if (nestArmed(blockIndex, fieldIndex, -1, insertAfter)) {
+                    nest.className += ' sdf-port-armed';
+                }
+                row.appendChild(nest);
+            }
             var add = document.createElement('button');
             add.type = 'button';
             add.className = 'sdf-port-add';
@@ -3081,10 +3113,27 @@
             return '';
         }
 
+        function insertNestAfter(host, optionIndex, childId) {
+            alignNests(host);
+            var at = optionIndex + 1;
+            if (at < 0) {
+                at = 0;
+            }
+            if (at > host.options.length) {
+                at = host.options.length;
+            }
+            while (at < host.options.length && trim(host.nests[at] || '')) {
+                at++;
+            }
+            host.options.splice(at, 0, '');
+            host.nests.splice(at, 0, childId);
+        }
+
         function attachNest(blockIndex, hostIndex, nestIndex, childIndex) {
             var fields = config.blocks[blockIndex].fields;
             var host = fields[hostIndex];
             var child = fields[childIndex];
+            var insertAfter = pendingLink && pendingLink.insertAfter != null ? pendingLink.insertAfter : -1;
             pendingLink = null;
             if (!host || !child || hostIndex === childIndex) {
                 return;
@@ -3092,13 +3141,15 @@
             if (host.type !== 'checkbox' && host.type !== 'radio') {
                 return;
             }
-            if (embeds(config.blocks[blockIndex], child.id, host.id) || nestTaken(config.blocks[blockIndex], host.id, nestIndex, child.id)) {
+            if (embeds(config.blocks[blockIndex], child.id, host.id) || nestTaken(config.blocks[blockIndex], host.id, insertAfter >= 0 ? -1 : nestIndex, child.id)) {
                 showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
                 refresh();
                 return;
             }
             alignNests(host);
-            if (nestIndex >= 0 && nestIndex < host.options.length) {
+            if (insertAfter >= 0) {
+                insertNestAfter(host, insertAfter, child.id);
+            } else if (nestIndex >= 0 && nestIndex < host.options.length) {
                 host.nests[nestIndex] = child.id;
                 host.options[nestIndex] = '';
             } else {
@@ -3531,7 +3582,15 @@
                 if (isNaN(nestIndex)) {
                     nestIndex = -1;
                 }
-                if (pendingLink && pendingLink.kind === 'nest' && pendingLink.blockIndex === nestSource.blockIndex && pendingLink.fieldIndex === nestSource.fieldIndex && pendingLink.nestIndex === nestIndex) {
+                var insertAfter = -1;
+                var rawInsert = e.target.getAttribute('data-insert-after');
+                if (rawInsert != null && rawInsert !== '') {
+                    insertAfter = parseInt(rawInsert, 10);
+                    if (isNaN(insertAfter)) {
+                        insertAfter = -1;
+                    }
+                }
+                if (nestArmed(nestSource.blockIndex, nestSource.fieldIndex, nestIndex, insertAfter)) {
                     pendingLink = null;
                 } else {
                     pendingLink = {
@@ -3539,7 +3598,8 @@
                         blockIndex: nestSource.blockIndex,
                         fieldIndex: nestSource.fieldIndex,
                         option: '',
-                        nestIndex: nestIndex
+                        nestIndex: nestIndex,
+                        insertAfter: insertAfter
                     };
                     selectedField = {blockIndex: nestSource.blockIndex, index: nestSource.fieldIndex};
                 }
