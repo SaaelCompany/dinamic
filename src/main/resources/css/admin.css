@@ -889,6 +889,11 @@ form.aui.sdf-card .buttons-container {
     display: contents;
 }
 
+.sdf-preview .sdf-choices > .sdf-field.sdf-rowfield > label,
+.sdf-preview .sdf-under > .sdf-field.sdf-rowfield > label {
+    display: none;
+}
+
 .sdf-preview .sdf-field.sdf-rowfield.sdf-hidden {
     display: none !important;
 }

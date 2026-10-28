@@ -286,35 +286,37 @@
         placeBetween(root, cfg.fields);
     }
 
-    // A checkbox or radio with no name continues the previous choice list:
-    // Доступ А, Доступ Б, then Строка А.
-    function namelessChoiceHost(field, fields, index, byId) {
-        if (!field || trim(field.label) || (field.type !== 'checkbox' && field.type !== 'radio')) {
-            return null;
-        }
-        if (field.after && field.after.fieldId) {
-            var linked = byId[field.after.fieldId];
-            if (linked && (linked.type === 'checkbox' || linked.type === 'radio')) {
-                return linked;
-            }
-        }
-        var j;
-        for (j = index - 1; j >= 0; j--) {
-            var prev = fields[j];
-            if (!prev || !prev.id) {
-                continue;
-            }
-            if (prev.type === 'checkbox' || prev.type === 'radio') {
-                return prev;
-            }
-            if (trim(prev.label)) {
-                return null;
+    function configField(id) {
+        var blocks = blocksOf(config);
+        var b;
+        var f;
+        for (b = 0; b < blocks.length; b++) {
+            var fields = blocks[b] && blocks[b].fields ? blocks[b].fields : [];
+            for (f = 0; f < fields.length; f++) {
+                if (fields[f] && fields[f].id === id) {
+                    return fields[f];
+                }
             }
         }
         return null;
     }
 
-    function parkNamelessRow(section, field, hostField) {
+    // Checkbox and radio rows join the host list. Any other question stays its own field there.
+    function rowsInline(field, byId) {
+        if (!field || !field.after || !field.after.fieldId) {
+            return false;
+        }
+        if (field.type !== 'checkbox' && field.type !== 'radio') {
+            return false;
+        }
+        var host = byId && byId[field.after.fieldId];
+        if (!host) {
+            host = configField(field.after.fieldId);
+        }
+        return !!(host && (host.type === 'checkbox' || host.type === 'radio'));
+    }
+
+    function parkAtEnd(section, field, hostField, flatten) {
         var node = nodeByHome(section, field.id);
         var host = nodeByHome(section, hostField.id);
         if (!node || !host || host === node || nodeContains(node, host)) {
@@ -324,10 +326,14 @@
         if (!choices || nodeContains(node, choices)) {
             return false;
         }
-        if (node.parentNode !== choices) {
+        if (choices.lastChild !== node) {
             choices.appendChild(node);
         }
-        addClass(node, 'sdf-rowfield');
+        if (flatten) {
+            addClass(node, 'sdf-rowfield');
+        } else {
+            removeClass(node, 'sdf-rowfield');
+        }
         return true;
     }
 
@@ -345,9 +351,11 @@
             }
         }
         for (i = 0; i < fields.length; i++) {
-            var hostField = namelessChoiceHost(fields[i], fields, i, byId);
-            if (hostField && parkNamelessRow(section, fields[i], hostField)) {
-                continue;
+            var placed = fields[i] && fields[i].after;
+            if (placed && placed.fieldId && !trim(placed.option) && byId[placed.fieldId]) {
+                if (parkAtEnd(section, fields[i], byId[placed.fieldId], rowsInline(fields[i], byId))) {
+                    continue;
+                }
             }
             var anchor = followAnchor(fields[i], byId);
             if (!anchor) {
@@ -365,7 +373,7 @@
             if (node.parentNode !== slot) {
                 slot.appendChild(node);
             }
-            if (fields[i].type === 'checkbox' || fields[i].type === 'radio') {
+            if (rowsInline(fields[i], byId)) {
                 addClass(node, 'sdf-rowfield');
             } else {
                 removeClass(node, 'sdf-rowfield');
@@ -2273,24 +2281,60 @@
         return lines;
     }
 
-    // A nameless choice continues the previous one, each selected row on its own line.
+    function insertLines(prev, option, lines) {
+        var at = prev.lines.length;
+        var i;
+        if (option) {
+            for (i = 0; i < prev.lines.length; i++) {
+                if (prev.lines[i] === option) {
+                    at = i + 1;
+                }
+            }
+        }
+        for (i = lines.length - 1; i >= 0; i--) {
+            prev.lines.splice(at, 0, lines[i]);
+        }
+        prev.value = prev.lines.join('\n');
+    }
+
+    // Rows placed inside another field stay in that list. A separate field keeps its own row.
     function presentRows(rows) {
         var ordered = detailRows(rows);
         var out = [];
         var i;
+        var j;
         for (i = 0; i < ordered.length; i++) {
             var row = ordered[i];
             if (!row) {
                 continue;
             }
             var lines = choiceLines(row);
-            if (!trim(row.label) && isChoiceType(row.type) && lines.length && out.length && isChoiceType(out[out.length - 1].type)) {
-                var prev = out[out.length - 1];
-                var j;
-                for (j = 0; j < lines.length; j++) {
-                    prev.lines.push(lines[j]);
+            var field = configField(row.fieldId);
+            if (rowsInline(field, null) && lines.length) {
+                var hostId = field.after.fieldId;
+                var prev = null;
+                var p;
+                for (p = 0; p < out.length; p++) {
+                    if (out[p].fieldId === hostId) {
+                        prev = out[p];
+                    }
                 }
-                prev.value = prev.lines.join('\n');
+                if (!prev) {
+                    var host = configField(hostId);
+                    prev = {
+                        owner: row.owner || '',
+                        fieldId: hostId,
+                        label: host && host.label ? host.label : '',
+                        type: host && host.type ? host.type : 'checkbox',
+                        lines: [],
+                        value: ''
+                    };
+                    out.push(prev);
+                }
+                if (!prev.lines) {
+                    prev.lines = [];
+                }
+                insertLines(prev, trim(field.after.option), lines);
                 continue;
             }
             var shown = [];

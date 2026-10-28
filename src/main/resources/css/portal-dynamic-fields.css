@@ -79,6 +79,13 @@ form.aui .sdf-under > .field-group.sdf-field,
     display: contents;
 }
 
+.sdf-choices > .field-group.sdf-field.sdf-rowfield > label,
+.sdf-choices > .field-group.sdf-field.sdf-rowfield > .sdf-help,
+.sdf-under > .field-group.sdf-field.sdf-rowfield > label,
+.sdf-under > .field-group.sdf-field.sdf-rowfield > .sdf-help {
+    display: none;
+}
+
 .sdf-field.sdf-rowfield.sdf-hidden {
     display: none !important;
 }

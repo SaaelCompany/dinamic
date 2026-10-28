@@ -192,7 +192,7 @@
         }
 
         function copyAfter(src) {
-            if (!src || !src.fieldId || !trim(src.option)) {
+            if (!src || !src.fieldId) {
                 return null;
             }
             return {fieldId: String(src.fieldId), option: trim(src.option)};
@@ -268,9 +268,6 @@
                 return null;
             }
             var option = trim(after.option);
-            if (!option) {
-                return null;
-            }
             var host = null;
             var j;
             for (j = 0; j < fields.length; j++) {
@@ -281,7 +278,7 @@
             if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
                 return null;
             }
-            if (!contains(host.options || [], option)) {
+            if (option && !contains(host.options || [], option)) {
                 return null;
             }
             return {fieldId: host.id, option: option};
@@ -1644,6 +1641,10 @@
                 if (parentAt < 0) {
                     return;
                 }
+                if (placement && !trim(binding.option)) {
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h - 10}, leftOf(indexAt[fieldIndex]), fieldIndex);
+                    return;
+                }
                 var values = placement ? [binding.option] : (binding.values || []);
                 if (!placement && (!values.length || binding._mode === 'any')) {
                     line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[fieldIndex]), fieldIndex);
@@ -1810,6 +1811,110 @@
             return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text');
         }
 
+        function earlierChoices(block, index) {
+            var out = [];
+            var i;
+            for (i = 0; i < index; i++) {
+                var field = block.fields[i];
+                if (field && (field.type === 'checkbox' || field.type === 'radio')) {
+                    out.push(field);
+                }
+            }
+            return out;
+        }
+
+        function renderPlace(block, field, index) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeMode')));
+            var value = el('div', 'sdf-field-value');
+            var hosts = earlierChoices(block, index);
+            var inside = !!(field.after && field.after.fieldId);
+            var separate = document.createElement('label');
+            separate.className = 'sdf-inline-check';
+            var separateInput = document.createElement('input');
+            separateInput.type = 'radio';
+            separateInput.name = 'sdf-place-' + field.id;
+            separateInput.setAttribute('data-role', 'place-mode');
+            separateInput.value = 'separate';
+            separateInput.checked = !inside;
+            separate.appendChild(separateInput);
+            separate.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeSeparate')));
+            value.appendChild(separate);
+            var rowsLabel = document.createElement('label');
+            rowsLabel.className = 'sdf-inline-check';
+            var rowsInput = document.createElement('input');
+            rowsInput.type = 'radio';
+            rowsInput.name = 'sdf-place-' + field.id;
+            rowsInput.setAttribute('data-role', 'place-mode');
+            rowsInput.value = 'rows';
+            rowsInput.checked = inside;
+            rowsInput.disabled = !hosts.length && !inside;
+            rowsLabel.appendChild(rowsInput);
+            rowsLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeInside')));
+            value.appendChild(rowsLabel);
+            if (inside) {
+                var hostSelect = document.createElement('select');
+                hostSelect.className = 'select';
+                hostSelect.setAttribute('data-role', 'place-host');
+                var h;
+                var known = false;
+                for (h = 0; h < hosts.length; h++) {
+                    var hostOption = document.createElement('option');
+                    hostOption.value = hosts[h].id;
+                    hostOption.appendChild(document.createTextNode(trim(hosts[h].label) || hosts[h].id));
+                    if (hosts[h].id === field.after.fieldId) {
+                        hostOption.selected = true;
+                        known = true;
+                    }
+                    hostSelect.appendChild(hostOption);
+                }
+                if (!known) {
+                    var missing = document.createElement('option');
+                    missing.value = field.after.fieldId;
+                    missing.selected = true;
+                    missing.appendChild(document.createTextNode(field.after.fieldId));
+                    hostSelect.appendChild(missing);
+                }
+                value.appendChild(hostSelect);
+                var rowSelect = document.createElement('select');
+                rowSelect.className = 'select';
+                rowSelect.setAttribute('data-role', 'place-row');
+                var end = document.createElement('option');
+                end.value = '';
+                end.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeEnd')));
+                if (!trim(field.after.option)) {
+                    end.selected = true;
+                }
+                rowSelect.appendChild(end);
+                var hostField = null;
+                for (h = 0; h < hosts.length; h++) {
+                    if (hosts[h].id === field.after.fieldId) {
+                        hostField = hosts[h];
+                    }
+                }
+                var options = hostField && hostField.options ? hostField.options : [];
+                var o;
+                for (o = 0; o < options.length; o++) {
+                    if (!trim(options[o])) {
+                        continue;
+                    }
+                    var rowOption = document.createElement('option');
+                    rowOption.value = options[o];
+                    rowOption.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterRow', options[o])));
+                    if (options[o] === field.after.option) {
+                        rowOption.selected = true;
+                    }
+                    rowSelect.appendChild(rowOption);
+                }
+                value.appendChild(rowSelect);
+            } else if (!hosts.length) {
+                value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeNone')));
+            }
+            value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeHint')));
+            box.appendChild(value);
+            return box;
+        }
+
         function renderCard(block, blockIndex, index) {
             var field = block.fields[index];
             var card = el('form', 'sdf-card aui');
@@ -1832,6 +1937,7 @@
             card.appendChild(renderDefault(field));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldId'), idInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.automationHint')));
             card.appendChild(renderWhen(block, field, index));
+            card.appendChild(renderPlace(block, field, index));
             var buttons = el('div', 'buttons-container');
             var row = el('div', 'buttons');
             row.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
@@ -3408,6 +3514,36 @@
                 renderPreview();
                 return;
             }
+            if (role === 'place-mode') {
+                if (e.target.value === 'separate') {
+                    field.after = null;
+                } else {
+                    var hosts = earlierChoices(block, loc.fieldIndex);
+                    if (!hosts.length) {
+                        return;
+                    }
+                    field.after = {fieldId: hosts[0].id, option: ''};
+                }
+                refresh();
+                return;
+            }
+            if (role === 'place-host') {
+                if (!field.after) {
+                    field.after = {fieldId: '', option: ''};
+                }
+                field.after.fieldId = e.target.value;
+                field.after.option = '';
+                refresh();
+                return;
+            }
+            if (role === 'place-row') {
+                if (!field.after) {
+                    return;
+                }
+                field.after.option = e.target.value;
+                refresh();
+                return;
+            }
             if (role === 'type') {
                 field.type = e.target.value;
                 if (isChoice(field.type)) {
@@ -4736,33 +4872,18 @@
             return true;
         }
 
-        function namelessChoiceHost(field, fields, index, byId) {
-            if (!field || trim(field.label) || (field.type !== 'checkbox' && field.type !== 'radio')) {
-                return null;
+        function rowsInline(field, byId) {
+            if (!field || !field.after || !field.after.fieldId) {
+                return false;
             }
-            if (field.after && field.after.fieldId) {
-                var linked = byId[field.after.fieldId];
-                if (linked && (linked.type === 'checkbox' || linked.type === 'radio')) {
-                    return linked;
-                }
+            if (field.type !== 'checkbox' && field.type !== 'radio') {
+                return false;
             }
-            var j;
-            for (j = index - 1; j >= 0; j--) {
-                var prev = fields[j];
-                if (!prev || !prev.id) {
-                    continue;
-                }
-                if (prev.type === 'checkbox' || prev.type === 'radio') {
-                    return prev;
-                }
-                if (trim(prev.label)) {
-                    return null;
-                }
-            }
-            return null;
+            var host = byId[field.after.fieldId];
+            return !!(host && (host.type === 'checkbox' || host.type === 'radio'));
         }
 
-        function parkNamelessRow(section, field, hostField) {
+        function parkAtEnd(section, field, hostField, flatten) {
             var node = previewNode(section, field.id);
             var host = previewNode(section, hostField.id);
             if (!node || !host || host === node || previewContains(node, host)) {
@@ -4772,10 +4893,10 @@
             if (!choices || previewContains(node, choices)) {
                 return false;
             }
-            if (node.parentNode !== choices) {
+            if (choices.lastChild !== node) {
                 choices.appendChild(node);
             }
-            markInlineRow(node, field);
+            markInlineRow(node, flatten);
             return true;
         }
 
@@ -4791,9 +4912,11 @@
                 }
             }
             for (i = 0; i < fields.length; i++) {
-                var hostField = namelessChoiceHost(fields[i], fields, i, byId);
-                if (hostField && parkNamelessRow(section, fields[i], hostField)) {
-                    continue;
+                var placed = fields[i] && fields[i].after;
+                if (placed && placed.fieldId && !trim(placed.option) && byId[placed.fieldId]) {
+                    if (parkAtEnd(section, fields[i], byId[placed.fieldId], rowsInline(fields[i], byId))) {
+                        continue;
+                    }
                 }
                 var anchor = previewAnchor(fields[i], byId);
                 if (!anchor) {
@@ -4811,14 +4934,13 @@
                 if (node.parentNode !== slot) {
                     slot.appendChild(node);
                 }
-                markInlineRow(node, fields[i]);
+                markInlineRow(node, rowsInline(fields[i], byId));
             }
         }
 
-        function markInlineRow(node, field) {
+        function markInlineRow(node, on) {
             var name = 'sdf-rowfield';
             var has = hasClass(node, name);
-            var on = field && (field.type === 'checkbox' || field.type === 'radio');
             if (on && !has) {
                 node.className += (node.className ? ' ' : '') + name;
             } else if (!on && has) {
