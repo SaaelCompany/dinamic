@@ -284,6 +284,30 @@
             }
         }
         placeBetween(root, cfg.fields);
+        placeNests(root);
+    }
+
+    function placeNests(section) {
+        if (!section || !section.querySelectorAll) {
+            return;
+        }
+        var slots = section.querySelectorAll('[data-sdf-nest]');
+        var i;
+        for (i = 0; i < slots.length; i++) {
+            var slot = slots[i];
+            var id = slot.getAttribute('data-sdf-nest');
+            if (!id) {
+                continue;
+            }
+            var node = nodeByHome(section, id);
+            if (!node || node === slot || nodeContains(node, slot)) {
+                continue;
+            }
+            if (node.parentNode !== slot) {
+                slot.appendChild(node);
+            }
+            removeClass(node, 'sdf-rowfield');
+        }
     }
 
     // A follow-up tied to one checkbox or radio answer sits under that answer,
@@ -1135,7 +1159,18 @@
         if (field.type === 'checkbox' || field.type === 'radio') {
             var choices = document.createElement('div');
             choices.className = 'sdf-choices';
+            var nests = field.nests || [];
             for (i = 0; i < options.length; i++) {
+                if (trim(nests[i] || '')) {
+                    var slot = document.createElement('div');
+                    slot.className = 'sdf-under';
+                    slot.setAttribute('data-sdf-nest', trim(nests[i]));
+                    choices.appendChild(slot);
+                    continue;
+                }
+                if (!trim(options[i])) {
+                    continue;
+                }
                 var line = document.createElement('div');
                 line.className = field.type;
                 var input = document.createElement('input');
