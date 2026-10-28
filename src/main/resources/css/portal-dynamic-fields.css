@@ -56,8 +56,12 @@
 }
 
 form.aui .checkbox > .sdf-under,
-form.aui .radio > .sdf-under {
+form.aui .radio > .sdf-under,
+form.aui .checkbox .sdf-under[data-sdf-portal-slot],
+form.aui .radio .sdf-under[data-sdf-portal-slot] {
     margin-left: -20px;
+    width: calc(100% + 20px);
+    box-sizing: border-box;
 }
 
 form.aui .sdf-under > .field-group.sdf-field,

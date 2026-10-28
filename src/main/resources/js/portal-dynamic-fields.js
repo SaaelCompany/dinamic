@@ -322,6 +322,87 @@
                 removeClass(node, 'sdf-rowfield');
             }
         }
+        alignPortalSlots(section);
+    }
+
+    // A Jira radio or checkbox keeps its mark in a 20px padding. A follow-up
+    // placed in that padding sits to the right of the question. Pull the slot
+    // back to the question's own left edge.
+    function alignPortalSlots(section) {
+        if (!section || !section.querySelectorAll || !window.getComputedStyle) {
+            return;
+        }
+        var slots = section.querySelectorAll('[data-sdf-portal-slot]');
+        var i;
+        for (i = 0; i < slots.length; i++) {
+            alignPortalSlot(slots[i]);
+        }
+    }
+
+    function alignPortalSlot(slot) {
+        var host = portalFieldHost(slot);
+        var edge = slotContentLeft(slot);
+        if (!host || edge == null) {
+            return;
+        }
+        var target = contentLeft(host);
+        var delta = edge - target;
+        if (Math.abs(delta) < 1) {
+            return;
+        }
+        var current = parseFloat(window.getComputedStyle(slot).marginLeft) || 0;
+        slot.style.marginLeft = String(Math.round(current - delta)) + 'px';
+    }
+
+    function portalFieldHost(slot) {
+        var node = slot.parentNode;
+        while (node && node !== document.body) {
+            if (hasClass(node, 'field-group') && !hasClass(node, 'sdf-field')) {
+                return node;
+            }
+            node = node.parentNode;
+        }
+        return null;
+    }
+
+    function contentLeft(node) {
+        var box = node.getBoundingClientRect();
+        var pad = parseFloat(window.getComputedStyle(node).paddingLeft) || 0;
+        return box.left + pad;
+    }
+
+    function slotContentLeft(slot) {
+        var nodes = slot.getElementsByTagName('div');
+        var i;
+        var field = null;
+        for (i = 0; i < nodes.length; i++) {
+            if (!hasClass(nodes[i], 'sdf-field') || nodes[i].getAttribute('data-sdf-shown') === '0') {
+                continue;
+            }
+            field = nodes[i];
+            break;
+        }
+        if (!field) {
+            var slotBox = slot.getBoundingClientRect();
+            if (slotBox.width < 1) {
+                return null;
+            }
+            return contentLeft(slot);
+        }
+        var kids = field.children;
+        for (i = 0; i < kids.length; i++) {
+            if (hasClass(kids[i], 'field-label') || hasClass(kids[i], 'sdf-label')) {
+                var labelBox = kids[i].getBoundingClientRect();
+                if (labelBox.width > 1) {
+                    return labelBox.left;
+                }
+            }
+        }
+        var fieldBox = field.getBoundingClientRect();
+        if (fieldBox.width < 1) {
+            return null;
+        }
+        return contentLeft(field);
     }
 
     function nodeContains(parent, child) {
