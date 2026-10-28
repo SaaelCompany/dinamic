@@ -49,11 +49,30 @@
     display: none;
 }
 
+.sdf-under {
+    margin: 0;
+    padding: 0;
+    clear: both;
+}
+
+form.aui .checkbox > .sdf-under,
+form.aui .radio > .sdf-under {
+    margin-left: -20px;
+}
+
 form.aui .sdf-under > .field-group.sdf-field,
 .sdf-under > .field-group.sdf-field {
-    margin: 4px 0 8px 24px;
-    padding-top: 0;
-    padding-bottom: 0;
+    margin: 4px 0 8px 0;
+    padding: 0;
+    clear: both;
+}
+
+form.aui .sdf-under > .field-group.sdf-field > label,
+.sdf-under > .field-group.sdf-field > label {
+    float: none;
+    width: auto;
+    margin-left: 0;
+    position: static;
 }
 
 .sdf-answer-group {
