@@ -67,6 +67,16 @@ form.aui .sdf-under > .field-group.sdf-field,
     clear: both;
 }
 
+.sdf-choices > .sdf-under,
+.sdf-under > .field-group.sdf-field.sdf-rowfield,
+.sdf-under > .field-group.sdf-field.sdf-rowfield > .sdf-choices {
+    display: contents;
+}
+
+.sdf-field.sdf-rowfield.sdf-hidden {
+    display: none !important;
+}
+
 form.aui .sdf-under > .field-group.sdf-field > label,
 .sdf-under > .field-group.sdf-field > label {
     float: none;
