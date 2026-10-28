@@ -182,7 +182,6 @@ public final class RulesValidator {
             return;
         }
         if (isBlank(after.getOption())) {
-            errors.add(label + ": \"after.option\" is required");
             return;
         }
         boolean found = false;
