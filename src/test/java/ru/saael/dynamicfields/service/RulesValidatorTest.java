@@ -3,6 +3,7 @@ package ru.saael.dynamicfields.service;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 import ru.saael.dynamicfields.model.Condition;
+import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
@@ -277,6 +278,33 @@ public class RulesValidatorTest {
         assertEquals(Collections.singletonList("Б"), when.getAlso().get(0).getValues());
         assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
         assertTrue(mapper.writeValueAsString(loaded).contains("\"also\""));
+    }
+
+    @Test
+    public void visibleQuestionBetweenRowsRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
+                + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
+                + "{\"id\":\"note\",\"label\":\"Комментарий\",\"type\":\"text\",\"after\":{\"fieldId\":\"flags\",\"option\":\"А\"}}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField note = loaded.getBlocks().get(0).getFields().get(1);
+        assertNull(note.getWhen());
+        assertEquals("flags", note.getAfter().getFieldId());
+        assertEquals("А", note.getAfter().getOption());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"after\""));
+    }
+
+    @Test
+    public void placementBetweenRowsMustFollowAnEarlierChoice() {
+        FormField note = field("note", "Комментарий", FormField.TEXT);
+        FieldAfter after = new FieldAfter();
+        after.setFieldId("note");
+        after.setOption("А");
+        note.setAfter(after);
+        List<String> errors = RulesValidator.validate(config(note));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("itself"));
     }
 
     @Test
