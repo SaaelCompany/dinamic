@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class RulesValidatorTest {
@@ -215,6 +216,38 @@ public class RulesValidatorTest {
         assertTrue(field.isRequired());
         assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
         assertTrue(mapper.writeValueAsString(loaded).contains("\"required\":true"));
+    }
+
+    @Test
+    public void helpTextRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Филиал\",\"type\":\"select\","
+                + "\"help\":\"Выберите филиал, где необходима поддержка\","
+                + "\"options\":[\"Клиника\"]}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField field = loaded.getBlocks().get(0).getFields().get(0);
+        assertEquals("Выберите филиал, где необходима поддержка", field.getHelp());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        assertTrue(mapper.writeValueAsString(loaded).contains("Выберите филиал, где необходима поддержка"));
+    }
+
+    @Test
+    public void blankHelpIsDropped() {
+        FormField field = field("note", "Note", FormField.TEXT);
+        field.setHelp("   ");
+        assertNull(field.getHelp());
+    }
+
+    @Test
+    public void helpTextTooLongIsReported() {
+        FormField field = field("note", "Note", FormField.TEXT);
+        char[] chars = new char[2001];
+        java.util.Arrays.fill(chars, 'a');
+        field.setHelp(new String(chars));
+        List<String> errors = RulesValidator.validate(config(field));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("help text"));
     }
 
     @Test

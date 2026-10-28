@@ -103,6 +103,17 @@ form.aui .field-group.sdf-field textarea.textarea,
     margin-top: 4px;
 }
 
+.sdf-help {
+    display: block;
+    clear: both;
+    margin: 4px 0 0;
+    color: #707070;
+    font-size: 12px;
+    font-weight: normal;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
 .sdf-field {
     overflow: visible;
 }
