@@ -115,6 +115,41 @@ form.aui .sdf-under > .field-group.sdf-field > label,
     white-space: pre-wrap;
 }
 
+.sdf-checks {
+    margin: 0;
+    padding: 0;
+}
+
+.sdf-check {
+    position: relative;
+    margin: 0 0 2px;
+    padding-left: 20px;
+    line-height: 1.4;
+}
+
+.sdf-check:before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #0052cc;
+}
+
+.sdf-check:after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 4px;
+    width: 3px;
+    height: 7px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
 form.aui .field-group.sdf-field input.text,
 form.aui .field-group.sdf-field select.select,
 form.aui .field-group.sdf-field textarea.textarea,

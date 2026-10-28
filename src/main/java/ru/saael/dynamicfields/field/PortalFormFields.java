@@ -95,7 +95,9 @@ public class PortalFormFields {
             return;
         }
         try {
-            field.getCustomFieldType().updateValue(field, issue, summary(rows));
+            // Keep this short text field empty. A long summary is rejected at 255 characters
+            // and would also show up on the issue as one block of text.
+            field.getCustomFieldType().updateValue(field, issue, null);
         } catch (RuntimeException e) {
             log.warn("Cannot store portal answers in {} on {}", field.getId(), issue.getKey(), e);
         }
@@ -126,27 +128,6 @@ public class PortalFormFields {
             }
         }
         return owned;
-    }
-
-    static String summary(List<AnswerRow> rows) {
-        if (rows == null || rows.isEmpty()) {
-            return null;
-        }
-        StringBuilder text = new StringBuilder();
-        for (int i = 0; i < rows.size(); i++) {
-            AnswerRow row = rows.get(i);
-            if (row == null) {
-                continue;
-            }
-            if (text.length() > 0) {
-                text.append('\n');
-            }
-            if (row.getLabel() != null && row.getLabel().trim().length() > 0) {
-                text.append(row.getLabel().trim()).append(": ");
-            }
-            text.append(row.getValue() == null ? "" : row.getValue());
-        }
-        return text.length() == 0 ? null : text.toString();
     }
 
     private static boolean isBlank(String value) {

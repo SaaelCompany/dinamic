@@ -1634,7 +1634,9 @@
         for (i = 0; i < hosts.length; i++) {
             var area = hosts[i].parentNode ? hosts[i].parentNode.querySelector('.sdf-cf-value') : null;
             if (area && typeof area.value === 'string') {
-                area.value = answerSummary(hosts[i]);
+                // The portal field is a 255-character Jira text field. The full
+                // answers are stored on the issue after the request is created.
+                area.value = '.';
             }
         }
     }
@@ -2114,9 +2116,31 @@
             dl.appendChild(dt);
         }
         var dd = document.createElement('dd');
-        dd.appendChild(document.createTextNode(row.value || ''));
+        fillAnswer(dd, row);
         dl.appendChild(dd);
         return dl;
+    }
+
+    function fillAnswer(node, row) {
+        var items = row && row.items ? row.items : [];
+        var checks = row && (row.type === 'checkbox' || row.type === 'multiselect') && items.length;
+        var i;
+        if (!checks) {
+            node.appendChild(document.createTextNode(row && row.value ? row.value : ''));
+            return;
+        }
+        var list = document.createElement('div');
+        list.className = 'sdf-checks';
+        for (i = 0; i < items.length; i++) {
+            if (!trim(items[i])) {
+                continue;
+            }
+            var line = document.createElement('div');
+            line.className = 'sdf-check';
+            line.appendChild(document.createTextNode(items[i]));
+            list.appendChild(line);
+        }
+        node.appendChild(list);
     }
 
     /**
@@ -2262,7 +2286,7 @@
             label.appendChild(document.createTextNode(rows[i].label || ''));
             var value = document.createElement('div');
             value.className = 'sdf-answer-value';
-            value.appendChild(document.createTextNode(rows[i].value || ''));
+            fillAnswer(value, rows[i]);
             host.appendChild(label);
             host.appendChild(value);
         }

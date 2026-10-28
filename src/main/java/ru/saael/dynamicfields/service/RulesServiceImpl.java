@@ -10,6 +10,7 @@ import org.codehaus.jackson.map.SerializationConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.saael.dynamicfields.field.PortalFormFields;
+import ru.saael.dynamicfields.field.PortalFormScreens;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import javax.inject.Inject;
@@ -32,15 +33,18 @@ public class RulesServiceImpl implements RulesService {
     private final PluginSettingsFactory pluginSettingsFactory;
     private final IssueFieldSync issueFieldSync;
     private final PortalFormFields portalFormFields;
+    private final PortalFormScreens portalFormScreens;
     private final ObjectMapper mapper;
 
     @Inject
     public RulesServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory,
                             IssueFieldSync issueFieldSync,
-                            PortalFormFields portalFormFields) {
+                            PortalFormFields portalFormFields,
+                            PortalFormScreens portalFormScreens) {
         this.pluginSettingsFactory = pluginSettingsFactory;
         this.issueFieldSync = issueFieldSync;
         this.portalFormFields = portalFormFields;
+        this.portalFormScreens = portalFormScreens;
         this.mapper = new ObjectMapper();
         this.mapper.configure(DeserializationConfig.Feature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         this.mapper.configure(SerializationConfig.Feature.INDENT_OUTPUT, true);
@@ -101,6 +105,7 @@ public class RulesServiceImpl implements RulesService {
         RulesConfig config = parse(json);
         portalFormFields.align(config);
         issueFieldSync.ensureFields(config);
+        portalFormScreens.placeQuestions(issueFieldSync.questionFields(config));
         String normalised = toJson(config);
         settings().put(SETTINGS_KEY, normalised);
         log.info("Portal form updated: {} block(s), {} field(s)", config.getBlocks().size(), config.fieldCount());

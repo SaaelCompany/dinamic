@@ -11,6 +11,10 @@ public class AnswerRow {
     private String owner;
     private String fieldId;
     private String label;
+    /** Question type, for example {@code checkbox}. Empty on answers saved by older versions. */
+    private String type;
+    /** Selected options when the question has several answers. */
+    private java.util.List<String> items;
     private String value;
 
     public AnswerRow() {
@@ -51,6 +55,22 @@ public class AnswerRow {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public java.util.List<String> getItems() {
+        return items;
+    }
+
+    public void setItems(java.util.List<String> items) {
+        this.items = items;
     }
 
     public String getValue() {
