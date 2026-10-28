@@ -2032,32 +2032,6 @@
         }
     }
 
-    function answersMount() {
-        var selectors = [
-            '.cv-request-details',
-            '.js-request-details',
-            '.request-details',
-            '.cv-request-content',
-            '.cp-request-content',
-            '#content'
-        ];
-        for (var i = 0; i < selectors.length; i++) {
-            var el = document.querySelector(selectors[i]);
-            if (el) {
-                return el;
-            }
-        }
-        return null;
-    }
-
-    function fallbackHeading() {
-        try {
-            return AJS.I18n.getText('ru.saael.dynamicfields.portal.answers');
-        } catch (e) {
-            return 'Answers';
-        }
-    }
-
     function ourFieldIds() {
         var ids = {};
         var blocks = blocksOf(config);
@@ -2068,28 +2042,6 @@
             }
         }
         return ids;
-    }
-
-    function rowsForOwner(rows, owner, block) {
-        var mine = [];
-        var known = {};
-        var fields = block && block.fields ? block.fields : [];
-        var i;
-        for (i = 0; i < fields.length; i++) {
-            if (fields[i] && fields[i].id) {
-                known[fields[i].id] = true;
-            }
-        }
-        for (i = 0; i < rows.length; i++) {
-            var row = rows[i];
-            if (!row) {
-                continue;
-            }
-            if (row.owner === owner || (!row.owner && known[row.fieldId])) {
-                mine.push(row);
-            }
-        }
-        return mine;
     }
 
     function detailSignature(groups) {
@@ -2106,115 +2058,238 @@
         return parts.join('\n');
     }
 
-    function buildDetailRow(owner, row) {
+    function questionFieldIds() {
+        var ids = [];
+        var seen = {};
+        var blocks = blocksOf(config);
+        var b;
+        var f;
+        var id;
+        for (b = 0; b < blocks.length; b++) {
+            var fields = blocks[b] && blocks[b].fields ? blocks[b].fields : [];
+            for (f = 0; f < fields.length; f++) {
+                id = fields[f] && fields[f].jiraFieldId;
+                if (!id || !/^customfield_\d+$/.test(id) || seen[id]) {
+                    continue;
+                }
+                seen[id] = true;
+                ids.push(id);
+            }
+        }
+        return ids;
+    }
+
+    function hideBox(node) {
+        var box = node;
+        while (box && box !== document.body && !hasClass(box, 'request-fields') && !hasClass(box, 'activity-item')) {
+            if (box.tagName === 'DL' || hasClass(box, 'cv-request-field') || hasClass(box, 'field-group')) {
+                box.style.display = 'none';
+                box.setAttribute('data-sdf-native-hidden', '1');
+                return;
+            }
+            box = box.parentNode;
+        }
+        if (node && node.style) {
+            node.style.display = 'none';
+            node.setAttribute('data-sdf-native-hidden', '1');
+        }
+    }
+
+    function fieldCaption(node) {
+        var caption = node.querySelector('dt, .cv-request-field-label, label');
+        return caption ? trim(caption.textContent) : '';
+    }
+
+    function hideNativeQuestionFields(rows) {
+        var ids = questionFieldIds();
+        var i;
+        var n;
+        var nodes;
+        var wanted = {};
+        for (i = 0; i < ids.length; i++) {
+            nodes = document.querySelectorAll('[data-test-id="' + ids[i] + '"], [name="' + ids[i] + '"]');
+            for (n = 0; n < nodes.length; n++) {
+                hideBox(nodes[n]);
+            }
+        }
+        rows = rows || [];
+        for (i = 0; i < rows.length; i++) {
+            var label = rows[i] && normalizeLabel(rows[i].label);
+            if (label) {
+                wanted[label] = true;
+            }
+        }
+        nodes = document.querySelectorAll('dl, .cv-request-field, .field-group');
+        for (i = 0; i < nodes.length; i++) {
+            if (hasClass(nodes[i], 'sdf-detail-row') || nodes[i].getAttribute('data-test-id') === 'description') {
+                continue;
+            }
+            var caption = normalizeLabel(fieldCaption(nodes[i]));
+            if (caption && wanted[caption]) {
+                hideBox(nodes[i]);
+            }
+        }
+        collapseAdditional();
+    }
+
+    function collapseAdditional() {
+        var headings = document.querySelectorAll('h1, h2, h3, h4');
+        var i;
+        var section;
+        var fields;
+        var visible;
+        var n;
+        var text;
+        for (i = 0; i < headings.length; i++) {
+            text = trim(headings[i].textContent);
+            if (text !== 'Дополнительно' && text !== 'Additional information') {
+                continue;
+            }
+            section = headings[i].parentNode;
+            if (!section || section === document.body || section.id === 'content') {
+                continue;
+            }
+            if (section.querySelector && section.querySelector('.activity-item, .request-fields')) {
+                continue;
+            }
+            fields = section.querySelectorAll('dl, .field-group, .cv-request-field');
+            visible = false;
+            for (n = 0; n < fields.length; n++) {
+                if (fields[n].getAttribute('data-sdf-native-hidden') === '1' || fields[n].style.display === 'none') {
+                    continue;
+                }
+                visible = true;
+                break;
+            }
+            if (!visible) {
+                section.style.display = 'none';
+            }
+        }
+    }
+
+    function detailRows(rows) {
+        var ordered = [];
+        var used = {};
+        var blocks = blocksOf(config);
+        var b;
+        var f;
+        var i;
+        var field;
+        for (b = 0; b < blocks.length; b++) {
+            var fields = blocks[b] && blocks[b].fields ? blocks[b].fields : [];
+            for (f = 0; f < fields.length; f++) {
+                field = fields[f];
+                if (!field || !field.id) {
+                    continue;
+                }
+                for (i = 0; i < rows.length; i++) {
+                    if (used[i] || !rows[i] || rows[i].fieldId !== field.id) {
+                        continue;
+                    }
+                    if (rows[i].owner && blocks[b].customFieldId && rows[i].owner !== blocks[b].customFieldId) {
+                        continue;
+                    }
+                    used[i] = true;
+                    ordered.push(rows[i]);
+                }
+            }
+        }
+        for (i = 0; i < rows.length; i++) {
+            if (!used[i] && rows[i]) {
+                ordered.push(rows[i]);
+            }
+        }
+        return ordered;
+    }
+
+    function buildDetailRow(owner, row, sample) {
         var dl = document.createElement('dl');
-        dl.className = 'sdf-detail-row';
-        dl.setAttribute('data-sdf-owner', owner);
+        dl.className = ((sample && sample.className) ? sample.className + ' ' : '') + 'sdf-detail-row';
+        dl.setAttribute('data-sdf-owner', owner || '');
         if (trim(row.label)) {
             var dt = document.createElement('dt');
+            var sampleDt = sample ? sample.querySelector('dt') : null;
+            if (sampleDt && sampleDt.className) {
+                dt.className = sampleDt.className;
+            }
             dt.appendChild(document.createTextNode(trim(row.label)));
             dl.appendChild(dt);
         }
         var dd = document.createElement('dd');
-        fillAnswer(dd, row);
+        var sampleDd = sample ? sample.querySelector('dd') : null;
+        if (sampleDd && sampleDd.className) {
+            dd.className = sampleDd.className;
+        }
+        dd.appendChild(document.createTextNode(row.value || ''));
         dl.appendChild(dd);
         return dl;
     }
 
-    function fillAnswer(node, row) {
-        var items = row && row.items ? row.items : [];
-        var checks = row && (row.type === 'checkbox' || row.type === 'multiselect') && items.length;
-        var i;
-        if (!checks) {
-            node.appendChild(document.createTextNode(row && row.value ? row.value : ''));
-            return;
-        }
-        var list = document.createElement('div');
-        list.className = 'sdf-checks';
-        for (i = 0; i < items.length; i++) {
-            if (!trim(items[i])) {
-                continue;
-            }
-            var line = document.createElement('div');
-            line.className = 'sdf-check';
-            line.appendChild(document.createTextNode(items[i]));
-            list.appendChild(line);
-        }
-        node.appendChild(list);
-    }
-
     /**
-     * The portal prints the whole answer as one line under the field name.
-     * Replace that line with one label and value per question, like the other details.
+     * Shows every answer inside Подробности, in the same label-and-value rows as the other request fields.
      */
     function renderDetails(rows) {
         var panel = document.querySelector('.activity-item.request-fields');
         if (!panel || !rows || !rows.length) {
             return false;
         }
-        var fields = ourFieldIds();
-        var groups = [];
-        var seen = {};
-        var i;
-        for (i = 0; i < rows.length; i++) {
-            var owner = rows[i] && rows[i].owner;
-            if (!owner || seen[owner] || !panel.querySelector('dl[data-test-id="' + owner + '"]')) {
-                continue;
-            }
-            seen[owner] = true;
-            var mine = rowsForOwner(rows, owner, fields[owner]);
-            if (mine.length) {
-                groups.push({owner: owner, rows: mine});
-            }
-        }
-        if (!groups.length) {
-            var ids = [];
-            for (owner in fields) {
-                if (fields.hasOwnProperty(owner)) {
-                    ids.push(owner);
-                }
-            }
-            for (i = 0; i < ids.length; i++) {
-                if (!panel.querySelector('dl[data-test-id="' + ids[i] + '"]')) {
-                    continue;
-                }
-                mine = rowsForOwner(rows, ids[i], fields[ids[i]]);
-                if (mine.length) {
-                    groups.push({owner: ids[i], rows: mine});
-                }
-            }
-        }
-        if (!groups.length) {
+        hideNativeQuestionFields(rows);
+        var ordered = detailRows(rows);
+        if (!ordered.length) {
             return false;
         }
-        var signature = detailSignature(groups);
+        var signature = detailSignature([{owner: 'details', rows: ordered}]);
         if (panel.getAttribute('data-sdf-details') === signature && panel.querySelector('.sdf-detail-row')) {
             return true;
         }
+        var sample = null;
+        var dls = panel.querySelectorAll('dl');
+        var i;
+        for (i = 0; i < dls.length; i++) {
+            if (hasClass(dls[i], 'sdf-detail-row') || dls[i].getAttribute('data-sdf-native-hidden') === '1') {
+                continue;
+            }
+            sample = dls[i];
+            break;
+        }
+        var parent = sample ? sample.parentNode : panel;
         var stale = panel.querySelectorAll('.sdf-detail-row');
         for (i = stale.length - 1; i >= 0; i--) {
             if (stale[i].parentNode) {
                 stale[i].parentNode.removeChild(stale[i]);
             }
         }
-        for (i = 0; i < groups.length; i++) {
-            var source = panel.querySelector('dl[data-test-id="' + groups[i].owner + '"]');
-            if (!source || !source.parentNode) {
+        var owners = ourFieldIds();
+        var anchor = null;
+        var owner;
+        for (owner in owners) {
+            if (!owners.hasOwnProperty(owner)) {
                 continue;
             }
-            var after = source;
-            var j;
-            for (j = 0; j < groups[i].rows.length; j++) {
-                var node = buildDetailRow(groups[i].owner, groups[i].rows[j]);
+            var source = panel.querySelector('dl[data-test-id="' + owner + '"]');
+            if (!source) {
+                continue;
+            }
+            source.style.display = 'none';
+            source.setAttribute('data-sdf-replaced', '1');
+            anchor = source;
+        }
+        var description = panel.querySelector('dl[data-test-id="description"]');
+        var after = anchor;
+        for (i = 0; i < ordered.length; i++) {
+            var node = buildDetailRow(ordered[i].owner || '', ordered[i], sample);
+            if (after && after.parentNode) {
                 if (after.nextSibling) {
                     after.parentNode.insertBefore(node, after.nextSibling);
                 } else {
                     after.parentNode.appendChild(node);
                 }
-                after = node;
+            } else if (description && description.parentNode) {
+                description.parentNode.insertBefore(node, description);
+            } else {
+                parent.appendChild(node);
             }
-            source.style.display = 'none';
-            source.setAttribute('data-sdf-replaced', '1');
+            after = node;
         }
         panel.setAttribute('data-sdf-details', signature);
         return !!panel.querySelector('.sdf-detail-row');
@@ -2225,71 +2300,7 @@
             removeAnswers();
             return;
         }
-        var existing = document.getElementById('sdf-portal-answers');
-        if (!rows || !rows.length) {
-            if (existing && existing.parentNode) {
-                existing.parentNode.removeChild(existing);
-            }
-            return;
-        }
-        var mount = answersMount();
-        if (!mount) {
-            return;
-        }
-        var host = existing || document.createElement('div');
-        host.id = 'sdf-portal-answers';
-        host.className = 'sdf-answers';
-        var header = mount.querySelector ? mount.querySelector('.cv-page-title, .vp-request-header') : null;
-        if (header && header.parentNode === mount) {
-            if (header.nextSibling) {
-                mount.insertBefore(host, header.nextSibling);
-            } else {
-                mount.appendChild(host);
-            }
-        } else if (host.parentNode !== mount) {
-            mount.insertBefore(host, mount.firstChild);
-        }
-        while (host.firstChild) {
-            host.removeChild(host.firstChild);
-        }
-        var distinct = [];
-        var g;
-        for (g = 0; g < rows.length; g++) {
-            var groupName = rows[g].group || '';
-            if (groupName && (distinct.length === 0 || distinct[distinct.length - 1] !== groupName)) {
-                distinct.push(groupName);
-            }
-        }
-        var blocks = blocksOf(config);
-        var heading = fallbackHeading();
-        if (distinct.length === 1) {
-            heading = distinct[0];
-        } else if (!distinct.length && blocks.length === 1 && trim(blocks[0].title)) {
-            heading = trim(blocks[0].title);
-        }
-        var title = document.createElement('h3');
-        title.className = 'sdf-title';
-        title.appendChild(document.createTextNode(heading));
-        host.appendChild(title);
-        var lastGroup = distinct.length === 1 ? distinct[0] : '';
-        for (var i = 0; i < rows.length; i++) {
-            var group = rows[i].group || '';
-            if (distinct.length > 1 && group && group !== lastGroup) {
-                var sub = document.createElement('div');
-                sub.className = 'sdf-answer-group';
-                sub.appendChild(document.createTextNode(group));
-                host.appendChild(sub);
-                lastGroup = group;
-            }
-            var label = document.createElement('div');
-            label.className = 'sdf-answer-label';
-            label.appendChild(document.createTextNode(rows[i].label || ''));
-            var value = document.createElement('div');
-            value.className = 'sdf-answer-value';
-            fillAnswer(value, rows[i]);
-            host.appendChild(label);
-            host.appendChild(value);
-        }
+        removeAnswers();
     }
 
     function removeAnswers() {

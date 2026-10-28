@@ -2,7 +2,6 @@ package ru.saael.dynamicfields.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ru.saael.dynamicfields.field.PortalFormScreens;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import javax.inject.Inject;
@@ -18,11 +17,15 @@ public class QuestionFieldBootstrap {
     private static final Logger log = LoggerFactory.getLogger(QuestionFieldBootstrap.class);
 
     @Inject
-    public QuestionFieldBootstrap(RulesService rulesService, IssueFieldSync issueFieldSync, PortalFormScreens portalFormScreens) {
+    public QuestionFieldBootstrap(RulesService rulesService) {
         try {
             RulesConfig config = rulesService.getConfig();
-            issueFieldSync.ensureFields(config);
-            portalFormScreens.placeQuestions(issueFieldSync.questionFields(config));
+            if (config.fieldCount() == 0) {
+                return;
+            }
+            // Saving writes the Jira field id onto each question. The customer portal
+            // uses that id to hide the native copy and show one plain row in Подробности.
+            rulesService.saveConfigJson(rulesService.toJson(config));
         } catch (InvalidRulesException e) {
             log.warn("Cannot prepare question fields: {}", e.getMessage());
         } catch (RuntimeException e) {
