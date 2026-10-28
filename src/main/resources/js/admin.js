@@ -2651,6 +2651,8 @@
                 return;
             }
             var sourceId = fields[fromIndex].id;
+            var parent = fields[fromIndex];
+            var placeVisible = !!(option && parent && (parent.type === 'checkbox' || parent.type === 'radio'));
             var keptAlso = fields[toIndex].when && fields[toIndex].when.also ? fields[toIndex].when.also : [];
             if (toIndex < fromIndex) {
                 var end = subtreeEnd(fields, toIndex);
@@ -2663,15 +2665,24 @@
                 }
                 toIndex = insertAt;
             }
-            fields[toIndex].when = {
-                fieldId: sourceId,
-                values: option ? [option] : [],
-                negate: false,
-                _mode: option ? 'selected' : 'any',
-                source: ''
-            };
-            if (keptAlso.length) {
-                fields[toIndex].when.also = keptAlso;
+            if (placeVisible) {
+                fields[toIndex].after = {fieldId: sourceId, option: option};
+                var linked = fields[toIndex].when;
+                var linkedValues = linked && linked.values ? linked.values : [];
+                if (linked && linked.source !== 'portal' && linked.fieldId === sourceId && !(linked.also && linked.also.length) && linkedValues.length === 1 && linkedValues[0] === option) {
+                    fields[toIndex].when = null;
+                }
+            } else {
+                fields[toIndex].when = {
+                    fieldId: sourceId,
+                    values: option ? [option] : [],
+                    negate: false,
+                    _mode: option ? 'selected' : 'any',
+                    source: ''
+                };
+                if (keptAlso.length) {
+                    fields[toIndex].when.also = keptAlso;
+                }
             }
             pendingLink = null;
             selectedField = {blockIndex: blockIndex, index: toIndex};
@@ -4753,6 +4764,18 @@
                 if (node.parentNode !== slot) {
                     slot.appendChild(node);
                 }
+                markInlineRow(node, fields[i]);
+            }
+        }
+
+        function markInlineRow(node, field) {
+            var name = 'sdf-rowfield';
+            var has = hasClass(node, name);
+            var on = field && (field.type === 'checkbox' || field.type === 'radio');
+            if (on && !has) {
+                node.className += (node.className ? ' ' : '') + name;
+            } else if (!on && has) {
+                node.className = (' ' + node.className + ' ').replace(' ' + name + ' ', ' ').replace(/^\s+|\s+$/g, '');
             }
         }
 

@@ -316,6 +316,11 @@
             if (node.parentNode !== slot) {
                 slot.appendChild(node);
             }
+            if (fields[i].type === 'checkbox' || fields[i].type === 'radio') {
+                addClass(node, 'sdf-rowfield');
+            } else {
+                removeClass(node, 'sdf-rowfield');
+            }
         }
     }
 
