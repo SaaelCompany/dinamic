@@ -286,57 +286,6 @@
         placeBetween(root, cfg.fields);
     }
 
-    function configField(id) {
-        var blocks = blocksOf(config);
-        var b;
-        var f;
-        for (b = 0; b < blocks.length; b++) {
-            var fields = blocks[b] && blocks[b].fields ? blocks[b].fields : [];
-            for (f = 0; f < fields.length; f++) {
-                if (fields[f] && fields[f].id === id) {
-                    return fields[f];
-                }
-            }
-        }
-        return null;
-    }
-
-    // Checkbox and radio rows join the host list. Any other question stays its own field there.
-    function rowsInline(field, byId) {
-        if (!field || !field.after || !field.after.fieldId) {
-            return false;
-        }
-        if (field.type !== 'checkbox' && field.type !== 'radio') {
-            return false;
-        }
-        var host = byId && byId[field.after.fieldId];
-        if (!host) {
-            host = configField(field.after.fieldId);
-        }
-        return !!(host && (host.type === 'checkbox' || host.type === 'radio'));
-    }
-
-    function parkAtEnd(section, field, hostField, flatten) {
-        var node = nodeByHome(section, field.id);
-        var host = nodeByHome(section, hostField.id);
-        if (!node || !host || host === node || nodeContains(node, host)) {
-            return false;
-        }
-        var choices = choicesOf(host);
-        if (!choices || nodeContains(node, choices)) {
-            return false;
-        }
-        if (choices.lastChild !== node) {
-            choices.appendChild(node);
-        }
-        if (flatten) {
-            addClass(node, 'sdf-rowfield');
-        } else {
-            removeClass(node, 'sdf-rowfield');
-        }
-        return true;
-    }
-
     // A follow-up tied to one checkbox or radio answer sits under that answer,
     // including an answer of an existing Jira checkbox field.
     function placeBetween(section, fields) {
@@ -351,12 +300,6 @@
             }
         }
         for (i = 0; i < fields.length; i++) {
-            var placed = fields[i] && fields[i].after;
-            if (placed && placed.fieldId && !trim(placed.option) && byId[placed.fieldId]) {
-                if (parkAtEnd(section, fields[i], byId[placed.fieldId], rowsInline(fields[i], byId))) {
-                    continue;
-                }
-            }
             var anchor = followAnchor(fields[i], byId);
             if (!anchor) {
                 continue;
@@ -373,11 +316,7 @@
             if (node.parentNode !== slot) {
                 slot.appendChild(node);
             }
-            if (rowsInline(fields[i], byId)) {
-                addClass(node, 'sdf-rowfield');
-            } else {
-                removeClass(node, 'sdf-rowfield');
-            }
+            removeClass(node, 'sdf-rowfield');
         }
         alignPortalSlots(section);
     }
@@ -2260,99 +2199,6 @@
         return ordered;
     }
 
-    function isChoiceType(type) {
-        return type === 'checkbox' || type === 'radio' || type === 'multiselect';
-    }
-
-    function choiceLines(row) {
-        var lines = [];
-        var items = row && row.items ? row.items : [];
-        var i;
-        if (row && isChoiceType(row.type)) {
-            for (i = 0; i < items.length; i++) {
-                if (trim(items[i])) {
-                    lines.push(trim(items[i]));
-                }
-            }
-            if (!lines.length && trim(row.value)) {
-                lines.push(trim(row.value));
-            }
-        }
-        return lines;
-    }
-
-    function insertLines(prev, option, lines) {
-        var at = prev.lines.length;
-        var i;
-        if (option) {
-            for (i = 0; i < prev.lines.length; i++) {
-                if (prev.lines[i] === option) {
-                    at = i + 1;
-                }
-            }
-        }
-        for (i = lines.length - 1; i >= 0; i--) {
-            prev.lines.splice(at, 0, lines[i]);
-        }
-        prev.value = prev.lines.join('\n');
-    }
-
-    // Rows placed inside another field stay in that list. A separate field keeps its own row.
-    function presentRows(rows) {
-        var ordered = detailRows(rows);
-        var out = [];
-        var i;
-        var j;
-        for (i = 0; i < ordered.length; i++) {
-            var row = ordered[i];
-            if (!row) {
-                continue;
-            }
-            var lines = choiceLines(row);
-            var field = configField(row.fieldId);
-            if (rowsInline(field, null) && lines.length) {
-                var hostId = field.after.fieldId;
-                var prev = null;
-                var p;
-                for (p = 0; p < out.length; p++) {
-                    if (out[p].fieldId === hostId) {
-                        prev = out[p];
-                    }
-                }
-                if (!prev) {
-                    var host = configField(hostId);
-                    prev = {
-                        owner: row.owner || '',
-                        fieldId: hostId,
-                        label: host && host.label ? host.label : '',
-                        type: host && host.type ? host.type : 'checkbox',
-                        lines: [],
-                        value: ''
-                    };
-                    out.push(prev);
-                }
-                if (!prev.lines) {
-                    prev.lines = [];
-                }
-                insertLines(prev, trim(field.after.option), lines);
-                continue;
-            }
-            var shown = [];
-            for (j = 0; j < lines.length; j++) {
-                shown.push(lines[j]);
-            }
-            out.push({
-                owner: row.owner || '',
-                fieldId: row.fieldId,
-                label: row.label,
-                type: row.type,
-                lines: shown,
-                value: row.value || ''
-            });
-        }
-        return out;
-    }
-
     function buildDetailRow(owner, row, sample) {
         var dl = document.createElement('dl');
         dl.className = ((sample && sample.className) ? sample.className + ' ' : '') + 'sdf-detail-row';
@@ -2385,7 +2231,7 @@
             return false;
         }
         hideNativeQuestionFields(rows);
-        var ordered = presentRows(rows);
+        var ordered = detailRows(rows);
         if (!ordered.length) {
             return false;
         }

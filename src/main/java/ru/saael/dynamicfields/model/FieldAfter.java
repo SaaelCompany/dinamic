@@ -4,8 +4,7 @@ import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 
 /**
- * Puts a question in the rows of an earlier checkbox or radio field.
- * {@link #option} is the row it follows. A blank option means the end of that list.
+ * Puts a question directly after one row of an earlier checkbox or radio field.
  * The question stays visible; this is only a place, not a hide condition.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
