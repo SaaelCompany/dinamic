@@ -120,23 +120,34 @@ public final class RulesValidator {
                     }
                 }
             }
-            Condition when = field.getWhen();
-            if (when != null) {
-                if (isBlank(when.getFieldId())) {
-                    errors.add(label + ": \"when.fieldId\" is required");
-                } else if (when.getFieldId().equals(field.getId())) {
-                    errors.add(label + ": a field cannot depend on itself");
-                } else if ("portal".equals(when.getSource())) {
-                    if (!PROJECT_FIELD_ID.matcher(when.getFieldId()).matches()) {
-                        errors.add(label + ": project field \"" + when.getFieldId() + "\" is not a Jira field");
-                    }
-                } else if (!earlier.contains(when.getFieldId())) {
-                    errors.add(label + ": condition refers to unknown or later field \"" + when.getFieldId() + "\"");
-                }
-            }
+            checkCondition(errors, label, field.getWhen(), field.getId(), earlier, "when");
             if (!isBlank(field.getId())) {
                 earlier.add(field.getId());
             }
+        }
+    }
+
+    private static void checkCondition(List<String> errors, String label, Condition when, String selfId,
+            List<String> earlier, String path) {
+        if (when == null) {
+            return;
+        }
+        if (isBlank(when.getFieldId())) {
+            errors.add(label + ": \"" + path + ".fieldId\" is required");
+        } else if (when.getFieldId().equals(selfId)) {
+            errors.add(label + ": a field cannot depend on itself");
+        } else if ("portal".equals(when.getSource())) {
+            if (!PROJECT_FIELD_ID.matcher(when.getFieldId()).matches()) {
+                errors.add(label + ": project field \"" + when.getFieldId() + "\" is not a Jira field");
+            }
+        } else if (!earlier.contains(when.getFieldId())) {
+            errors.add(label + ": condition refers to unknown or later field \"" + when.getFieldId() + "\"");
+        }
+        if (when.getAlso() == null) {
+            return;
+        }
+        for (int i = 0; i < when.getAlso().size(); i++) {
+            checkCondition(errors, label, when.getAlso().get(i), selfId, earlier, path + ".also[" + i + "]");
         }
     }
 

@@ -71,8 +71,7 @@
         return String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
     }
 
-    function shown(field, visible, values) {
-        var when = field.when;
+    function conditionMatches(when, visible, values) {
         if (!when || !when.fieldId) {
             return true;
         }
@@ -106,6 +105,24 @@
             }
         }
         return when.negate ? !match : match;
+    }
+
+    function shown(field, visible, values) {
+        var when = field.when;
+        if (!when || !when.fieldId) {
+            return true;
+        }
+        if (!conditionMatches(when, visible, values)) {
+            return false;
+        }
+        var also = when.also || [];
+        var i;
+        for (i = 0; i < also.length; i++) {
+            if (also[i] && also[i].fieldId && !conditionMatches(also[i], visible, values)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     function ownedField(node, el) {
@@ -1776,18 +1793,37 @@
             var scope = formOf(root) || document;
             var i;
             for (i = 0; i < fields.length; i++) {
-                var when = fields[i].when;
-                if (!when || when.source !== 'portal' || !when.fieldId) {
-                    continue;
-                }
-                if (values[when.fieldId] && values[when.fieldId].length) {
-                    continue;
-                }
-                var read = readPortalField(scope, when.fieldId, when.fieldName);
-                if (read.length) {
-                    values[when.fieldId] = read;
+                var pending = portalConditions(fields[i].when);
+                var n;
+                for (n = 0; n < pending.length; n++) {
+                    var when = pending[n];
+                    if (values[when.fieldId] && values[when.fieldId].length) {
+                        continue;
+                    }
+                    var read = readPortalField(scope, when.fieldId, when.fieldName);
+                    if (read.length) {
+                        values[when.fieldId] = read;
+                    }
                 }
             }
+        }
+
+        function portalConditions(when) {
+            var out = [];
+            if (!when) {
+                return out;
+            }
+            if (when.source === 'portal' && when.fieldId) {
+                out.push(when);
+            }
+            var also = when.also || [];
+            var i;
+            for (i = 0; i < also.length; i++) {
+                if (also[i] && also[i].source === 'portal' && also[i].fieldId) {
+                    out.push(also[i]);
+                }
+            }
+            return out;
         }
 
         function readGroupValues(group) {

@@ -19,7 +19,8 @@ import java.util.List;
  *   <li>empty {@code values} - matches when the field has any value (any checkbox ticked, option chosen, text typed);</li>
  *   <li>non-empty {@code values} - matches when at least one of the current values of the field equals one of the
  *       listed values. Both option ids ("10101") and option labels ("Открытый") are accepted;</li>
- *   <li>{@code negate} inverts the result.</li>
+ *   <li>{@code negate} inverts the result;</li>
+ *   <li>{@code also} lists extra conditions that must hold at the same time (logical and).</li>
  * </ul>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -33,6 +34,8 @@ public class Condition {
     private String fieldName;
     private List<String> values = new ArrayList<String>();
     private boolean negate;
+    /** Extra conditions that must hold together with this one. Empty means no extra condition. */
+    private List<Condition> also;
 
     public String getFieldId() {
         return fieldId;
@@ -72,5 +75,17 @@ public class Condition {
 
     public void setNegate(boolean negate) {
         this.negate = negate;
+    }
+
+    public List<Condition> getAlso() {
+        return also;
+    }
+
+    public void setAlso(List<Condition> also) {
+        if (also == null || also.isEmpty()) {
+            this.also = null;
+            return;
+        }
+        this.also = also;
     }
 }

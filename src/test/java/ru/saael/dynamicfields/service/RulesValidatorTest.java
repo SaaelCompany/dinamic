@@ -262,6 +262,40 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void additionalConditionRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
+                + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
+                + "{\"id\":\"branch\",\"label\":\"Филиал\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
+                + "{\"id\":\"extra\",\"label\":\"Уточнение\",\"type\":\"text\",\"when\":{"
+                + "\"fieldId\":\"flags\",\"values\":[\"А\"],\"also\":[{\"fieldId\":\"branch\",\"values\":[\"Б\"]}]}}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        Condition when = loaded.getBlocks().get(0).getFields().get(2).getWhen();
+        assertEquals("flags", when.getFieldId());
+        assertEquals(1, when.getAlso().size());
+        assertEquals("branch", when.getAlso().get(0).getFieldId());
+        assertEquals(Collections.singletonList("Б"), when.getAlso().get(0).getValues());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"also\""));
+    }
+
+    @Test
+    public void additionalConditionCannotReferToItself() {
+        FormField flags = field("flags", "Доступы", FormField.CHECKBOX, "А");
+        FormField extra = field("extra", "Уточнение", FormField.TEXT);
+        Condition main = new Condition();
+        main.setFieldId("flags");
+        main.setValues(Collections.singletonList("А"));
+        Condition bad = new Condition();
+        bad.setFieldId("extra");
+        main.setAlso(Collections.singletonList(bad));
+        extra.setWhen(main);
+        List<String> errors = RulesValidator.validate(config(flags, extra));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("itself"));
+    }
+
+    @Test
     public void invalidProjectFieldIsReported() {
         FormField first = field("field1", "Первый вопрос", FormField.TEXT);
         Condition condition = new Condition();
