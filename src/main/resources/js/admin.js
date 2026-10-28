@@ -5347,7 +5347,28 @@
             return when.negate ? !match : match;
         }
 
+        function afterShown(field, visible, values) {
+            if (!field || !field.after || !field.after.fieldId || !trim(field.after.option)) {
+                return true;
+            }
+            if (!visible[field.after.fieldId]) {
+                return false;
+            }
+            var current = values[field.after.fieldId] || [];
+            var option = trim(field.after.option);
+            var i;
+            for (i = 0; i < current.length; i++) {
+                if (String(current[i]) === option) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         function shown(field, visible, values) {
+            if (!afterShown(field, visible, values)) {
+                return false;
+            }
             var when = field.when;
             if (!when || !when.fieldId) {
                 return true;
@@ -5451,38 +5472,7 @@
             return null;
         }
 
-        function previewAnchor(field, byId) {
-            if (field && field.after && field.after.fieldId && trim(field.after.option)) {
-                var host = byId[field.after.fieldId];
-                if (host && (host.type === 'checkbox' || host.type === 'radio')) {
-                    return {fieldId: host.id, values: [trim(field.after.option)]};
-                }
-            }
-            var seen = {};
-            var current = field;
-            while (current && current.when && current.when.fieldId) {
-                if (seen[current.id]) {
-                    return null;
-                }
-                seen[current.id] = true;
-                if (current.when.source === 'portal') {
-                    if (current.when._mode === 'any' || !(current.when.values || []).length) {
-                        return null;
-                    }
-                    return {fieldId: current.when.fieldId, values: current.when.values};
-                }
-                var parent = byId[current.when.fieldId];
-                if (!parent) {
-                    return null;
-                }
-                if (parent.type === 'checkbox' || parent.type === 'radio') {
-                    if (current.when._mode === 'any' || !(current.when.values || []).length) {
-                        return null;
-                    }
-                    return {fieldId: parent.id, values: current.when.values};
-                }
-                current = parent;
-            }
+        function previewAnchor() {
             return null;
         }
 

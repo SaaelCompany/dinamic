@@ -107,7 +107,28 @@
         return when.negate ? !match : match;
     }
 
+    function afterShown(field, visible, values) {
+        if (!field || !field.after || !field.after.fieldId || !trim(field.after.option)) {
+            return true;
+        }
+        if (!visible[field.after.fieldId]) {
+            return false;
+        }
+        var current = values[field.after.fieldId] || [];
+        var option = trim(field.after.option);
+        var i;
+        for (i = 0; i < current.length; i++) {
+            if (String(current[i]) === option) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function shown(field, visible, values) {
+        if (!afterShown(field, visible, values)) {
+            return false;
+        }
         var when = field.when;
         if (!when || !when.fieldId) {
             return true;
@@ -457,53 +478,10 @@
         return null;
     }
 
-    function followAnchor(field, byId) {
-        var placed = placedAfter(field, byId);
-        if (placed) {
-            return placed;
-        }
-        var seen = {};
-        var current = field;
-        while (current && current.when && current.when.fieldId) {
-            if (seen[current.id]) {
-                return null;
-            }
-            seen[current.id] = true;
-            if (current.when.source === 'portal') {
-                if (current.when._mode === 'any' || !(current.when.values || []).length) {
-                    return null;
-                }
-                return {
-                    portal: true,
-                    fieldId: current.when.fieldId,
-                    fieldName: current.when.fieldName || '',
-                    values: current.when.values
-                };
-            }
-            var parent = byId[current.when.fieldId];
-            if (!parent) {
-                return null;
-            }
-            if (parent.type === 'checkbox' || parent.type === 'radio') {
-                if (current.when._mode === 'any' || !(current.when.values || []).length) {
-                    return null;
-                }
-                return {portal: false, fieldId: parent.id, values: current.when.values};
-            }
-            current = parent;
-        }
+    // A condition keeps the question in its own place. Only a row that is another
+    // field (nests) is drawn between the answers.
+    function followAnchor() {
         return null;
-    }
-
-    function placedAfter(field, byId) {
-        if (!field || !field.after || !field.after.fieldId || !trim(field.after.option)) {
-            return null;
-        }
-        var host = byId[field.after.fieldId];
-        if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
-            return null;
-        }
-        return {portal: false, fieldId: host.id, values: [trim(field.after.option)]};
     }
 
     function anchorHost(section, anchor) {
