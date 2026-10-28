@@ -97,6 +97,24 @@ public class IssueFieldSyncTest {
     }
 
     @Test
+    public void checkboxQuestionBecomesACheckboxField() {
+        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
+                IssueFieldSync.fieldTypeKey("checkbox"));
+        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
+                IssueFieldSync.fieldTypeKey("multiselect"));
+        assertTrue(IssueFieldSync.checks("checkbox"));
+    }
+
+    @Test
+    public void textQuestionStaysATextArea() {
+        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:textarea",
+                IssueFieldSync.fieldTypeKey("text"));
+        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:textarea",
+                IssueFieldSync.fieldTypeKey("select"));
+        assertFalse(IssueFieldSync.checks("radio"));
+    }
+
+    @Test
     public void emptyFormKeepsNoQuestionMarkers() {
         assertTrue(IssueFieldSync.keptMarkers(new RulesConfig()).isEmpty());
         assertTrue(IssueFieldSync.keptMarkers(null).isEmpty());

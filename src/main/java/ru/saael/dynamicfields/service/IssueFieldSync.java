@@ -11,7 +11,12 @@ import com.atlassian.jira.issue.context.GlobalIssueContext;
 import com.atlassian.jira.issue.context.JiraContextNode;
 import com.atlassian.jira.issue.customfields.CustomFieldSearcher;
 import com.atlassian.jira.issue.customfields.CustomFieldType;
+import com.atlassian.jira.issue.customfields.manager.OptionsManager;
+import com.atlassian.jira.issue.customfields.option.Option;
+import com.atlassian.jira.issue.customfields.option.Options;
 import com.atlassian.jira.issue.fields.CustomField;
+import com.atlassian.jira.issue.fields.config.FieldConfig;
+import com.atlassian.jira.issue.fields.config.FieldConfigScheme;
 import com.atlassian.jira.issue.fields.FieldManager;
 import com.atlassian.jira.issue.index.IssueIndexingService;
 import com.atlassian.jira.issue.issuetype.IssueType;
@@ -27,6 +32,7 @@ import ru.saael.dynamicfields.model.RulesConfig;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,8 +52,11 @@ public class IssueFieldSync {
 
     static final String TYPE_KEY = "com.atlassian.jira.plugin.system.customfieldtypes:textarea";
     static final String SEARCHER_KEY = "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher";
+    static final String CHECKBOX_TYPE = "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes";
+    static final String CHECKBOX_SEARCHER = "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher";
 
     private final CustomFieldManager customFieldManager;
+    private final OptionsManager optionsManager;
     private final FieldManager fieldManager;
     private final IssueManager issueManager;
     private final IssueIndexingService indexingService;
@@ -55,11 +64,13 @@ public class IssueFieldSync {
 
     @Inject
     public IssueFieldSync(@ComponentImport CustomFieldManager customFieldManager,
+                          @ComponentImport OptionsManager optionsManager,
                           @ComponentImport FieldManager fieldManager,
                           @ComponentImport IssueManager issueManager,
                           @ComponentImport IssueIndexingService indexingService,
                           @ComponentImport EventPublisher eventPublisher) {
         this.customFieldManager = customFieldManager;
+        this.optionsManager = optionsManager;
         this.fieldManager = fieldManager;
         this.issueManager = issueManager;
         this.indexingService = indexingService;
@@ -71,12 +82,7 @@ public class IssueFieldSync {
      * then removes Jira fields whose questions are no longer in the form.
      */
     public void ensureFields(RulesConfig config) throws InvalidRulesException {
-        CustomFieldType type = customFieldManager.getCustomFieldType(TYPE_KEY);
-        CustomFieldSearcher searcher = customFieldManager.getCustomFieldSearcher(SEARCHER_KEY);
-        if (searcher == null && type != null) {
-            searcher = customFieldManager.getDefaultSearcher(type);
-        }
-        if (type == null || searcher == null) {
+        if (customFieldManager.getCustomFieldType(TYPE_KEY) == null) {
             throw new InvalidRulesException(Collections.singletonList(
                     "Jira text field type is not available, so the questions cannot become issue fields"));
         }
@@ -94,7 +100,7 @@ public class IssueFieldSync {
                         continue;
                     }
                     try {
-                        bind(block.getId(), field, type, searcher, reserved);
+                        bind(block.getId(), field, reserved);
                     } catch (GenericEntityException e) {
                         errors.add("Cannot create the Jira field for \"" + display(field) + "\": " + e.getMessage());
                     } catch (RuntimeException e) {
@@ -146,10 +152,14 @@ public class IssueFieldSync {
     }
 
     private static boolean ownedByPlugin(CustomField field) {
+        if (field.getDescription() == null || !field.getDescription().startsWith("sdf:")) {
+            return false;
+        }
         if (field.getCustomFieldType() == null || field.getCustomFieldType().getKey() == null) {
             return false;
         }
-        return TYPE_KEY.equals(field.getCustomFieldType().getKey());
+        String key = field.getCustomFieldType().getKey();
+        return TYPE_KEY.equals(key) || CHECKBOX_TYPE.equals(key);
     }
 
     private static String deleteError(CustomField field, String message) {
@@ -216,12 +226,20 @@ public class IssueFieldSync {
                 if (customField == null) {
                     continue;
                 }
-                String next = text(values == null ? null : values.get(field.getId()));
-                if (same(customField, issue, next)) {
-                    continue;
-                }
+                List<String> selected = values == null ? null : values.get(field.getId());
                 try {
-                    update(customField, issue, next);
+                    if (checks(field.getType()) && choiceField(customField)) {
+                        if (sameChoices(customField, issue, selected)) {
+                            continue;
+                        }
+                        updateChoices(customField, issue, selected);
+                    } else {
+                        String next = text(selected);
+                        if (same(customField, issue, next)) {
+                            continue;
+                        }
+                        update(customField, issue, next);
+                    }
                     changed = true;
                 } catch (RuntimeException e) {
                     log.warn("Cannot write portal answer into {} on {}", customField.getId(), issue.getKey(), e);
@@ -251,9 +269,39 @@ public class IssueFieldSync {
         }
     }
 
-    private void bind(String blockId, FormField field, CustomFieldType type, CustomFieldSearcher searcher, Set<String> reserved)
-            throws GenericEntityException {
+    private void bind(String blockId, FormField field, Set<String> reserved) throws GenericEntityException {
+        String wanted = fieldTypeKey(field.getType());
         CustomField current = locate(blockId, field);
+        if (current != null && !sameType(current, wanted)) {
+            try {
+                customFieldManager.removeCustomField(current);
+                log.info("Removed {} so \"{}\" can be stored as checkboxes", current.getId(), display(field));
+                current = null;
+                customFieldManager.refresh();
+            } catch (RemoveException e) {
+                log.warn("Cannot replace {} with checkboxes: {}", current.getId(), e.getMessage());
+            }
+        }
+        CustomFieldType type = customFieldManager.getCustomFieldType(wanted);
+        String searcherKey = searcherKeyFor(field.getType());
+        if (type == null) {
+            type = customFieldManager.getCustomFieldType(TYPE_KEY);
+            searcherKey = SEARCHER_KEY;
+        }
+        CustomFieldSearcher searcher = customFieldManager.getCustomFieldSearcher(searcherKey);
+        if (searcher == null && type != null) {
+            searcher = customFieldManager.getDefaultSearcher(type);
+        }
+        if (current != null && !sameType(current, wanted)) {
+            type = current.getCustomFieldType();
+            CustomFieldSearcher kept = type == null ? null : customFieldManager.getDefaultSearcher(type);
+            if (kept != null) {
+                searcher = kept;
+            }
+        }
+        if (type == null || searcher == null) {
+            throw new GenericEntityException("Jira field type is not available");
+        }
         Set<String> taken = new HashSet<String>(reserved);
         List<CustomField> existing = customFieldManager.getCustomFieldObjects();
         for (int i = 0; i < existing.size(); i++) {
@@ -280,6 +328,157 @@ public class IssueFieldSync {
             log.info("Renamed Jira field {} to {}", current.getId(), name);
         }
         field.setJiraFieldId(current.getId());
+        if (checks(field.getType()) && sameType(current, CHECKBOX_TYPE)) {
+            syncOptions(current, field.getOptions());
+        }
+    }
+
+    /**
+     * Question fields in form order. The issue screen uses this order.
+     */
+    public List<CustomField> questionFields(RulesConfig config) {
+        List<CustomField> found = new ArrayList<CustomField>();
+        if (config == null || config.getBlocks() == null) {
+            return found;
+        }
+        for (int b = 0; b < config.getBlocks().size(); b++) {
+            FormBlock block = config.getBlocks().get(b);
+            if (block == null || block.getFields() == null) {
+                continue;
+            }
+            for (int i = 0; i < block.getFields().size(); i++) {
+                FormField field = block.getFields().get(i);
+                if (field == null || field.getId() == null || field.getId().trim().isEmpty()) {
+                    continue;
+                }
+                CustomField customField = locate(block.getId(), field);
+                if (customField != null) {
+                    found.add(customField);
+                }
+            }
+        }
+        return found;
+    }
+
+    static boolean checks(String questionType) {
+        return FormField.CHECKBOX.equals(questionType) || FormField.MULTISELECT.equals(questionType);
+    }
+
+    static String fieldTypeKey(String questionType) {
+        return checks(questionType) ? CHECKBOX_TYPE : TYPE_KEY;
+    }
+
+    static String searcherKeyFor(String questionType) {
+        return checks(questionType) ? CHECKBOX_SEARCHER : SEARCHER_KEY;
+    }
+
+    private static boolean sameType(CustomField field, String typeKey) {
+        return field != null && field.getCustomFieldType() != null && typeKey.equals(field.getCustomFieldType().getKey());
+    }
+
+    private static boolean choiceField(CustomField field) {
+        return sameType(field, CHECKBOX_TYPE);
+    }
+
+    private void syncOptions(CustomField field, List<String> wanted) {
+        FieldConfig config = onlyConfig(field);
+        if (config == null || wanted == null) {
+            return;
+        }
+        Options options = optionsManager.getOptions(config);
+        if (options == null) {
+            return;
+        }
+        long sequence = 0L;
+        List<Option> existing = options.getRootOptions();
+        if (existing != null) {
+            for (int i = 0; i < existing.size(); i++) {
+                Long current = existing.get(i).getSequence();
+                if (current != null && current.longValue() >= sequence) {
+                    sequence = current.longValue() + 1L;
+                }
+            }
+        }
+        for (int i = 0; i < wanted.size(); i++) {
+            String value = wanted.get(i) == null ? "" : wanted.get(i).trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            if (value.length() > 255) {
+                value = value.substring(0, 255);
+            }
+            if (options.getOptionForValue(value, null) != null) {
+                continue;
+            }
+            optionsManager.createOption(config, null, Long.valueOf(sequence), value);
+            sequence++;
+        }
+    }
+
+    private void updateChoices(CustomField field, Issue issue, List<String> values) {
+        FieldConfig config = field.getRelevantConfig(issue);
+        if (config == null) {
+            config = onlyConfig(field);
+        }
+        if (config == null) {
+            return;
+        }
+        Options options = optionsManager.getOptions(config);
+        if (options == null) {
+            return;
+        }
+        Collection<Option> selected = new ArrayList<Option>();
+        if (values != null) {
+            for (int i = 0; i < values.size(); i++) {
+                String text = values.get(i) == null ? "" : values.get(i).trim();
+                if (text.isEmpty()) {
+                    continue;
+                }
+                Option option = options.getOptionForValue(text, null);
+                if (option != null && !selected.contains(option)) {
+                    selected.add(option);
+                }
+            }
+        }
+        field.getCustomFieldType().updateValue(field, issue, selected);
+    }
+
+    private boolean sameChoices(CustomField field, Issue issue, List<String> values) {
+        Set<String> wanted = new HashSet<String>();
+        if (values != null) {
+            for (int i = 0; i < values.size(); i++) {
+                if (values.get(i) != null && values.get(i).trim().length() > 0) {
+                    wanted.add(values.get(i).trim());
+                }
+            }
+        }
+        Set<String> have = new HashSet<String>();
+        Object current = field.getValue(issue);
+        if (current instanceof Collection) {
+            Collection<?> items = (Collection<?>) current;
+            for (Object item : items) {
+                if (item instanceof Option) {
+                    have.add(((Option) item).getValue());
+                } else if (item != null) {
+                    have.add(String.valueOf(item));
+                }
+            }
+        }
+        return have.equals(wanted);
+    }
+
+    private static FieldConfig onlyConfig(CustomField field) {
+        List<FieldConfigScheme> schemes = field.getConfigurationSchemes();
+        if (schemes == null) {
+            return null;
+        }
+        for (int i = 0; i < schemes.size(); i++) {
+            FieldConfig config = schemes.get(i).getOneAndOnlyConfig();
+            if (config != null) {
+                return config;
+            }
+        }
+        return null;
     }
 
     private CustomField locate(String blockId, FormField field) {

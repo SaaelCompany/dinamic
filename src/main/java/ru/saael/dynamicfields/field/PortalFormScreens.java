@@ -11,6 +11,7 @@ import com.atlassian.jira.issue.fields.screen.FieldScreenTab;
 import com.atlassian.jira.issue.fields.screen.issuetype.IssueTypeScreenScheme;
 import com.atlassian.jira.issue.fields.screen.issuetype.IssueTypeScreenSchemeEntity;
 import com.atlassian.jira.issue.fields.screen.issuetype.IssueTypeScreenSchemeManager;
+import com.atlassian.jira.issue.operation.IssueOperation;
 import com.atlassian.jira.issue.operation.IssueOperations;
 import com.atlassian.jira.project.Project;
 import com.atlassian.jira.project.ProjectManager;
@@ -53,6 +54,29 @@ public class PortalFormScreens {
         placeAll();
     }
 
+    /**
+     * Puts each question field on the view and edit screens, in the given order,
+     * so the created request lists them like ordinary Jira fields.
+     */
+    public void placeQuestions(List<CustomField> fields) {
+        if (fields == null || fields.isEmpty()) {
+            return;
+        }
+        try {
+            List<Project> projects = projectManager.getProjectObjects();
+            for (int i = 0; i < fields.size(); i++) {
+                CustomField field = fields.get(i);
+                if (field == null || field.getDescription() == null || !field.getDescription().startsWith("sdf:")) {
+                    continue;
+                }
+                place(field, projects, IssueOperations.VIEW_ISSUE_OPERATION);
+                place(field, projects, IssueOperations.EDIT_ISSUE_OPERATION);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Cannot put question fields on the issue screen", e);
+        }
+    }
+
     @EventListener
     public void onCustomFieldCreated(CustomFieldCreatedEvent event) {
         if (event == null || !PortalFormFields.TYPE_KEY.equals(event.getFieldType())) {
@@ -63,7 +87,7 @@ public class PortalFormScreens {
             return;
         }
         try {
-            place(field, projectManager.getProjectObjects());
+            place(field, projectManager.getProjectObjects(), IssueOperations.CREATE_ISSUE_OPERATION);
         } catch (RuntimeException e) {
             log.warn("Cannot put the new dynamic field on service project screens", e);
         }
@@ -78,14 +102,14 @@ public class PortalFormScreens {
                 if (!isOurs(field)) {
                     continue;
                 }
-                place(field, projects);
+                place(field, projects, IssueOperations.CREATE_ISSUE_OPERATION);
             }
         } catch (RuntimeException e) {
             log.warn("Cannot put dynamic fields on service project screens", e);
         }
     }
 
-    private void place(CustomField field, List<Project> projects) {
+    private void place(CustomField field, List<Project> projects, IssueOperation operation) {
         if (field == null || projects == null) {
             return;
         }
@@ -108,7 +132,7 @@ public class PortalFormScreens {
                 if (screens == null) {
                     continue;
                 }
-                addToScreen(screens.getFieldScreen(IssueOperations.CREATE_ISSUE_OPERATION), field.getId(), seen);
+                addToScreen(screens.getFieldScreen(operation), field.getId(), seen);
             }
         }
     }
