@@ -45,6 +45,17 @@
     margin-top: 4px;
 }
 
+.sdf-under:empty {
+    display: none;
+}
+
+form.aui .sdf-under > .field-group.sdf-field,
+.sdf-under > .field-group.sdf-field {
+    margin: 4px 0 8px 24px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
 .sdf-answer-group {
     font-weight: 600;
     margin: 12px 0 6px;

@@ -108,6 +108,28 @@
         return when.negate ? !match : match;
     }
 
+    function ownedField(node, el) {
+        var current = el;
+        while (current) {
+            if (current.getAttribute && current.getAttribute('data-sdf-field')) {
+                return current === node;
+            }
+            current = current.parentNode;
+        }
+        return false;
+    }
+
+    function firstOwned(node, tag) {
+        var list = node.getElementsByTagName(tag);
+        var i;
+        for (i = 0; i < list.length; i++) {
+            if (ownedField(node, list[i])) {
+                return list[i];
+            }
+        }
+        return null;
+    }
+
     function readField(node) {
         var type = node.getAttribute('data-sdf-type');
         var values = [];
@@ -115,12 +137,12 @@
         if (type === 'checkbox' || type === 'radio') {
             var inputs = node.getElementsByTagName('input');
             for (i = 0; i < inputs.length; i++) {
-                if (inputs[i].checked) {
+                if (ownedField(node, inputs[i]) && inputs[i].checked) {
                     values.push(inputs[i].value);
                 }
             }
         } else if (type === 'select' || type === 'multiselect') {
-            var select = node.getElementsByTagName('select')[0];
+            var select = firstOwned(node, 'select');
             if (select && select.multiple) {
                 var opts = select.options;
                 for (i = 0; i < opts.length; i++) {
@@ -132,12 +154,12 @@
                 values.push(select.value);
             }
         } else if (type === 'textarea') {
-            var area = node.getElementsByTagName('textarea')[0];
+            var area = firstOwned(node, 'textarea');
             if (area && trim(area.value)) {
                 values.push(trim(area.value));
             }
         } else {
-            var text = node.getElementsByTagName('input')[0];
+            var text = firstOwned(node, 'input');
             if (text && trim(text.value)) {
                 values.push(trim(text.value));
             }
@@ -145,12 +167,32 @@
         return values;
     }
 
+    function fieldNodes(root) {
+        if (!root || !root.querySelectorAll) {
+            return [];
+        }
+        var home = root.getAttribute && root.getAttribute('data-sdf-block');
+        if (!home) {
+            return root.querySelectorAll('[data-sdf-field]');
+        }
+        var scope = formOf(root) || root;
+        var all = scope.querySelectorAll('[data-sdf-field]');
+        var out = [];
+        var i;
+        for (i = 0; i < all.length; i++) {
+            if (all[i].getAttribute('data-sdf-home') === home) {
+                out.push(all[i]);
+            }
+        }
+        return out;
+    }
+
     function readValues(root, onlyVisible) {
         var result = {};
         if (!root || !root.querySelectorAll) {
             return result;
         }
-        var nodes = root.querySelectorAll('[data-sdf-field]');
+        var nodes = fieldNodes(root);
         for (var i = 0; i < nodes.length; i++) {
             if (onlyVisible && hasClass(nodes[i], 'sdf-hidden')) {
                 continue;
@@ -164,6 +206,9 @@
         var inputs = node.getElementsByTagName('input');
         var i;
         for (i = 0; i < inputs.length; i++) {
+            if (!ownedField(node, inputs[i])) {
+                continue;
+            }
             if (inputs[i].type === 'checkbox' || inputs[i].type === 'radio') {
                 inputs[i].checked = false;
             } else {
@@ -172,10 +217,16 @@
         }
         var areas = node.getElementsByTagName('textarea');
         for (i = 0; i < areas.length; i++) {
+            if (!ownedField(node, areas[i])) {
+                continue;
+            }
             areas[i].value = '';
         }
         var selects = node.getElementsByTagName('select');
         for (i = 0; i < selects.length; i++) {
+            if (!ownedField(node, selects[i])) {
+                continue;
+            }
             if (selects[i].multiple) {
                 var opts = selects[i].options;
                 var n;
@@ -196,7 +247,7 @@
         var values = readValues(root, false);
         mergePortalAnswers(root, cfg, values);
         var visible = visibility(cfg.fields, values);
-        var nodes = root.querySelectorAll('[data-sdf-field]');
+        var nodes = fieldNodes(root);
         for (var i = 0; i < nodes.length; i++) {
             var node = nodes[i];
             var show = !!visible[node.getAttribute('data-sdf-field')];
@@ -215,6 +266,389 @@
                 }
             }
         }
+        placeBetween(root, cfg.fields);
+    }
+
+    // A follow-up tied to one checkbox or radio answer sits under that answer,
+    // including an answer of an existing Jira checkbox field.
+    function placeBetween(section, fields) {
+        if (!section || !fields || !fields.length) {
+            return;
+        }
+        var byId = {};
+        var i;
+        for (i = 0; i < fields.length; i++) {
+            if (fields[i] && fields[i].id) {
+                byId[fields[i].id] = fields[i];
+            }
+        }
+        for (i = 0; i < fields.length; i++) {
+            var anchor = followAnchor(fields[i], byId);
+            if (!anchor) {
+                continue;
+            }
+            var node = nodeByHome(section, fields[i].id);
+            var host = anchorHost(section, anchor);
+            if (!node || !host || host === node || nodeContains(node, host)) {
+                continue;
+            }
+            var slot = anchorSlot(host, anchor.values);
+            if (!slot || nodeContains(node, slot)) {
+                continue;
+            }
+            if (node.parentNode !== slot) {
+                slot.appendChild(node);
+            }
+        }
+    }
+
+    function nodeContains(parent, child) {
+        var current = child;
+        while (current) {
+            if (current === parent) {
+                return true;
+            }
+            current = current.parentNode;
+        }
+        return false;
+    }
+
+    function nodeByHome(section, fieldId) {
+        var scope = formOf(section) || section;
+        if (!scope || !scope.querySelectorAll) {
+            return null;
+        }
+        var home = section.getAttribute('data-sdf-block');
+        var all = scope.querySelectorAll('[data-sdf-field]');
+        var i;
+        for (i = 0; i < all.length; i++) {
+            if (all[i].getAttribute('data-sdf-field') !== fieldId) {
+                continue;
+            }
+            var marked = all[i].getAttribute('data-sdf-home');
+            if (home && marked && marked !== home) {
+                continue;
+            }
+            return all[i];
+        }
+        return null;
+    }
+
+    function followAnchor(field, byId) {
+        var seen = {};
+        var current = field;
+        while (current && current.when && current.when.fieldId) {
+            if (seen[current.id]) {
+                return null;
+            }
+            seen[current.id] = true;
+            if (current.when.source === 'portal') {
+                if (current.when._mode === 'any' || !(current.when.values || []).length) {
+                    return null;
+                }
+                return {
+                    portal: true,
+                    fieldId: current.when.fieldId,
+                    fieldName: current.when.fieldName || '',
+                    values: current.when.values
+                };
+            }
+            var parent = byId[current.when.fieldId];
+            if (!parent) {
+                return null;
+            }
+            if (parent.type === 'checkbox' || parent.type === 'radio') {
+                if (current.when._mode === 'any' || !(current.when.values || []).length) {
+                    return null;
+                }
+                return {portal: false, fieldId: parent.id, values: current.when.values};
+            }
+            current = parent;
+        }
+        return null;
+    }
+
+    function anchorHost(section, anchor) {
+        var existing = nodeByHome(section, anchor.fieldId);
+        if (existing && choicesOf(existing)) {
+            return existing;
+        }
+        if (!anchor.portal) {
+            return existing;
+        }
+        var form = formOf(section);
+        if (!form) {
+            return null;
+        }
+        return findPortalGroup(form, anchor.fieldId, anchor.fieldName);
+    }
+
+    function choicesOf(node) {
+        if (!node || !node.getElementsByTagName) {
+            return null;
+        }
+        var lists = node.getElementsByTagName('div');
+        var i;
+        for (i = 0; i < lists.length; i++) {
+            if (!hasClass(lists[i], 'sdf-choices')) {
+                continue;
+            }
+            if (ownerOf(lists[i]) === node) {
+                return lists[i];
+            }
+        }
+        return null;
+    }
+
+    function ownerOf(node) {
+        var current = node;
+        while (current) {
+            if (current.getAttribute && current.getAttribute('data-sdf-field')) {
+                return current;
+            }
+            current = current.parentNode;
+        }
+        return null;
+    }
+
+    function anchorSlot(host, values) {
+        var choices = choicesOf(host);
+        if (choices) {
+            return ownSlot(choices, values);
+        }
+        return portalChoiceSlot(host, values);
+    }
+
+    function ownSlot(choices, values) {
+        var rows = [];
+        var i;
+        for (i = 0; i < choices.children.length; i++) {
+            if (!hasClass(choices.children[i], 'sdf-under')) {
+                rows.push(choices.children[i]);
+            }
+        }
+        var fallback = null;
+        var picked = null;
+        for (i = 0; i < rows.length; i++) {
+            var input = rowChoiceInput(rows[i]);
+            if (!input || !valueHit(input.value, values)) {
+                continue;
+            }
+            if (!fallback) {
+                fallback = rows[i];
+            }
+            if (input.checked) {
+                picked = rows[i];
+                break;
+            }
+        }
+        var row = picked || fallback;
+        if (!row) {
+            return null;
+        }
+        return slotAfter(row, rowChoiceInput(row).value, false);
+    }
+
+    function valueHit(value, values) {
+        var i;
+        var flat = flatText(value);
+        for (i = 0; i < (values || []).length; i++) {
+            if (String(value) === String(values[i]) || (flat && flat === flatText(values[i]))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function rowChoiceInput(row) {
+        var inputs = row.getElementsByTagName('input');
+        var i;
+        for (i = 0; i < inputs.length; i++) {
+            var type = String(inputs[i].type || '').toLowerCase();
+            if (type !== 'checkbox' && type !== 'radio') {
+                continue;
+            }
+            var current = inputs[i];
+            var nested = false;
+            while (current && current !== row) {
+                if (current.getAttribute && current.getAttribute('data-sdf-field')) {
+                    nested = true;
+                    break;
+                }
+                current = current.parentNode;
+            }
+            if (!nested) {
+                return inputs[i];
+            }
+        }
+        return null;
+    }
+
+    function slotAfter(row, key, portal) {
+        var next = row.nextSibling;
+        while (next && next.nodeType !== 1) {
+            next = next.nextSibling;
+        }
+        if (next && next.getAttribute && next.getAttribute('data-sdf-under') === key && (!portal || next.getAttribute('data-sdf-portal-slot') === '1')) {
+            return next;
+        }
+        var slot = document.createElement('div');
+        slot.className = 'sdf-under';
+        slot.setAttribute('data-sdf-under', key);
+        if (portal) {
+            slot.setAttribute('data-sdf-portal-slot', '1');
+        }
+        if (row.nextSibling) {
+            row.parentNode.insertBefore(slot, row.nextSibling);
+        } else {
+            row.parentNode.appendChild(slot);
+        }
+        return slot;
+    }
+
+    function portalChoiceSlot(group, values) {
+        var rows = portalChoiceRows(group);
+        var i;
+        var fallback = null;
+        var picked = null;
+        var fallbackKey = '';
+        var pickedKey = '';
+        for (i = 0; i < rows.length; i++) {
+            var input = rowChoiceInput(rows[i]);
+            if (!input) {
+                continue;
+            }
+            var key = matchedLabel(input, values);
+            if (!key) {
+                continue;
+            }
+            if (!fallback) {
+                fallback = rows[i];
+                fallbackKey = key;
+            }
+            if (input.checked) {
+                picked = rows[i];
+                pickedKey = key;
+                break;
+            }
+        }
+        if (!picked && !fallback) {
+            return null;
+        }
+        return slotAfter(picked || fallback, picked ? pickedKey : fallbackKey, true);
+    }
+
+    function matchedLabel(input, values) {
+        var labels = choiceLabels(input);
+        var i;
+        var j;
+        for (j = 0; j < (values || []).length; j++) {
+            var expected = flatText(values[j]);
+            if (!expected) {
+                continue;
+            }
+            for (i = 0; i < labels.length; i++) {
+                if (labels[i] === expected) {
+                    return expected;
+                }
+            }
+        }
+        return '';
+    }
+
+    function choiceLabels(input) {
+        var out = [];
+        function add(text) {
+            var flat = flatText(text);
+            var i;
+            if (!flat) {
+                return;
+            }
+            for (i = 0; i < out.length; i++) {
+                if (out[i] === flat) {
+                    return;
+                }
+            }
+            out.push(flat);
+        }
+        add(input.value);
+        var id = input.id;
+        if (id && input.ownerDocument) {
+            var labels = input.ownerDocument.getElementsByTagName('label');
+            var n;
+            for (n = 0; n < labels.length; n++) {
+                if (labels[n].getAttribute('for') === id) {
+                    add(labels[n].textContent);
+                }
+            }
+        }
+        var parent = input.parentNode;
+        if (parent && parent.tagName && parent.tagName.toLowerCase() === 'label') {
+            add(parent.textContent);
+        }
+        var sib = input.nextSibling;
+        while (sib) {
+            if (sib.nodeType === 1 && sib.tagName && sib.tagName.toLowerCase() === 'label') {
+                add(sib.textContent);
+                break;
+            }
+            sib = sib.nextSibling;
+        }
+        return out;
+    }
+
+    function portalChoiceRows(group) {
+        var inputs = group.getElementsByTagName('input');
+        var rows = [];
+        var i;
+        for (i = 0; i < inputs.length; i++) {
+            var type = String(inputs[i].type || '').toLowerCase();
+            if (type !== 'checkbox' && type !== 'radio') {
+                continue;
+            }
+            if (insideOwn(inputs[i])) {
+                continue;
+            }
+            var row = choiceRow(inputs[i], group);
+            if (row && !nodeListed(rows, row)) {
+                rows.push(row);
+            }
+        }
+        return rows;
+    }
+
+    function nodeListed(list, node) {
+        var i;
+        for (i = 0; i < list.length; i++) {
+            if (list[i] === node) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function choiceRow(input, stop) {
+        var node = input;
+        while (node.parentNode && node.parentNode !== stop && node.parentNode !== document.body) {
+            if (countChoices(node.parentNode) > 1) {
+                return node;
+            }
+            node = node.parentNode;
+        }
+        return node;
+    }
+
+    function countChoices(root) {
+        var inputs = root.getElementsByTagName('input');
+        var n = 0;
+        var i;
+        for (i = 0; i < inputs.length; i++) {
+            var type = String(inputs[i].type || '').toLowerCase();
+            if ((type === 'checkbox' || type === 'radio') && !insideOwn(inputs[i])) {
+                n++;
+            }
+        }
+        return n;
     }
 
     var pickerEvents = false;
@@ -721,6 +1155,7 @@
         var visible = visibility(cfg.fields, {});
         for (var i = 0; i < cfg.fields.length; i++) {
             var node = buildField(cfg.fields[i], cfg.id);
+            node.setAttribute('data-sdf-home', cfg.id || 'block');
             var show = !!visible[cfg.fields[i].id];
             node.setAttribute('data-sdf-shown', show ? '1' : '0');
             if (!show) {
@@ -978,12 +1413,60 @@
         for (i = 0; i < blocks.length; i++) {
             var block = blocks[i];
             var node = host.querySelector('[data-sdf-block="' + block.id + '"]');
+            var scope = formEl || document;
+            if (node && blockHasGap(scope, block)) {
+                dropHome(scope, block.id);
+                node = null;
+            }
             if (!node) {
                 node = buildSection(block);
                 host.appendChild(node);
             }
             applyVisibility(node, block);
             removeClass(node, 'sdf-hidden');
+        }
+    }
+
+    function blockHasGap(scope, block) {
+        var i;
+        for (i = 0; i < block.fields.length; i++) {
+            if (!block.fields[i] || !block.fields[i].id) {
+                continue;
+            }
+            if (!findHome(scope, block.id, block.fields[i].id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function findHome(scope, blockId, fieldId) {
+        if (!scope || !scope.querySelectorAll) {
+            return null;
+        }
+        var all = scope.querySelectorAll('[data-sdf-field]');
+        var i;
+        for (i = 0; i < all.length; i++) {
+            if (all[i].getAttribute('data-sdf-field') === fieldId && all[i].getAttribute('data-sdf-home') === blockId) {
+                return all[i];
+            }
+        }
+        return null;
+    }
+
+    function dropHome(scope, blockId) {
+        if (!scope || !scope.querySelectorAll) {
+            return;
+        }
+        var all = scope.querySelectorAll('[data-sdf-home], [data-sdf-block]');
+        var i;
+        for (i = all.length - 1; i >= 0; i--) {
+            var item = all[i];
+            if (item.getAttribute('data-sdf-home') === blockId || item.getAttribute('data-sdf-block') === blockId) {
+                if (item.parentNode) {
+                    item.parentNode.removeChild(item);
+                }
+            }
         }
     }
 
@@ -1156,7 +1639,16 @@
         }
 
         function isOwnGroup(group) {
-            return !!(group && group.querySelector && group.querySelector('.sdf-cf-form, .sdf-portal-block, [data-sdf-field]'));
+            if (!group) {
+                return false;
+            }
+            if (group.getAttribute && (group.getAttribute('data-sdf-field') || group.getAttribute('data-sdf-block'))) {
+                return true;
+            }
+            if (hasClass(group, 'sdf-field') || hasClass(group, 'sdf-portal-block') || hasClass(group, 'sdf-cf-form')) {
+                return true;
+            }
+            return !!(group.querySelector && group.querySelector('.sdf-cf-form, .sdf-portal-block'));
         }
 
         function findPortalGroup(scope, fieldId, fieldName) {
@@ -1307,6 +1799,9 @@
             var i;
             for (i = 0; i < nodes.length; i++) {
                 var node = nodes[i];
+                if (insideOwn(node)) {
+                    continue;
+                }
                 if (node.type === 'hidden' || node.type === 'submit' || node.type === 'button') {
                     continue;
                 }
@@ -1771,9 +2266,14 @@
     }
 
     function stripPortalNames() {
-        var sections = document.querySelectorAll('.sdf-portal-block');
-        for (var i = 0; i < sections.length; i++) {
-            stripNames(sections[i]);
+        var sections = portalSections();
+        var i;
+        var n;
+        for (i = 0; i < sections.length; i++) {
+            var nodes = fieldNodes(sections[i]);
+            for (n = 0; n < nodes.length; n++) {
+                stripNames(nodes[n]);
+            }
         }
     }
 
@@ -1981,8 +2481,11 @@
             if (hasClass(sections[s], 'sdf-hidden')) {
                 continue;
             }
-            var nodes = sections[s].querySelectorAll('[data-sdf-required="1"]');
+            var nodes = fieldNodes(sections[s]);
             for (i = 0; i < nodes.length; i++) {
+                if (nodes[i].getAttribute('data-sdf-required') !== '1') {
+                    continue;
+                }
                 if (hasClass(nodes[i], 'sdf-hidden') || nodes[i].getAttribute('data-sdf-shown') === '0') {
                     clearRequiredMark(nodes[i]);
                     continue;
