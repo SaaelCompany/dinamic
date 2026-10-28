@@ -348,6 +348,40 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void nestedFieldBetweenRowsNeedsNoLink() throws Exception {
+        FormField parent = field("flags", "Доступы", FormField.CHECKBOX, "Доступ А", "", "Доступ Б");
+        parent.setNests(Arrays.asList("", "spec", ""));
+        FormField child = field("spec", "Специальность", FormField.TEXT);
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(parent, child)));
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
+                + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"Доступ А\",\"\",\"Доступ Б\"],\"nests\":[\"\",\"spec\",\"\"]},"
+                + "{\"id\":\"spec\",\"label\":\"Специальность\",\"type\":\"text\"}]}]}";
+        RulesConfig loaded = new ObjectMapper().readValue(json, RulesConfig.class);
+        FormField flags = loaded.getBlocks().get(0).getFields().get(0);
+        assertEquals("spec", flags.getNests().get(1));
+        assertNull(loaded.getBlocks().get(0).getFields().get(1).getAfter());
+        assertNull(loaded.getBlocks().get(0).getFields().get(1).getWhen());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+    }
+
+    @Test
+    public void fieldsCannotNestEachOther() {
+        FormField parent = field("flags", "Доступы", FormField.CHECKBOX, "");
+        parent.setNests(Collections.singletonList("spec"));
+        FormField child = field("spec", "Специальность", FormField.CHECKBOX, "");
+        child.setNests(Collections.singletonList("flags"));
+        List<String> errors = RulesValidator.validate(config(parent, child));
+        assertTrue(errors.size() >= 1);
+        boolean cycle = false;
+        for (int i = 0; i < errors.size(); i++) {
+            if (errors.get(i).contains("nest each other")) {
+                cycle = true;
+            }
+        }
+        assertTrue(errors.toString(), cycle);
+    }
+
+    @Test
     public void duplicateIdIsReported() {
         RulesConfig config = config(
                 field("category", "One", FormField.TEXT),

@@ -37,6 +37,12 @@ public class FormField {
     private String help;
     private String type = TEXT;
     private List<String> options = new ArrayList<String>();
+    /**
+     * One entry per option row. Empty means the row is a normal answer.
+     * A field id means that question is drawn at this position, between the neighbouring rows.
+     * The nested question does not need a visibility link.
+     */
+    private List<String> nests = new ArrayList<String>();
     /** Text of the empty dropdown row. Empty means the portal default, usually Not selected. */
     private String blankLabel = "";
     /** When true and a default exists, the dropdown has no empty row. */
@@ -110,6 +116,14 @@ public class FormField {
 
     public void setOptions(List<String> options) {
         this.options = options == null ? new ArrayList<String>() : options;
+    }
+
+    public List<String> getNests() {
+        return nests;
+    }
+
+    public void setNests(List<String> nests) {
+        this.nests = nests == null ? new ArrayList<String>() : nests;
     }
 
     public String getBlankLabel() {

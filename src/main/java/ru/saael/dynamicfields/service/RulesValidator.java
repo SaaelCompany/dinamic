@@ -113,7 +113,13 @@ public final class RulesValidator {
                 }
                 Set<String> options = new HashSet<String>();
                 List<String> declared = field.getOptions() == null ? new ArrayList<String>() : field.getOptions();
-                for (String option : declared) {
+                List<String> nests = field.getNests() == null ? new ArrayList<String>() : field.getNests();
+                for (int o = 0; o < declared.size(); o++) {
+                    String option = declared.get(o);
+                    String nest = o < nests.size() && nests.get(o) != null ? nests.get(o).trim() : "";
+                    if (!nest.isEmpty()) {
+                        continue;
+                    }
                     if (isBlank(option)) {
                         errors.add(label + ": an option is empty");
                     } else if (!options.add(option)) {
@@ -121,12 +127,97 @@ public final class RulesValidator {
                     }
                 }
             }
+            checkNests(errors, label, field, list);
             checkCondition(errors, label, field.getWhen(), field.getId(), earlier, "when");
             checkAfter(errors, label, field.getAfter(), field.getId(), list, i);
             if (!isBlank(field.getId())) {
                 earlier.add(field.getId());
             }
         }
+    }
+
+    private static void checkNests(List<String> errors, String label, FormField field, List<FormField> fields) {
+        List<String> nests = field.getNests();
+        if (nests == null || nests.isEmpty()) {
+            return;
+        }
+        boolean host = FormField.CHECKBOX.equals(field.getType()) || FormField.RADIO.equals(field.getType());
+        List<String> options = field.getOptions() == null ? new ArrayList<String>() : field.getOptions();
+        Set<String> usedHere = new HashSet<String>();
+        for (int i = 0; i < nests.size() && i < options.size(); i++) {
+            String nest = nests.get(i) == null ? "" : nests.get(i).trim();
+            if (nest.isEmpty()) {
+                continue;
+            }
+            if (!host) {
+                errors.add(label + ": a nested field can sit only among checkbox or radio rows");
+                return;
+            }
+            if (nest.equals(field.getId())) {
+                errors.add(label + ": a field cannot be nested into itself");
+                continue;
+            }
+            if (!usedHere.add(nest)) {
+                errors.add(label + ": field \"" + nest + "\" is nested more than once");
+            }
+            if (fieldById(fields, nest) == null) {
+                errors.add(label + ": nested field \"" + nest + "\" is not in this block");
+                continue;
+            }
+            if (reaches(fields, nest, field.getId(), new HashSet<String>())) {
+                errors.add(label + ": fields cannot nest each other");
+            }
+            if (nestedElsewhere(fields, field.getId(), nest)) {
+                errors.add(label + ": field \"" + nest + "\" is already nested in another field");
+            }
+        }
+    }
+
+    private static boolean nestedElsewhere(List<FormField> fields, String ownerId, String childId) {
+        for (int i = 0; i < fields.size(); i++) {
+            FormField other = fields.get(i);
+            if (other == null || ownerId.equals(other.getId()) || other.getNests() == null) {
+                continue;
+            }
+            for (int n = 0; n < other.getNests().size(); n++) {
+                String nest = other.getNests().get(n);
+                if (nest != null && childId.equals(nest.trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean reaches(List<FormField> fields, String from, String target, Set<String> seen) {
+        if (from == null || !seen.add(from)) {
+            return false;
+        }
+        FormField field = fieldById(fields, from);
+        if (field == null || field.getNests() == null) {
+            return false;
+        }
+        for (int i = 0; i < field.getNests().size(); i++) {
+            String nest = field.getNests().get(i);
+            if (nest == null || nest.trim().isEmpty()) {
+                continue;
+            }
+            String id = nest.trim();
+            if (id.equals(target) || reaches(fields, id, target, seen)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static FormField fieldById(List<FormField> fields, String id) {
+        for (int i = 0; i < fields.size(); i++) {
+            FormField field = fields.get(i);
+            if (field != null && id.equals(field.getId())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     private static void checkCondition(List<String> errors, String label, Condition when, String selfId,

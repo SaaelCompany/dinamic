@@ -130,10 +130,13 @@
             for (i = 0; i < incoming.length; i++) {
                 var src = incoming[i] || {};
                 var options = [];
+                var nests = [];
                 var rawOptions = src.options || [];
+                var rawNests = src.nests || [];
                 var o;
                 for (o = 0; o < rawOptions.length; o++) {
                     options.push(rawOptions[o] == null ? '' : String(rawOptions[o]));
+                    nests.push(rawNests[o] == null ? '' : String(rawNests[o]));
                 }
                 var when = copyWhen(src.when);
                 fields.push({
@@ -144,6 +147,7 @@
                     help: src.help == null ? '' : String(src.help),
                     type: src.type || 'text',
                     options: options,
+                    nests: nests,
                     blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
                     hideBlank: !!src.hideBlank,
                     required: !!src.required,
@@ -410,12 +414,21 @@
             for (i = 0; i < fields.length; i++) {
                 var src = fields[i];
                 var options = [];
+                var nests = [];
+                var nested = false;
                 if (isChoice(src.type)) {
                     var o;
                     for (o = 0; o < (src.options || []).length; o++) {
-                        var text = keepBlank ? (src.options[o] == null ? '' : String(src.options[o])) : trim(src.options[o]);
-                        if (keepBlank || text) {
+                        var nest = trim((src.nests || [])[o] || '');
+                        var rawText = src.options[o] == null ? '' : String(src.options[o]);
+                        var text = keepBlank ? rawText : trim(rawText);
+                        if (nest && (src.type === 'checkbox' || src.type === 'radio')) {
+                            options.push(keepBlank ? rawText : '');
+                            nests.push(nest);
+                            nested = true;
+                        } else if (keepBlank || text) {
                             options.push(text);
+                            nests.push('');
                         }
                     }
                 }
@@ -436,6 +449,9 @@
                     hideBlank: !!src.hideBlank,
                     defaults: defaults
                 };
+                if (nested) {
+                    field.nests = nests;
+                }
                 var helpRaw = src.help == null ? '' : String(src.help);
                 var help = keepBlank ? helpRaw : trim(helpRaw);
                 if (help) {
@@ -1508,17 +1524,77 @@
             return field.when && field.when.fieldId ? 22 : 0;
         }
 
+        function nestedTitle(block, id) {
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                if (block.fields[i].id === id) {
+                    return trim(block.fields[i].label) || id;
+                }
+            }
+            return id;
+        }
+
+        function nestHost(block, fieldId) {
+            var i;
+            var n;
+            for (i = 0; i < block.fields.length; i++) {
+                var nests = block.fields[i].nests || [];
+                for (n = 0; n < nests.length; n++) {
+                    if (trim(nests[n]) === fieldId) {
+                        return block.fields[i];
+                    }
+                }
+            }
+            return null;
+        }
+
+        function listedRows(block, field) {
+            var rows = [];
+            if (field.type !== 'checkbox' && field.type !== 'radio') {
+                return rows;
+            }
+            var options = field.options || [];
+            var nests = field.nests || [];
+            var i;
+            for (i = 0; i < options.length; i++) {
+                var nest = trim(nests[i] || '');
+                if (nest) {
+                    rows.push({
+                        option: '',
+                        nest: nest,
+                        text: AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField') + ': ' + nestedTitle(block, nest)
+                    });
+                } else if (trim(options[i])) {
+                    rows.push({option: trim(options[i]), nest: '', text: trim(options[i])});
+                }
+            }
+            return rows;
+        }
+
         function bandsOf(block, field) {
-            var choice = isChoice(field.type);
-            var options = choice ? filledOptions(field) : [''];
-            if (!options.length) {
-                options = [''];
+            var rows = [];
+            var listed = listedRows(block, field);
+            var i;
+            if (field.type === 'checkbox' || field.type === 'radio') {
+                rows = listed;
+            } else if (isChoice(field.type)) {
+                var filled = filledOptions(field);
+                for (i = 0; i < filled.length; i++) {
+                    rows.push({option: filled[i], nest: '', text: filled[i]});
+                }
+            }
+            if (!rows.length) {
+                rows = [{option: '', nest: '', text: ''}];
             }
             var bands = [];
             var y = NODE_HEAD + nodeExtra(field);
-            var p;
-            for (p = 0; p < options.length; p++) {
-                bands.push({option: options[p], portY: y + NODE_ROW / 2});
+            for (i = 0; i < rows.length; i++) {
+                bands.push({
+                    option: rows[i].option,
+                    nest: rows[i].nest,
+                    text: rows[i].text,
+                    portY: y + NODE_ROW / 2
+                });
                 y += NODE_ROW;
             }
             return {bands: bands, bottom: y};
@@ -1677,6 +1753,12 @@
             if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
                 node.className += ' sdf-node-selected';
             }
+            var hostField = nestHost(block, field.id);
+            if (hostField) {
+                node.className += ' sdf-node-nested';
+                node.appendChild(el('span', 'sdf-nest-badge', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestBadge')));
+                node.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestHint', nestedTitle(block, hostField.id)));
+            }
             var head = el('div', 'sdf-node-head');
             head.style.background = color;
             head.setAttribute('data-role', 'pick-node');
@@ -1700,14 +1782,24 @@
                 body.appendChild(el('div', 'sdf-node-when', whenLine(block, field.when)));
             }
             var bands = bandsOf(block, field);
-            if (isChoice(field.type) && !filledOptions(field).length) {
+            var listed = listedRows(block, field);
+            if ((field.type === 'checkbox' || field.type === 'radio') && !listed.length) {
+                body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
+            } else if (isChoice(field.type) && !filledOptions(field).length) {
                 body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
             } else {
                 var o;
                 for (o = 0; o < bands.bands.length; o++) {
                     var band = bands.bands[o];
-                    var caption = isChoice(field.type) ? band.option : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext');
-                    body.appendChild(portRow(blockIndex, laid.index, isChoice(field.type) ? band.option : '', caption));
+                    if (isChoice(field.type) && !band.option && !band.nest) {
+                        continue;
+                    }
+                    if (band.nest) {
+                        body.appendChild(el('div', 'sdf-port-row sdf-port-nest', band.text));
+                    } else {
+                        var caption = isChoice(field.type) ? band.option : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext');
+                        body.appendChild(portRow(blockIndex, laid.index, isChoice(field.type) ? band.option : '', caption));
+                    }
                 }
             }
             node.appendChild(body);
@@ -1906,13 +1998,20 @@
             card.onsubmit = function () {
                 return false;
             };
+            var nestParent = nestHost(block, field.id);
+            if (nestParent) {
+                var mark = el('div', 'sdf-nest-mark');
+                mark.appendChild(el('span', 'sdf-nest-badge', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestBadge')));
+                mark.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestHint', nestedTitle(block, nestParent.id))));
+                card.appendChild(mark);
+            }
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelp'), helpInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelpHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
             card.appendChild(renderRequired(field));
             card.appendChild(renderColor(field, index));
             if (isChoice(field.type)) {
-                card.appendChild(renderOptions(field));
+                card.appendChild(renderOptions(block, field));
             }
             if (field.type === 'select') {
                 card.appendChild(renderBlank(field));
@@ -1920,7 +2019,6 @@
             card.appendChild(renderDefault(field));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldId'), idInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.automationHint')));
             card.appendChild(renderWhen(block, field, index));
-            card.appendChild(renderPlace(block, field, index));
             var buttons = el('div', 'buttons-container');
             var row = el('div', 'buttons');
             row.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
@@ -2187,11 +2285,141 @@
             return select;
         }
 
-        function renderOptions(field) {
+        function alignNests(field) {
+            if (!field.nests) {
+                field.nests = [];
+            }
+            var i;
+            for (i = field.nests.length; i < (field.options || []).length; i++) {
+                field.nests.push('');
+            }
+            if (field.nests.length > (field.options || []).length) {
+                field.nests.length = (field.options || []).length;
+            }
+        }
+
+        function embeds(block, fromId, targetId, seen) {
+            if (!fromId) {
+                return false;
+            }
+            if (fromId === targetId) {
+                return true;
+            }
+            if (!seen) {
+                seen = {};
+            }
+            if (seen[fromId]) {
+                return false;
+            }
+            seen[fromId] = true;
+            var host = null;
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                if (block.fields[i].id === fromId) {
+                    host = block.fields[i];
+                }
+            }
+            if (!host) {
+                return false;
+            }
+            var nests = host.nests || [];
+            var n;
+            for (n = 0; n < nests.length; n++) {
+                var id = trim(nests[n] || '');
+                if (id && embeds(block, id, targetId, seen)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function nestTaken(block, ownerId, ownerIndex, childId) {
+            var i;
+            var n;
+            for (i = 0; i < block.fields.length; i++) {
+                var nests = block.fields[i].nests || [];
+                for (n = 0; n < nests.length; n++) {
+                    if (trim(nests[n]) !== childId) {
+                        continue;
+                    }
+                    if (block.fields[i].id === ownerId && n === ownerIndex) {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function firstNestCandidate(block, field, index) {
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var other = block.fields[i];
+                if (!other || !other.id || other.id === field.id) {
+                    continue;
+                }
+                if (embeds(block, other.id, field.id)) {
+                    continue;
+                }
+                if (nestTaken(block, field.id, index, other.id)) {
+                    continue;
+                }
+                return other.id;
+            }
+            return '';
+        }
+
+        function nestSelect(block, field, index) {
+            var select = document.createElement('select');
+            select.className = 'select sdf-row-field';
+            select.setAttribute('data-role', 'option-nest');
+            select.setAttribute('data-option-index', String(index));
+            var current = trim((field.nests || [])[index] || '');
+            var blank = document.createElement('option');
+            blank.value = '';
+            blank.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowFieldPick')));
+            if (!current) {
+                blank.selected = true;
+            }
+            select.appendChild(blank);
+            var found = false;
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var other = block.fields[i];
+                if (!other || !other.id || other.id === field.id) {
+                    continue;
+                }
+                if (embeds(block, other.id, field.id)) {
+                    continue;
+                }
+                if (nestTaken(block, field.id, index, other.id)) {
+                    continue;
+                }
+                var option = document.createElement('option');
+                option.value = other.id;
+                option.appendChild(document.createTextNode(trim(other.label) || other.id));
+                if (other.id === current) {
+                    option.selected = true;
+                    found = true;
+                }
+                select.appendChild(option);
+            }
+            if (current && !found) {
+                var missing = document.createElement('option');
+                missing.value = current;
+                missing.selected = true;
+                missing.appendChild(document.createTextNode(nestedTitle(block, current)));
+                select.appendChild(missing);
+            }
+            return select;
+        }
+
+        function renderOptions(block, field) {
             var box = el('div', 'field-group sdf-options');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.options')));
             var value = el('div', 'sdf-field-value');
             var options = field.options || [];
+            var nesting = field.type === 'checkbox' || field.type === 'radio';
             var i;
             for (i = 0; i < options.length; i++) {
                 var row = el('div', 'sdf-option-row');
@@ -2206,25 +2434,50 @@
                 grip.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.dragOption'));
                 grip.appendChild(document.createTextNode('\u2630'));
                 row.appendChild(grip);
-                var input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'text';
-                input.setAttribute('data-role', 'option');
-                input.setAttribute('data-option-index', String(i));
-                input.setAttribute('autocomplete', 'off');
-                input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.optionPlaceholder'));
-                input.value = options[i];
-                row.appendChild(input);
-                if (field.type === 'checkbox' || field.type === 'radio') {
-                    var nest = document.createElement('button');
-                    nest.type = 'button';
-                    nest.className = 'sdf-option-add';
-                    nest.setAttribute('data-role', 'add-from-answer');
-                    nest.setAttribute('data-option', options[i]);
-                    nest.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeAdd'));
-                    nest.disabled = !trim(options[i]);
-                    nest.appendChild(document.createTextNode('+'));
-                    row.appendChild(nest);
+                var nestId = nesting ? trim((field.nests || [])[i] || '') : '';
+                if (nesting) {
+                    var kind = document.createElement('select');
+                    kind.className = 'select sdf-row-kind';
+                    kind.setAttribute('data-role', 'option-kind');
+                    kind.setAttribute('data-option-index', String(i));
+                    var answerKind = document.createElement('option');
+                    answerKind.value = 'answer';
+                    answerKind.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowAnswer')));
+                    var fieldKind = document.createElement('option');
+                    fieldKind.value = 'field';
+                    fieldKind.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField')));
+                    if (nestId) {
+                        fieldKind.selected = true;
+                    } else {
+                        answerKind.selected = true;
+                    }
+                    kind.appendChild(answerKind);
+                    kind.appendChild(fieldKind);
+                    row.appendChild(kind);
+                }
+                if (nestId) {
+                    row.appendChild(nestSelect(block, field, i));
+                } else {
+                    var input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'text';
+                    input.setAttribute('data-role', 'option');
+                    input.setAttribute('data-option-index', String(i));
+                    input.setAttribute('autocomplete', 'off');
+                    input.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.optionPlaceholder'));
+                    input.value = options[i];
+                    row.appendChild(input);
+                    if (nesting) {
+                        var nest = document.createElement('button');
+                        nest.type = 'button';
+                        nest.className = 'sdf-option-add';
+                        nest.setAttribute('data-role', 'add-from-answer');
+                        nest.setAttribute('data-option', options[i]);
+                        nest.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeAdd'));
+                        nest.disabled = !trim(options[i]);
+                        nest.appendChild(document.createTextNode('+'));
+                        row.appendChild(nest);
+                    }
                 }
                 var remove = document.createElement('button');
                 remove.type = 'button';
@@ -2237,6 +2490,9 @@
                 value.appendChild(row);
             }
             value.appendChild(button('add-option', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption'), false));
+            if (nesting) {
+                value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowHint')));
+            }
             box.appendChild(value);
             return box;
         }
@@ -3068,8 +3324,11 @@
             if (from < 0 || to < 0 || from >= field.options.length || to >= field.options.length) {
                 return;
             }
+            alignNests(field);
             var item = field.options.splice(from, 1)[0];
+            var nestItem = field.nests.splice(from, 1)[0];
             field.options.splice(to, 0, item);
+            field.nests.splice(to, 0, nestItem || '');
             refresh();
         }
 
@@ -3294,13 +3553,19 @@
                 moveField(loc.blockIndex, loc.fieldIndex, 1);
             } else if (role === 'add-option') {
                 var field = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
+                alignNests(field);
                 field.options.push('');
+                field.nests.push('');
                 refresh();
                 focusOption(loc.blockIndex, loc.fieldIndex, field.options.length - 1);
             } else if (role === 'remove-option') {
                 var optIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
                 var target = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
+                alignNests(target);
                 var removed = target.options.splice(optIndex, 1)[0];
+                if (optIndex >= 0 && optIndex < target.nests.length) {
+                    target.nests.splice(optIndex, 1);
+                }
                 renameOption(config.blocks[loc.blockIndex], target.id, removed, '');
                 refresh();
             }
@@ -3497,6 +3762,41 @@
                 renderPreview();
                 return;
             }
+            if (role === 'option-kind' && loc.fieldIndex >= 0) {
+                var kindIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
+                var kindField = block.fields[loc.fieldIndex];
+                if (!kindField || !kindField.options || isNaN(kindIndex) || kindIndex < 0 || kindIndex >= kindField.options.length) {
+                    return;
+                }
+                alignNests(kindField);
+                if (e.target.value === 'field') {
+                    var pick = firstNestCandidate(block, kindField, kindIndex);
+                    if (!pick) {
+                        e.target.value = 'answer';
+                        return;
+                    }
+                    kindField.nests[kindIndex] = pick;
+                    kindField.options[kindIndex] = '';
+                } else {
+                    kindField.nests[kindIndex] = '';
+                }
+                refresh();
+                return;
+            }
+            if (role === 'option-nest' && loc.fieldIndex >= 0) {
+                var nestIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
+                var nestField = block.fields[loc.fieldIndex];
+                if (!nestField || isNaN(nestIndex) || nestIndex < 0) {
+                    return;
+                }
+                alignNests(nestField);
+                nestField.nests[nestIndex] = e.target.value || '';
+                if (nestField.nests[nestIndex]) {
+                    nestField.options[nestIndex] = '';
+                }
+                refresh();
+                return;
+            }
             if (role === 'place-mode') {
                 if (e.target.value === 'separate') {
                     field.after = null;
@@ -3527,7 +3827,11 @@
                     }
                 } else {
                     field.options = [];
+                    field.nests = [];
                     relaxDependents(block, field.id);
+                }
+                if (field.type !== 'checkbox' && field.type !== 'radio') {
+                    field.nests = [];
                 }
                 refresh();
             } else if (role === 'hide-blank') {
@@ -4072,6 +4376,13 @@
             }
             var i;
             for (i = 0; i < fields.length; i++) {
+                var nests = fields[i].nests || [];
+                var n;
+                for (n = 0; n < nests.length; n++) {
+                    if (trim(nests[n]) === removed.id) {
+                        nests[n] = '';
+                    }
+                }
                 if (fields[i].after && fields[i].after.fieldId === removed.id) {
                     fields[i].after = null;
                 }
@@ -4461,7 +4772,14 @@
             var i;
             if (field.type === 'checkbox' || field.type === 'radio') {
                 var choices = el('div', 'sdf-choices');
+                var previewNests = field.nests || [];
                 for (i = 0; i < options.length; i++) {
+                    if (trim(previewNests[i] || '')) {
+                        var slot = el('div', 'sdf-under');
+                        slot.setAttribute('data-sdf-nest', trim(previewNests[i]));
+                        choices.appendChild(slot);
+                        continue;
+                    }
                     if (!trim(options[i])) {
                         continue;
                     }
@@ -4724,6 +5042,7 @@
                 }
             }
             placeBetween(root, block.fields);
+            placeNests(root);
         }
 
         function clearNode(node) {
@@ -4845,6 +5164,36 @@
                 }
             }
             return true;
+        }
+
+        function placeNests(section) {
+            if (!section || !section.querySelectorAll) {
+                return;
+            }
+            var slots = section.querySelectorAll('[data-sdf-nest]');
+            var i;
+            for (i = 0; i < slots.length; i++) {
+                var slot = slots[i];
+                var id = slot.getAttribute('data-sdf-nest');
+                if (!id) {
+                    continue;
+                }
+                var nodes = section.querySelectorAll('[data-sdf-field]');
+                var node = null;
+                var n;
+                for (n = 0; n < nodes.length; n++) {
+                    if (nodes[n].getAttribute('data-sdf-field') === id && nodes[n].getAttribute('data-sdf-external') !== '1') {
+                        node = nodes[n];
+                        break;
+                    }
+                }
+                if (!node || node === slot || previewContains(node, slot)) {
+                    continue;
+                }
+                if (node.parentNode !== slot) {
+                    slot.appendChild(node);
+                }
+            }
         }
 
         function placeBetween(section, fields) {
