@@ -72,6 +72,8 @@ form.aui .sdf-under > .field-group.sdf-field,
 }
 
 .sdf-choices > .sdf-under,
+.sdf-choices > .field-group.sdf-field.sdf-rowfield,
+.sdf-choices > .field-group.sdf-field.sdf-rowfield > .sdf-choices,
 .sdf-under > .field-group.sdf-field.sdf-rowfield,
 .sdf-under > .field-group.sdf-field.sdf-rowfield > .sdf-choices {
     display: contents;

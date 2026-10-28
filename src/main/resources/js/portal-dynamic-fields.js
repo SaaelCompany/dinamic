@@ -286,6 +286,51 @@
         placeBetween(root, cfg.fields);
     }
 
+    // A checkbox or radio with no name continues the previous choice list:
+    // Доступ А, Доступ Б, then Строка А.
+    function namelessChoiceHost(field, fields, index, byId) {
+        if (!field || trim(field.label) || (field.type !== 'checkbox' && field.type !== 'radio')) {
+            return null;
+        }
+        if (field.after && field.after.fieldId) {
+            var linked = byId[field.after.fieldId];
+            if (linked && (linked.type === 'checkbox' || linked.type === 'radio')) {
+                return linked;
+            }
+        }
+        var j;
+        for (j = index - 1; j >= 0; j--) {
+            var prev = fields[j];
+            if (!prev || !prev.id) {
+                continue;
+            }
+            if (prev.type === 'checkbox' || prev.type === 'radio') {
+                return prev;
+            }
+            if (trim(prev.label)) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    function parkNamelessRow(section, field, hostField) {
+        var node = nodeByHome(section, field.id);
+        var host = nodeByHome(section, hostField.id);
+        if (!node || !host || host === node || nodeContains(node, host)) {
+            return false;
+        }
+        var choices = choicesOf(host);
+        if (!choices || nodeContains(node, choices)) {
+            return false;
+        }
+        if (node.parentNode !== choices) {
+            choices.appendChild(node);
+        }
+        addClass(node, 'sdf-rowfield');
+        return true;
+    }
+
     // A follow-up tied to one checkbox or radio answer sits under that answer,
     // including an answer of an existing Jira checkbox field.
     function placeBetween(section, fields) {
@@ -300,6 +345,10 @@
             }
         }
         for (i = 0; i < fields.length; i++) {
+            var hostField = namelessChoiceHost(fields[i], fields, i, byId);
+            if (hostField && parkNamelessRow(section, fields[i], hostField)) {
+                continue;
+            }
             var anchor = followAnchor(fields[i], byId);
             if (!anchor) {
                 continue;
@@ -541,9 +590,10 @@
         var rows = [];
         var i;
         for (i = 0; i < choices.children.length; i++) {
-            if (!hasClass(choices.children[i], 'sdf-under')) {
-                rows.push(choices.children[i]);
+            if (hasClass(choices.children[i], 'sdf-under') || choices.children[i].getAttribute('data-sdf-field')) {
+                continue;
             }
+            rows.push(choices.children[i]);
         }
         var fallback = null;
         var picked = null;
@@ -2202,6 +2252,63 @@
         return ordered;
     }
 
+    function isChoiceType(type) {
+        return type === 'checkbox' || type === 'radio' || type === 'multiselect';
+    }
+
+    function choiceLines(row) {
+        var lines = [];
+        var items = row && row.items ? row.items : [];
+        var i;
+        if (row && isChoiceType(row.type)) {
+            for (i = 0; i < items.length; i++) {
+                if (trim(items[i])) {
+                    lines.push(trim(items[i]));
+                }
+            }
+            if (!lines.length && trim(row.value)) {
+                lines.push(trim(row.value));
+            }
+        }
+        return lines;
+    }
+
+    // A nameless choice continues the previous one, each selected row on its own line.
+    function presentRows(rows) {
+        var ordered = detailRows(rows);
+        var out = [];
+        var i;
+        for (i = 0; i < ordered.length; i++) {
+            var row = ordered[i];
+            if (!row) {
+                continue;
+            }
+            var lines = choiceLines(row);
+            if (!trim(row.label) && isChoiceType(row.type) && lines.length && out.length && isChoiceType(out[out.length - 1].type)) {
+                var prev = out[out.length - 1];
+                var j;
+                for (j = 0; j < lines.length; j++) {
+                    prev.lines.push(lines[j]);
+                }
+                prev.value = prev.lines.join('\n');
+                continue;
+            }
+            var shown = [];
+            for (j = 0; j < lines.length; j++) {
+                shown.push(lines[j]);
+            }
+            out.push({
+                owner: row.owner || '',
+                fieldId: row.fieldId,
+                label: row.label,
+                type: row.type,
+                lines: shown,
+                value: row.value || ''
+            });
+        }
+        return out;
+    }
+
     function buildDetailRow(owner, row, sample) {
         var dl = document.createElement('dl');
         dl.className = ((sample && sample.className) ? sample.className + ' ' : '') + 'sdf-detail-row';
@@ -2234,7 +2341,7 @@
             return false;
         }
         hideNativeQuestionFields(rows);
-        var ordered = detailRows(rows);
+        var ordered = presentRows(rows);
         if (!ordered.length) {
             return false;
         }

@@ -4736,6 +4736,49 @@
             return true;
         }
 
+        function namelessChoiceHost(field, fields, index, byId) {
+            if (!field || trim(field.label) || (field.type !== 'checkbox' && field.type !== 'radio')) {
+                return null;
+            }
+            if (field.after && field.after.fieldId) {
+                var linked = byId[field.after.fieldId];
+                if (linked && (linked.type === 'checkbox' || linked.type === 'radio')) {
+                    return linked;
+                }
+            }
+            var j;
+            for (j = index - 1; j >= 0; j--) {
+                var prev = fields[j];
+                if (!prev || !prev.id) {
+                    continue;
+                }
+                if (prev.type === 'checkbox' || prev.type === 'radio') {
+                    return prev;
+                }
+                if (trim(prev.label)) {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        function parkNamelessRow(section, field, hostField) {
+            var node = previewNode(section, field.id);
+            var host = previewNode(section, hostField.id);
+            if (!node || !host || host === node || previewContains(node, host)) {
+                return false;
+            }
+            var choices = previewChoices(host);
+            if (!choices || previewContains(node, choices)) {
+                return false;
+            }
+            if (node.parentNode !== choices) {
+                choices.appendChild(node);
+            }
+            markInlineRow(node, field);
+            return true;
+        }
+
         function placeBetween(section, fields) {
             if (!section || !fields) {
                 return;
@@ -4748,6 +4791,10 @@
                 }
             }
             for (i = 0; i < fields.length; i++) {
+                var hostField = namelessChoiceHost(fields[i], fields, i, byId);
+                if (hostField && parkNamelessRow(section, fields[i], hostField)) {
+                    continue;
+                }
                 var anchor = previewAnchor(fields[i], byId);
                 if (!anchor) {
                     continue;
@@ -4871,9 +4918,10 @@
             var rows = [];
             var i;
             for (i = 0; i < choices.children.length; i++) {
-                if (!hasClass(choices.children[i], 'sdf-under')) {
-                    rows.push(choices.children[i]);
+                if (hasClass(choices.children[i], 'sdf-under') || choices.children[i].getAttribute('data-sdf-field')) {
+                    continue;
                 }
+                rows.push(choices.children[i]);
             }
             var fallback = null;
             var picked = null;
