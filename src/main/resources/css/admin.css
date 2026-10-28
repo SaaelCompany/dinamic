@@ -829,6 +829,16 @@ form.aui.sdf-card .buttons-container {
     line-height: 1.42857143;
 }
 
+.sdf-preview .sdf-help {
+    display: block;
+    margin: 4px 0 0;
+    color: #707070;
+    font-size: 12px;
+    font-weight: normal;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
 .sdf-preview .sdf-option {
     display: block;
     margin: 2px 0;

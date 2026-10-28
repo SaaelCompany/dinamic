@@ -28,6 +28,7 @@ public final class RulesValidator {
             FormField.TEXT, FormField.TEXTAREA, FormField.NUMBER,
             FormField.DATE, FormField.TIME, FormField.DATETIME, FormField.URL);
     private static final List<String> PLACES = Arrays.asList("end", "start", "after");
+    private static final int HELP_LIMIT = 2000;
 
     private RulesValidator() {
     }
@@ -99,6 +100,9 @@ public final class RulesValidator {
             }
             if (isBlank(field.getLabel()) && (field.getType() == null || !field.hasOptions())) {
                 errors.add(label + ": name is required");
+            }
+            if (field.getHelp() != null && field.getHelp().length() > HELP_LIMIT) {
+                errors.add(label + ": help text is longer than " + HELP_LIMIT + " characters");
             }
             if (!TYPES.contains(field.getType())) {
                 errors.add(label + ": unknown type \"" + field.getType() + "\"");

@@ -152,6 +152,7 @@
                     jiraFieldId: src.jiraFieldId ? String(src.jiraFieldId) : '',
                     issueName: src.issueName == null ? '' : String(src.issueName),
                     label: src.label == null ? '' : String(src.label),
+                    help: src.help == null ? '' : String(src.help),
                     type: src.type || 'text',
                     options: options,
                     blankLabel: src.blankLabel == null ? '' : String(src.blankLabel),
@@ -335,6 +336,11 @@
                     hideBlank: !!src.hideBlank,
                     defaults: defaults
                 };
+                var helpRaw = src.help == null ? '' : String(src.help);
+                var help = keepBlank ? helpRaw : trim(helpRaw);
+                if (help) {
+                    field.help = help;
+                }
                 if (src.required) {
                     field.required = true;
                 }
@@ -1644,6 +1650,7 @@
                 return false;
             };
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
+            card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelp'), helpInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelpHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
             card.appendChild(renderRequired(field));
             card.appendChild(renderColor(field, index));
@@ -1758,6 +1765,16 @@
             name.setAttribute('data-role', 'label');
             name.value = field.label || '';
             return name;
+        }
+
+        function helpInput(field) {
+            var help = document.createElement('textarea');
+            help.className = 'textarea long-field';
+            help.setAttribute('rows', '3');
+            help.setAttribute('data-role', 'help');
+            help.setAttribute('maxlength', '2000');
+            help.value = field.help || '';
+            return help;
         }
 
         function automaticIssueName(field) {
@@ -2862,6 +2879,10 @@
                 patchQuestionTitle(loc.blockIndex, loc.fieldIndex);
                 patchIssueName(loc.blockIndex, loc.fieldIndex);
                 renderPreview();
+            } else if (role === 'help' && loc.fieldIndex >= 0) {
+                block.fields[loc.fieldIndex].help = e.target.value;
+                sync();
+                renderPreview();
             } else if (role === 'issue-name' && loc.fieldIndex >= 0) {
                 applyIssueName(block.fields[loc.fieldIndex], e.target.value);
                 sync();
@@ -3927,7 +3948,18 @@
                 text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
                 wrap.appendChild(text);
             }
+            appendHelp(wrap, field);
             return wrap;
+        }
+
+        function appendHelp(wrap, field) {
+            var text = trim(field.help || '');
+            if (!text) {
+                return;
+            }
+            var help = el('div', 'sdf-help');
+            help.appendChild(document.createTextNode(text));
+            wrap.appendChild(help);
         }
 
         function hasDefault(field) {

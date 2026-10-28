@@ -33,6 +33,8 @@ public class FormField {
     /** Name of the Jira text field used by automation. Empty means the question label, then the id. */
     private String issueName;
     private String label;
+    /** Help shown under the question on the portal. Empty means no help. */
+    private String help;
     private String type = TEXT;
     private List<String> options = new ArrayList<String>();
     /** Text of the empty dropdown row. Empty means the portal default, usually Not selected. */
@@ -77,6 +79,19 @@ public class FormField {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public String getHelp() {
+        return help;
+    }
+
+    public void setHelp(String help) {
+        if (help == null) {
+            this.help = null;
+            return;
+        }
+        String trimmed = help.trim();
+        this.help = trimmed.isEmpty() ? null : trimmed;
     }
 
     public String getType() {

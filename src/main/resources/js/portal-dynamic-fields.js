@@ -647,7 +647,19 @@
             text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(text);
         }
+        appendHelp(wrap, field);
         return wrap;
+    }
+
+    function appendHelp(wrap, field) {
+        var text = trim(field.help || '');
+        if (!text) {
+            return;
+        }
+        var help = document.createElement('div');
+        help.className = 'description sdf-help';
+        help.appendChild(document.createTextNode(text));
+        wrap.appendChild(help);
     }
 
     function listHas(list, value) {
