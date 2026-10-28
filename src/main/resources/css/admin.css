@@ -881,21 +881,8 @@ form.aui.sdf-card .buttons-container {
     margin: 4px 0 8px 0;
 }
 
-.sdf-preview .sdf-choices > .sdf-under,
-.sdf-preview .sdf-choices > .sdf-field.sdf-rowfield,
-.sdf-preview .sdf-choices > .sdf-field.sdf-rowfield > .sdf-choices,
-.sdf-preview .sdf-under > .sdf-field.sdf-rowfield,
-.sdf-preview .sdf-under > .sdf-field.sdf-rowfield > .sdf-choices {
-    display: contents;
-}
-
-.sdf-preview .sdf-choices > .sdf-field.sdf-rowfield > label,
-.sdf-preview .sdf-under > .sdf-field.sdf-rowfield > label {
-    display: none;
-}
-
-.sdf-preview .sdf-field.sdf-rowfield.sdf-hidden {
-    display: none !important;
+.sdf-preview .sdf-choices > .sdf-under > .sdf-field {
+    padding-left: 20px;
 }
 
 .sdf-preview .sdf-title {

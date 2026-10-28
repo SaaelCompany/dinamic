@@ -296,18 +296,6 @@ public class RulesValidatorTest {
     }
 
     @Test
-    public void placementAtTheEndOfTheListNeedsNoRow() throws Exception {
-        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
-                + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
-                + "{\"id\":\"row\",\"label\":\"\",\"type\":\"checkbox\",\"options\":[\"Строка А\"],\"after\":{\"fieldId\":\"flags\"}}]}]}";
-        ObjectMapper mapper = new ObjectMapper();
-        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
-        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
-        assertEquals("flags", loaded.getBlocks().get(0).getFields().get(1).getAfter().getFieldId());
-        assertNull(loaded.getBlocks().get(0).getFields().get(1).getAfter().getOption());
-    }
-
-    @Test
     public void placementBetweenRowsMustFollowAnEarlierChoice() {
         FormField note = field("note", "Комментарий", FormField.TEXT);
         FieldAfter after = new FieldAfter();

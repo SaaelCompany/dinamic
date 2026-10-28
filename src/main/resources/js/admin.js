@@ -192,7 +192,7 @@
         }
 
         function copyAfter(src) {
-            if (!src || !src.fieldId) {
+            if (!src || !src.fieldId || !trim(src.option)) {
                 return null;
             }
             return {fieldId: String(src.fieldId), option: trim(src.option)};
@@ -268,6 +268,9 @@
                 return null;
             }
             var option = trim(after.option);
+            if (!option) {
+                return null;
+            }
             var host = null;
             var j;
             for (j = 0; j < fields.length; j++) {
@@ -278,7 +281,7 @@
             if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
                 return null;
             }
-            if (option && !contains(host.options || [], option)) {
+            if (!contains(host.options || [], option)) {
                 return null;
             }
             return {fieldId: host.id, option: option};
@@ -1641,10 +1644,6 @@
                 if (parentAt < 0) {
                     return;
                 }
-                if (placement && !trim(binding.option)) {
-                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h - 10}, leftOf(indexAt[fieldIndex]), fieldIndex);
-                    return;
-                }
                 var values = placement ? [binding.option] : (binding.values || []);
                 if (!placement && (!values.length || binding._mode === 'any')) {
                     line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[fieldIndex]), fieldIndex);
@@ -1811,24 +1810,40 @@
             return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text');
         }
 
-        function earlierChoices(block, index) {
-            var out = [];
+        function placeSpots(block, index) {
+            var spots = [];
             var i;
+            var o;
             for (i = 0; i < index; i++) {
-                var field = block.fields[i];
-                if (field && (field.type === 'checkbox' || field.type === 'radio')) {
-                    out.push(field);
+                var host = block.fields[i];
+                if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
+                    continue;
+                }
+                var options = host.options || [];
+                for (o = 0; o < options.length; o++) {
+                    if (!trim(options[o])) {
+                        continue;
+                    }
+                    spots.push({
+                        fieldId: host.id,
+                        option: options[o],
+                        label: (trim(host.label) || host.id) + ' — ' + options[o]
+                    });
                 }
             }
-            return out;
+            return spots;
+        }
+
+        function spotValue(fieldId, option) {
+            return fieldId + '\u0001' + option;
         }
 
         function renderPlace(block, field, index) {
             var box = el('div', 'field-group');
             box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeMode')));
             var value = el('div', 'sdf-field-value');
-            var hosts = earlierChoices(block, index);
-            var inside = !!(field.after && field.after.fieldId);
+            var spots = placeSpots(block, index);
+            var inside = !!(field.after && field.after.fieldId && trim(field.after.option));
             var separate = document.createElement('label');
             separate.className = 'sdf-inline-check';
             var separateInput = document.createElement('input');
@@ -1848,67 +1863,35 @@
             rowsInput.setAttribute('data-role', 'place-mode');
             rowsInput.value = 'rows';
             rowsInput.checked = inside;
-            rowsInput.disabled = !hosts.length && !inside;
+            rowsInput.disabled = !spots.length && !inside;
             rowsLabel.appendChild(rowsInput);
             rowsLabel.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeInside')));
             value.appendChild(rowsLabel);
             if (inside) {
-                var hostSelect = document.createElement('select');
-                hostSelect.className = 'select';
-                hostSelect.setAttribute('data-role', 'place-host');
-                var h;
+                var select = document.createElement('select');
+                select.className = 'select';
+                select.setAttribute('data-role', 'place-spot');
+                var s;
                 var known = false;
-                for (h = 0; h < hosts.length; h++) {
-                    var hostOption = document.createElement('option');
-                    hostOption.value = hosts[h].id;
-                    hostOption.appendChild(document.createTextNode(trim(hosts[h].label) || hosts[h].id));
-                    if (hosts[h].id === field.after.fieldId) {
-                        hostOption.selected = true;
+                var current = spotValue(field.after.fieldId, field.after.option);
+                for (s = 0; s < spots.length; s++) {
+                    var option = document.createElement('option');
+                    option.value = spotValue(spots[s].fieldId, spots[s].option);
+                    option.appendChild(document.createTextNode(spots[s].label));
+                    if (option.value === current) {
+                        option.selected = true;
                         known = true;
                     }
-                    hostSelect.appendChild(hostOption);
+                    select.appendChild(option);
                 }
                 if (!known) {
                     var missing = document.createElement('option');
-                    missing.value = field.after.fieldId;
+                    missing.value = current;
                     missing.selected = true;
-                    missing.appendChild(document.createTextNode(field.after.fieldId));
-                    hostSelect.appendChild(missing);
+                    missing.appendChild(document.createTextNode(field.after.fieldId + ' — ' + field.after.option));
+                    select.appendChild(missing);
                 }
-                value.appendChild(hostSelect);
-                var rowSelect = document.createElement('select');
-                rowSelect.className = 'select';
-                rowSelect.setAttribute('data-role', 'place-row');
-                var end = document.createElement('option');
-                end.value = '';
-                end.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeEnd')));
-                if (!trim(field.after.option)) {
-                    end.selected = true;
-                }
-                rowSelect.appendChild(end);
-                var hostField = null;
-                for (h = 0; h < hosts.length; h++) {
-                    if (hosts[h].id === field.after.fieldId) {
-                        hostField = hosts[h];
-                    }
-                }
-                var options = hostField && hostField.options ? hostField.options : [];
-                var o;
-                for (o = 0; o < options.length; o++) {
-                    if (!trim(options[o])) {
-                        continue;
-                    }
-                    var rowOption = document.createElement('option');
-                    rowOption.value = options[o];
-                    rowOption.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeAfterRow', options[o])));
-                    if (options[o] === field.after.option) {
-                        rowOption.selected = true;
-                    }
-                    rowSelect.appendChild(rowOption);
-                }
-                value.appendChild(rowSelect);
-            } else if (!hosts.length) {
-                value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeNone')));
+                value.appendChild(select);
             }
             value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.placeHint')));
             box.appendChild(value);
@@ -3518,29 +3501,21 @@
                 if (e.target.value === 'separate') {
                     field.after = null;
                 } else {
-                    var hosts = earlierChoices(block, loc.fieldIndex);
-                    if (!hosts.length) {
+                    var spots = placeSpots(block, loc.fieldIndex);
+                    if (!spots.length) {
                         return;
                     }
-                    field.after = {fieldId: hosts[0].id, option: ''};
+                    field.after = {fieldId: spots[0].fieldId, option: spots[0].option};
                 }
                 refresh();
                 return;
             }
-            if (role === 'place-host') {
-                if (!field.after) {
-                    field.after = {fieldId: '', option: ''};
-                }
-                field.after.fieldId = e.target.value;
-                field.after.option = '';
-                refresh();
-                return;
-            }
-            if (role === 'place-row') {
-                if (!field.after) {
+            if (role === 'place-spot') {
+                var parts = String(e.target.value || '').split('\u0001');
+                if (parts.length < 2 || !parts[0] || !parts[1]) {
                     return;
                 }
-                field.after.option = e.target.value;
+                field.after = {fieldId: parts[0], option: parts.slice(1).join('\u0001')};
                 refresh();
                 return;
             }
@@ -4872,34 +4847,6 @@
             return true;
         }
 
-        function rowsInline(field, byId) {
-            if (!field || !field.after || !field.after.fieldId) {
-                return false;
-            }
-            if (field.type !== 'checkbox' && field.type !== 'radio') {
-                return false;
-            }
-            var host = byId[field.after.fieldId];
-            return !!(host && (host.type === 'checkbox' || host.type === 'radio'));
-        }
-
-        function parkAtEnd(section, field, hostField, flatten) {
-            var node = previewNode(section, field.id);
-            var host = previewNode(section, hostField.id);
-            if (!node || !host || host === node || previewContains(node, host)) {
-                return false;
-            }
-            var choices = previewChoices(host);
-            if (!choices || previewContains(node, choices)) {
-                return false;
-            }
-            if (choices.lastChild !== node) {
-                choices.appendChild(node);
-            }
-            markInlineRow(node, flatten);
-            return true;
-        }
-
         function placeBetween(section, fields) {
             if (!section || !fields) {
                 return;
@@ -4912,12 +4859,6 @@
                 }
             }
             for (i = 0; i < fields.length; i++) {
-                var placed = fields[i] && fields[i].after;
-                if (placed && placed.fieldId && !trim(placed.option) && byId[placed.fieldId]) {
-                    if (parkAtEnd(section, fields[i], byId[placed.fieldId], rowsInline(fields[i], byId))) {
-                        continue;
-                    }
-                }
                 var anchor = previewAnchor(fields[i], byId);
                 if (!anchor) {
                     continue;
@@ -4934,17 +4875,6 @@
                 if (node.parentNode !== slot) {
                     slot.appendChild(node);
                 }
-                markInlineRow(node, rowsInline(fields[i], byId));
-            }
-        }
-
-        function markInlineRow(node, on) {
-            var name = 'sdf-rowfield';
-            var has = hasClass(node, name);
-            if (on && !has) {
-                node.className += (node.className ? ' ' : '') + name;
-            } else if (!on && has) {
-                node.className = (' ' + node.className + ' ').replace(' ' + name + ' ', ' ').replace(/^\s+|\s+$/g, '');
             }
         }
 

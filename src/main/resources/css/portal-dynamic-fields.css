@@ -71,23 +71,9 @@ form.aui .sdf-under > .field-group.sdf-field,
     clear: both;
 }
 
-.sdf-choices > .sdf-under,
-.sdf-choices > .field-group.sdf-field.sdf-rowfield,
-.sdf-choices > .field-group.sdf-field.sdf-rowfield > .sdf-choices,
-.sdf-under > .field-group.sdf-field.sdf-rowfield,
-.sdf-under > .field-group.sdf-field.sdf-rowfield > .sdf-choices {
-    display: contents;
-}
-
-.sdf-choices > .field-group.sdf-field.sdf-rowfield > label,
-.sdf-choices > .field-group.sdf-field.sdf-rowfield > .sdf-help,
-.sdf-under > .field-group.sdf-field.sdf-rowfield > label,
-.sdf-under > .field-group.sdf-field.sdf-rowfield > .sdf-help {
-    display: none;
-}
-
-.sdf-field.sdf-rowfield.sdf-hidden {
-    display: none !important;
+form.aui .sdf-choices > .sdf-under > .field-group.sdf-field,
+.sdf-choices > .sdf-under > .field-group.sdf-field {
+    padding-left: 20px;
 }
 
 form.aui .sdf-under > .field-group.sdf-field > label,
