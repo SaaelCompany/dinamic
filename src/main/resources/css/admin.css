@@ -305,6 +305,19 @@
     background: #fff;
 }
 
+.sdf-port-field {
+    background: #6554c0;
+    box-shadow: 0 0 0 2px #6554c0;
+}
+
+.sdf-port-field.sdf-port-armed {
+    background: #fff;
+}
+
+.sdf-edge-nest {
+    stroke: #6554c0;
+}
+
 .sdf-node-del {
     position: absolute;
     top: 9px;

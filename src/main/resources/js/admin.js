@@ -638,6 +638,22 @@
 
         function render() {
             ensureType();
+            var pageX = window.pageXOffset || document.documentElement.scrollLeft || 0;
+            var pageY = window.pageYOffset || document.documentElement.scrollTop || 0;
+            var canvasScroll = [];
+            var oldCanvases = host.querySelectorAll('.sdf-canvas');
+            var c;
+            for (c = 0; c < oldCanvases.length; c++) {
+                var owner = oldCanvases[c];
+                while (owner && !hasClass(owner, 'sdf-block-card')) {
+                    owner = owner.parentNode;
+                }
+                canvasScroll.push({
+                    block: owner ? owner.getAttribute('data-block-index') : '',
+                    top: oldCanvases[c].scrollTop,
+                    left: oldCanvases[c].scrollLeft
+                });
+            }
             while (host.firstChild) {
                 host.removeChild(host.firstChild);
             }
@@ -659,6 +675,24 @@
             var i;
             for (i = 0; i < visible.length; i++) {
                 host.appendChild(renderBlock(config.blocks[visible[i]], visible[i]));
+            }
+            var freshCanvases = host.querySelectorAll('.sdf-canvas');
+            for (c = 0; c < freshCanvases.length; c++) {
+                var freshOwner = freshCanvases[c];
+                while (freshOwner && !hasClass(freshOwner, 'sdf-block-card')) {
+                    freshOwner = freshOwner.parentNode;
+                }
+                var freshKey = freshOwner ? freshOwner.getAttribute('data-block-index') : '';
+                var s;
+                for (s = 0; s < canvasScroll.length; s++) {
+                    if (canvasScroll[s].block === freshKey) {
+                        freshCanvases[c].scrollTop = canvasScroll[s].top;
+                        freshCanvases[c].scrollLeft = canvasScroll[s].left;
+                    }
+                }
+            }
+            if (window.scrollTo) {
+                window.scrollTo(pageX, pageY);
             }
             placeFloats();
             syncProject();
@@ -717,12 +751,18 @@
             head.appendChild(close);
             panel.appendChild(head);
             panel.appendChild(renderCard(block, blockIndex, index));
+            panel.style.position = 'fixed';
+            panel.style.left = '0px';
+            panel.style.top = '0px';
+            panel.style.visibility = 'hidden';
             return panel;
         }
 
         function placeFloats() {
             var panels = host.querySelectorAll('.sdf-float');
             var i;
+            var viewW = window.innerWidth || document.documentElement.clientWidth || 0;
+            var viewH = window.innerHeight || document.documentElement.clientHeight || 0;
             for (i = 0; i < panels.length; i++) {
                 var panel = panels[i];
                 var card = panel.parentNode;
@@ -738,32 +778,40 @@
                     continue;
                 }
                 var nodeBox = node.getBoundingClientRect();
-                var cardBox = card.getBoundingClientRect();
                 var width = panel.offsetWidth || 480;
-                var left = nodeBox.right - cardBox.left + 18;
-                var top = nodeBox.top - cardBox.top;
-                if (left + width > card.clientWidth - 8) {
-                    var leftSide = nodeBox.left - cardBox.left - width - 18;
+                var height = panel.offsetHeight || 320;
+                if (height > viewH - 16) {
+                    height = viewH - 16;
+                }
+                var left = nodeBox.right + 18;
+                var top = nodeBox.top;
+                if (left + width > viewW - 8) {
+                    var leftSide = nodeBox.left - width - 18;
                     if (leftSide >= 8) {
                         left = leftSide;
                     } else {
-                        left = Math.max(8, card.clientWidth - width - 8);
-                        top = nodeBox.bottom - cardBox.top + 12;
+                        left = Math.max(8, viewW - width - 8);
+                        top = nodeBox.bottom + 12;
                     }
                 }
-                var minTop = 8;
-                if (top < minTop) {
-                    top = minTop;
+                if (top + height > viewH - 8) {
+                    top = Math.max(8, viewH - height - 8);
                 }
+                if (top < 8) {
+                    top = 8;
+                }
+                if (left < 8) {
+                    left = 8;
+                }
+                panel.style.position = 'fixed';
                 panel.style.left = Math.round(left) + 'px';
                 panel.style.top = Math.round(top) + 'px';
+                panel.style.visibility = 'visible';
             }
         }
 
-        function onCanvasScroll(e) {
-            if (e.target && hasClass(e.target, 'sdf-canvas')) {
-                placeFloats();
-            }
+        function onCanvasScroll() {
+            placeFloats();
         }
 
         function closeMenu() {
@@ -1643,6 +1691,7 @@
                     for (p = 0; p < bands.bands.length; p++) {
                         item.ports.push({
                             option: bands.bands[p].option,
+                            nest: bands.bands[p].nest || '',
                             y: bands.bands[p].portY
                         });
                     }
@@ -1666,17 +1715,20 @@
             function leftOf(at) {
                 return {x: laid[at].x, y: laid[at].y + laid[at].h / 2};
             }
-            function portPoint(item, option) {
+            function portPoint(item, option, nestId) {
                 var ports = item.ports || [];
                 var n;
                 for (n = 0; n < ports.length; n++) {
-                    if (option && ports[n].option === option) {
+                    if (nestId && ports[n].nest === nestId) {
+                        return {x: item.x + NODE_W, y: item.y + ports[n].y};
+                    }
+                    if (!nestId && option && ports[n].option === option) {
                         return {x: item.x + NODE_W, y: item.y + ports[n].y};
                     }
                 }
                 return {x: item.x + NODE_W, y: item.y + item.h / 2};
             }
-            function line(from, to, childIndex) {
+            function line(from, to, fieldIndex, kind, nestIndex) {
                 var mid = (from.x + to.x) / 2;
                 var d = 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y;
                 var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1684,17 +1736,20 @@
                 hit.setAttribute('fill', 'none');
                 hit.setAttribute('stroke', 'transparent');
                 hit.setAttribute('stroke-width', '22');
-                hit.setAttribute('data-role', 'unlink');
+                hit.setAttribute('data-role', kind === 'nest' ? 'unlink-nest' : 'unlink');
                 hit.setAttribute('data-block-index', String(blockIndex));
-                hit.setAttribute('data-field-index', String(childIndex));
+                hit.setAttribute('data-field-index', String(fieldIndex));
+                if (kind === 'nest') {
+                    hit.setAttribute('data-nest-index', String(nestIndex));
+                }
                 hit.setAttribute('class', 'sdf-edge-hit');
                 svg.appendChild(hit);
                 var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', d);
                 path.setAttribute('fill', 'none');
-                path.setAttribute('stroke', '#4c9aff');
+                path.setAttribute('stroke', kind === 'nest' ? '#6554c0' : '#4c9aff');
                 path.setAttribute('stroke-width', '1.5');
-                path.setAttribute('class', 'sdf-edge');
+                path.setAttribute('class', kind === 'nest' ? 'sdf-edge sdf-edge-nest' : 'sdf-edge');
                 svg.appendChild(path);
             }
             for (i = 0; i < block.fields.length; i++) {
@@ -1703,6 +1758,7 @@
                 }
                 bindLine(i, block.fields[i].after, true);
                 bindLine(i, block.fields[i].when, false);
+                bindNest(i);
             }
             return svg;
 
@@ -1736,6 +1792,32 @@
                     line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[fieldIndex]), fieldIndex);
                 }
             }
+
+            function bindNest(hostIndex) {
+                var host = block.fields[hostIndex];
+                if (!host || (host.type !== 'checkbox' && host.type !== 'radio') || indexAt[hostIndex] == null) {
+                    return;
+                }
+                var nests = host.nests || [];
+                var n;
+                for (n = 0; n < nests.length; n++) {
+                    var childId = trim(nests[n] || '');
+                    if (!childId) {
+                        continue;
+                    }
+                    var childAt = -1;
+                    var p;
+                    for (p = 0; p < block.fields.length; p++) {
+                        if (block.fields[p].id === childId) {
+                            childAt = indexAt[p];
+                        }
+                    }
+                    if (childAt == null || childAt < 0) {
+                        continue;
+                    }
+                    line(portPoint(laid[indexAt[hostIndex]], '', childId), leftOf(childAt), hostIndex, 'nest', n);
+                }
+            }
         }
 
         function nodeButton(block, blockIndex, laid) {
@@ -1752,12 +1834,6 @@
             node.setAttribute('data-field-index', String(laid.index));
             if (selectedField.blockIndex === blockIndex && selectedField.index === laid.index) {
                 node.className += ' sdf-node-selected';
-            }
-            var hostField = nestHost(block, field.id);
-            if (hostField) {
-                node.className += ' sdf-node-nested';
-                node.appendChild(el('span', 'sdf-nest-badge', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestBadge')));
-                node.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestHint', nestedTitle(block, hostField.id)));
             }
             var head = el('div', 'sdf-node-head');
             head.style.background = color;
@@ -1784,8 +1860,8 @@
             var bands = bandsOf(block, field);
             var listed = listedRows(block, field);
             if ((field.type === 'checkbox' || field.type === 'radio') && !listed.length) {
-                body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
-            } else if (isChoice(field.type) && !filledOptions(field).length) {
+                body.appendChild(nestPortRow(blockIndex, laid.index, -1, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestAttach')));
+            } else if (isChoice(field.type) && !filledOptions(field).length && !listed.length) {
                 body.appendChild(el('div', 'sdf-port-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addOption')));
             } else {
                 var o;
@@ -1795,7 +1871,7 @@
                         continue;
                     }
                     if (band.nest) {
-                        body.appendChild(el('div', 'sdf-port-row sdf-port-nest', band.text));
+                        body.appendChild(nestPortRow(blockIndex, laid.index, nestIndexOf(field, band.nest), band.text));
                     } else {
                         var caption = isChoice(field.type) ? band.option : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeNext');
                         body.appendChild(portRow(blockIndex, laid.index, isChoice(field.type) ? band.option : '', caption));
@@ -1804,6 +1880,33 @@
             }
             node.appendChild(body);
             return node;
+        }
+
+        function nestIndexOf(field, nestId) {
+            var nests = field.nests || [];
+            var i;
+            for (i = 0; i < nests.length; i++) {
+                if (trim(nests[i]) === nestId) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function nestPortRow(blockIndex, fieldIndex, nestIndex, text) {
+            var row = el('div', 'sdf-port-row sdf-port-nest');
+            row.appendChild(el('span', 'sdf-port-text', text));
+            var port = document.createElement('button');
+            port.type = 'button';
+            port.className = 'sdf-port sdf-port-field';
+            port.setAttribute('data-role', 'link-nest');
+            port.setAttribute('data-nest-index', String(nestIndex));
+            port.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestLink'));
+            if (pendingLink && pendingLink.kind === 'nest' && pendingLink.blockIndex === blockIndex && pendingLink.fieldIndex === fieldIndex && pendingLink.nestIndex === nestIndex) {
+                port.className += ' sdf-port-armed';
+            }
+            row.appendChild(port);
+            return row;
         }
 
         function portRow(blockIndex, fieldIndex, option, text) {
@@ -1998,13 +2101,6 @@
             card.onsubmit = function () {
                 return false;
             };
-            var nestParent = nestHost(block, field.id);
-            if (nestParent) {
-                var mark = el('div', 'sdf-nest-mark');
-                mark.appendChild(el('span', 'sdf-nest-badge', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestBadge')));
-                mark.appendChild(document.createTextNode(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nestHint', nestedTitle(block, nestParent.id))));
-                card.appendChild(mark);
-            }
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.name'), questionInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.questionHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelp'), helpInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldHelpHint')));
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.typeLabel'), typeSelect(field.type), null));
@@ -2985,7 +3081,51 @@
             return '';
         }
 
+        function attachNest(blockIndex, hostIndex, nestIndex, childIndex) {
+            var fields = config.blocks[blockIndex].fields;
+            var host = fields[hostIndex];
+            var child = fields[childIndex];
+            pendingLink = null;
+            if (!host || !child || hostIndex === childIndex) {
+                return;
+            }
+            if (host.type !== 'checkbox' && host.type !== 'radio') {
+                return;
+            }
+            if (embeds(config.blocks[blockIndex], child.id, host.id) || nestTaken(config.blocks[blockIndex], host.id, nestIndex, child.id)) {
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
+                refresh();
+                return;
+            }
+            alignNests(host);
+            if (nestIndex >= 0 && nestIndex < host.options.length) {
+                host.nests[nestIndex] = child.id;
+                host.options[nestIndex] = '';
+            } else {
+                var onlyBlank = true;
+                var i;
+                for (i = 0; i < host.options.length; i++) {
+                    if (trim(host.options[i]) || trim(host.nests[i] || '')) {
+                        onlyBlank = false;
+                    }
+                }
+                if (onlyBlank && host.options.length) {
+                    host.options[0] = '';
+                    host.nests[0] = child.id;
+                } else {
+                    host.options.push('');
+                    host.nests.push(child.id);
+                }
+            }
+            selectedField = {blockIndex: blockIndex, index: hostIndex};
+            refresh();
+        }
+
         function connectFields(blockIndex, fromIndex, option, toIndex) {
+            if (pendingLink && pendingLink.kind === 'nest') {
+                attachNest(blockIndex, fromIndex, pendingLink.nestIndex, toIndex);
+                return;
+            }
             var fields = config.blocks[blockIndex].fields;
             if (!fields[fromIndex] || !fields[toIndex] || fromIndex === toIndex) {
                 return;
@@ -3376,6 +3516,36 @@
                 }
                 return;
             }
+            if (role === 'link-nest') {
+                if (new Date().getTime() < ignoreLinkClickUntil) {
+                    return;
+                }
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var nestSource = fieldAt(e.target);
+                if (!nestSource) {
+                    return;
+                }
+                var nestIndex = parseInt(e.target.getAttribute('data-nest-index'), 10);
+                if (isNaN(nestIndex)) {
+                    nestIndex = -1;
+                }
+                if (pendingLink && pendingLink.kind === 'nest' && pendingLink.blockIndex === nestSource.blockIndex && pendingLink.fieldIndex === nestSource.fieldIndex && pendingLink.nestIndex === nestIndex) {
+                    pendingLink = null;
+                } else {
+                    pendingLink = {
+                        kind: 'nest',
+                        blockIndex: nestSource.blockIndex,
+                        fieldIndex: nestSource.fieldIndex,
+                        option: '',
+                        nestIndex: nestIndex
+                    };
+                    selectedField = {blockIndex: nestSource.blockIndex, index: nestSource.fieldIndex};
+                }
+                refresh();
+                return;
+            }
             if (role === 'link-from') {
                 if (new Date().getTime() < ignoreLinkClickUntil) {
                     return;
@@ -3434,6 +3604,35 @@
                 selectedType = parseInt(holder.getAttribute('data-value'), 10) || 0;
                 typePicked = true;
                 refresh();
+                return;
+            }
+            if (role === 'unlink-nest') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var nestHostNode = e.target;
+                while (nestHostNode && nestHostNode !== app && !(nestHostNode.getAttribute && nestHostNode.getAttribute('data-field-index') != null)) {
+                    nestHostNode = nestHostNode.parentNode;
+                }
+                if (!nestHostNode) {
+                    return;
+                }
+                var nestBlock = parseInt(nestHostNode.getAttribute('data-block-index'), 10) || 0;
+                var nestField = parseInt(nestHostNode.getAttribute('data-field-index'), 10) || 0;
+                var nestAt = parseInt(nestHostNode.getAttribute('data-nest-index'), 10);
+                var nestOwner = config.blocks[nestBlock] && config.blocks[nestBlock].fields[nestField];
+                if (nestOwner && !isNaN(nestAt)) {
+                    alignNests(nestOwner);
+                    if (nestAt >= 0 && nestAt < nestOwner.nests.length) {
+                        nestOwner.nests[nestAt] = '';
+                        if (!trim(nestOwner.options[nestAt]) && nestOwner.options.length > 1) {
+                            nestOwner.options.splice(nestAt, 1);
+                            nestOwner.nests.splice(nestAt, 1);
+                        }
+                    }
+                    selectedField = {blockIndex: nestBlock, index: nestField};
+                    refresh();
+                }
                 return;
             }
             if (role === 'unlink' || role === 'unlink-field') {
