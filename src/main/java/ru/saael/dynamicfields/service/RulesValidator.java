@@ -2,6 +2,7 @@ package ru.saael.dynamicfields.service;
 
 import ru.saael.dynamicfields.model.Condition;
 import ru.saael.dynamicfields.model.FieldAfter;
+import ru.saael.dynamicfields.model.FieldAmong;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
@@ -130,6 +131,7 @@ public final class RulesValidator {
             checkNests(errors, label, field, list);
             checkCondition(errors, label, field.getWhen(), field.getId(), earlier, "when");
             checkAfter(errors, label, field.getAfter(), field.getId(), list, i);
+            checkAmong(errors, label, field, list, i);
             if (!isBlank(field.getId())) {
                 earlier.add(field.getId());
             }
@@ -287,6 +289,68 @@ public final class RulesValidator {
         if (!found) {
             errors.add(label + ": placement option \"" + after.getOption() + "\" is not on the field");
         }
+    }
+
+    private static void checkAmong(List<String> errors, String label, FormField field, List<FormField> fields, int index) {
+        FieldAmong among = field.getAmong();
+        if (among == null) {
+            return;
+        }
+        if (isBlank(among.getFieldId())) {
+            errors.add(label + ": \"among.fieldId\" is required");
+            return;
+        }
+        if (among.getFieldId().equals(field.getId())) {
+            errors.add(label + ": a field cannot sit inside itself");
+            return;
+        }
+        FormField host = null;
+        for (int i = 0; i < index; i++) {
+            FormField candidate = fields.get(i);
+            if (candidate != null && among.getFieldId().equals(candidate.getId())) {
+                host = candidate;
+            }
+        }
+        if (host == null) {
+            errors.add(label + ": position refers to unknown or later field \"" + among.getFieldId() + "\"");
+            return;
+        }
+        if (!FormField.CHECKBOX.equals(host.getType()) && !FormField.RADIO.equals(host.getType())) {
+            errors.add(label + ": a question can sit between the rows of a checkbox or radio field only");
+            return;
+        }
+        if (!among.isBefore()) {
+            if (isBlank(among.getOption())) {
+                errors.add(label + ": \"among.option\" is required");
+                return;
+            }
+            boolean found = false;
+            if (host.getOptions() != null) {
+                for (String option : host.getOptions()) {
+                    if (among.getOption().equals(option)) {
+                        found = true;
+                    }
+                }
+            }
+            if (!found) {
+                errors.add(label + ": position option \"" + among.getOption() + "\" is not on the field");
+            }
+        }
+        if (amongReaches(fields, host.getId(), field.getId(), new HashSet<String>())) {
+            errors.add(label + ": fields cannot sit inside each other");
+        }
+    }
+
+    private static boolean amongReaches(List<FormField> fields, String from, String target, Set<String> seen) {
+        if (from == null || !seen.add(from)) {
+            return false;
+        }
+        FormField field = fieldById(fields, from);
+        if (field == null || field.getAmong() == null || isBlank(field.getAmong().getFieldId())) {
+            return false;
+        }
+        String id = field.getAmong().getFieldId().trim();
+        return id.equals(target) || amongReaches(fields, id, target, seen);
     }
 
     private static String blockName(FormBlock block, int index) {

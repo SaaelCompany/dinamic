@@ -4,6 +4,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 import ru.saael.dynamicfields.model.Condition;
 import ru.saael.dynamicfields.model.FieldAfter;
+import ru.saael.dynamicfields.model.FieldAmong;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
@@ -379,6 +380,25 @@ public class RulesValidatorTest {
             }
         }
         assertTrue(errors.toString(), cycle);
+    }
+
+    @Test
+    public void upButtonCanPlaceAFieldBetweenRows() throws Exception {
+        FormField parent = field("server", "Характеристики сервера", FormField.RADIO, "Стандартный сервер", "Другое");
+        FormField child = field("name", "Имя", FormField.TEXT);
+        FieldAmong among = new FieldAmong();
+        among.setFieldId("server");
+        among.setOption("Стандартный сервер");
+        child.setAmong(among);
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(parent, child)));
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
+                + "{\"id\":\"server\",\"label\":\"Характеристики сервера\",\"type\":\"radio\",\"options\":[\"Стандартный сервер\",\"Другое\"]},"
+                + "{\"id\":\"name\",\"label\":\"Имя\",\"type\":\"text\",\"among\":{\"fieldId\":\"server\",\"option\":\"Стандартный сервер\"}}]}]}";
+        RulesConfig loaded = new ObjectMapper().readValue(json, RulesConfig.class);
+        FieldAmong saved = loaded.getBlocks().get(0).getFields().get(1).getAmong();
+        assertEquals("server", saved.getFieldId());
+        assertEquals("Стандартный сервер", saved.getOption());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
     }
 
     @Test
