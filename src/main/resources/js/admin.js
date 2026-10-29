@@ -1692,6 +1692,7 @@
                 option: '',
                 nest: '',
                 among: true,
+                amongId: child ? child.id : '',
                 text: AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField') + ': ' + fieldCaption(child)
             };
         }
@@ -1753,6 +1754,7 @@
                     option: rows[i].option,
                     nest: rows[i].nest,
                     among: rows[i].among ? true : false,
+                    amongId: rows[i].amongId || '',
                     text: rows[i].text,
                     portY: y + NODE_ROW / 2
                 });
@@ -1795,7 +1797,7 @@
                     var bands = bandsOf(block, field);
                     var item = {
                         index: index,
-                        x: 16 + col * (NODE_W + 88),
+                        x: 40 + col * (NODE_W + 88),
                         y: y,
                         h: nodeBoxHeight(block, field),
                         ports: []
@@ -1805,6 +1807,7 @@
                         item.ports.push({
                             option: bands.bands[p].option,
                             nest: bands.bands[p].nest || '',
+                            amongId: bands.bands[p].amongId || '',
                             y: bands.bands[p].portY
                         });
                     }
@@ -1828,6 +1831,16 @@
             function leftOf(at) {
                 return {x: laid[at].x, y: laid[at].y + laid[at].h / 2};
             }
+            function amongPoint(item, childId) {
+                var ports = item.ports || [];
+                var n;
+                for (n = 0; n < ports.length; n++) {
+                    if (childId && ports[n].amongId === childId) {
+                        return {x: item.x + NODE_W, y: item.y + ports[n].y};
+                    }
+                }
+                return {x: item.x + NODE_W, y: item.y + item.h / 2};
+            }
             function portPoint(item, option, nestId) {
                 var ports = item.ports || [];
                 var n;
@@ -1844,25 +1857,45 @@
             function line(from, to, fieldIndex, kind, nestIndex) {
                 var mid = (from.x + to.x) / 2;
                 var d = 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y;
+                var stroke = '#4c9aff';
+                var cls = 'sdf-edge';
+                var role = 'unlink';
+                if (kind === 'nest') {
+                    stroke = '#6554c0';
+                    cls = 'sdf-edge sdf-edge-nest';
+                    role = 'unlink-nest';
+                } else if (kind === 'among') {
+                    stroke = '#6554c0';
+                    cls = 'sdf-edge sdf-edge-among';
+                    role = 'unlink-among';
+                }
                 var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 hit.setAttribute('d', d);
                 hit.setAttribute('fill', 'none');
                 hit.setAttribute('stroke', 'transparent');
                 hit.setAttribute('stroke-width', '22');
-                hit.setAttribute('data-role', kind === 'nest' ? 'unlink-nest' : 'unlink');
+                hit.setAttribute('data-role', role);
                 hit.setAttribute('data-block-index', String(blockIndex));
                 hit.setAttribute('data-field-index', String(fieldIndex));
                 if (kind === 'nest') {
                     hit.setAttribute('data-nest-index', String(nestIndex));
+                }
+                if (kind === 'among') {
+                    var hint = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                    hint.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.amongUnlink')));
+                    hit.appendChild(hint);
                 }
                 hit.setAttribute('class', 'sdf-edge-hit');
                 svg.appendChild(hit);
                 var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', d);
                 path.setAttribute('fill', 'none');
-                path.setAttribute('stroke', kind === 'nest' ? '#6554c0' : '#4c9aff');
+                path.setAttribute('stroke', stroke);
                 path.setAttribute('stroke-width', '1.5');
-                path.setAttribute('class', kind === 'nest' ? 'sdf-edge sdf-edge-nest' : 'sdf-edge');
+                if (kind === 'among') {
+                    path.setAttribute('stroke-dasharray', '5 4');
+                }
+                path.setAttribute('class', cls);
                 svg.appendChild(path);
             }
             for (i = 0; i < block.fields.length; i++) {
@@ -1871,6 +1904,7 @@
                 }
                 bindLine(i, block.fields[i].after, true);
                 bindLine(i, block.fields[i].when, false);
+                bindAmong(i);
             }
             return svg;
 
@@ -1903,6 +1937,33 @@
                     }
                     line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[fieldIndex]), fieldIndex);
                 }
+            }
+
+            function bindAmong(childIndex) {
+                var child = block.fields[childIndex];
+                var among = child && child.among;
+                if (!among || !among.fieldId || indexAt[childIndex] == null) {
+                    return;
+                }
+                var hostIndex = -1;
+                var p;
+                for (p = 0; p < childIndex; p++) {
+                    if (block.fields[p].id === among.fieldId) {
+                        hostIndex = p;
+                    }
+                }
+                if (hostIndex < 0 || indexAt[hostIndex] == null) {
+                    return;
+                }
+                var host = block.fields[hostIndex];
+                if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
+                    return;
+                }
+                if (!among.before && (!trim(among.option) || !contains(host.options || [], trim(among.option)))) {
+                    return;
+                }
+                var childItem = laid[indexAt[childIndex]];
+                line(amongPoint(laid[indexAt[hostIndex]], child.id), {x: childItem.x, y: childItem.y + childItem.h / 2}, childIndex, 'among');
             }
 
             function bindNest(hostIndex) {
@@ -1965,6 +2026,12 @@
             remove.appendChild(document.createTextNode('\u00d7'));
             head.appendChild(remove);
             node.appendChild(head);
+            var inlet = document.createElement('button');
+            inlet.type = 'button';
+            inlet.className = 'sdf-port sdf-port-in';
+            inlet.setAttribute('data-role', 'link-among');
+            inlet.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.amongPort'));
+            node.appendChild(inlet);
             var body = el('div', 'sdf-node-body');
             if (field.when && field.when.fieldId) {
                 body.appendChild(el('div', 'sdf-node-when', whenLine(block, field.when)));
@@ -3338,6 +3405,54 @@
             return hostIndex;
         }
 
+        function pullInsideAfter(fields, childIndex) {
+            var childId = fields[childIndex].id;
+            var moving = [];
+            var i;
+            for (i = fields.length - 1; i >= 0; i--) {
+                if (fields[i].id !== childId && itemInside(fields, i, childIndex)) {
+                    moving.unshift(fields.splice(i, 1)[0]);
+                    if (i < childIndex) {
+                        childIndex--;
+                    }
+                }
+            }
+            var at = idIndex(fields, childId);
+            for (i = 0; i < moving.length; i++) {
+                fields.splice(at + 1 + i, 0, moving[i]);
+            }
+            return at;
+        }
+
+        function placeAmongLink(blockIndex, childIndex, hostIndex, before, option) {
+            var fields = config.blocks[blockIndex].fields;
+            var host = fields[hostIndex];
+            var child = fields[childIndex];
+            if (!host || !child || hostIndex === childIndex) {
+                return;
+            }
+            if (host.type !== 'checkbox' && host.type !== 'radio') {
+                return;
+            }
+            if (!before && !trim(option)) {
+                return;
+            }
+            if (itemInside(fields, hostIndex, childIndex)) {
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
+                refresh();
+                return;
+            }
+            if (before) {
+                child.among = {fieldId: host.id, before: true};
+            } else {
+                child.among = {fieldId: host.id, option: trim(option), before: false};
+            }
+            var at = placeAfterHost(fields, childIndex, hostIndex);
+            at = pullInsideAfter(fields, at);
+            selectedField = {blockIndex: blockIndex, index: at};
+            refresh();
+        }
+
         function sameSlot(left, right) {
             if (!left || !right || left.fieldId !== right.fieldId) {
                 return false;
@@ -3551,7 +3666,8 @@
         }
 
         function onPortDown(e) {
-            if (roleOf(e.target) !== 'link-from') {
+            var role = roleOf(e.target);
+            if (role !== 'link-from' && role !== 'link-among') {
                 return;
             }
             if (e.button) {
@@ -3568,10 +3684,13 @@
             var boardBox = board.getBoundingClientRect();
             var portBox = e.target.getBoundingClientRect();
             dragLink = {
+                kind: role === 'link-among' ? 'among' : 'when',
                 blockIndex: source.blockIndex,
                 fieldIndex: source.fieldIndex,
-                option: optionOf(e.target),
+                option: role === 'link-among' ? '' : optionOf(e.target),
                 moved: false,
+                drop: null,
+                dropReject: '',
                 board: board,
                 x0: e.clientX,
                 y0: e.clientY,
@@ -3590,7 +3709,14 @@
                 dragLink.moved = true;
             }
             var boardBox = dragLink.board.getBoundingClientRect();
-            paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top);
+            if (dragLink.kind === 'among') {
+                paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top, '#6554c0', true);
+                if (dragLink.moved) {
+                    markAmongDrop(e.clientX, e.clientY);
+                }
+            } else {
+                paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top);
+            }
         }
 
         function onPortUp(e) {
@@ -3602,10 +3728,20 @@
             var info = dragLink;
             dragLink = null;
             clearRubber(info.board);
+            clearAmongGaps();
             if (!info.moved) {
                 return;
             }
             ignoreLinkClickUntil = new Date().getTime() + 400;
+            if (info.kind === 'among') {
+                if (info.drop) {
+                    placeAmongLink(info.blockIndex, info.fieldIndex, info.drop.hostIndex, info.drop.before, info.drop.option);
+                } else if (info.dropReject === 'cycle') {
+                    showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
+                    refresh();
+                }
+                return;
+            }
             var under = document.elementFromPoint(e.clientX, e.clientY);
             var target = fieldAt(under);
             if (target && target.blockIndex === info.blockIndex && target.fieldIndex !== info.fieldIndex) {
@@ -3613,7 +3749,7 @@
             }
         }
 
-        function paintRubber(board, x1, y1, x2, y2) {
+        function paintRubber(board, x1, y1, x2, y2, color, dashed) {
             var svg = board.querySelector('.sdf-rubber');
             if (!svg) {
                 svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -3629,9 +3765,93 @@
             var mid = (x1 + x2) / 2;
             path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + mid + ' ' + y1 + ', ' + mid + ' ' + y2 + ', ' + x2 + ' ' + y2);
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#0052cc');
+            path.setAttribute('stroke', color || '#0052cc');
             path.setAttribute('stroke-width', '1.5');
+            if (dashed) {
+                path.setAttribute('stroke-dasharray', '5 4');
+            }
             svg.appendChild(path);
+        }
+
+        function nodeElOf(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-node')) {
+                    return node;
+                }
+                node = node.parentNode;
+            }
+            return null;
+        }
+
+        function clearAmongGaps() {
+            var nodes = app.getElementsByClassName('sdf-among-gap');
+            var copy = [];
+            var i;
+            for (i = 0; i < nodes.length; i++) {
+                copy.push(nodes[i]);
+            }
+            for (i = 0; i < copy.length; i++) {
+                if (copy[i].parentNode) {
+                    copy[i].parentNode.removeChild(copy[i]);
+                }
+            }
+        }
+
+        function amongSlotAt(node, clientY) {
+            var rows = node.querySelectorAll('.sdf-port-row');
+            var box = node.getBoundingClientRect();
+            var before = true;
+            var option = '';
+            var gapTop = node.querySelector('.sdf-node-when') ? 62 : 40;
+            var i;
+            for (i = 0; i < rows.length; i++) {
+                var rect = rows[i].getBoundingClientRect();
+                if (clientY < rect.top + rect.height / 2) {
+                    gapTop = rect.top - box.top;
+                    break;
+                }
+                before = false;
+                var port = rows[i].querySelector('[data-role="link-from"]');
+                option = port ? (port.getAttribute('data-option') || '') : option;
+                gapTop = rect.bottom - box.top;
+            }
+            return {before: before, option: before ? '' : option, y: gapTop};
+        }
+
+        function markAmongDrop(clientX, clientY) {
+            clearAmongGaps();
+            dragLink.drop = null;
+            dragLink.dropReject = '';
+            var node = nodeElOf(document.elementFromPoint(clientX, clientY));
+            if (!node) {
+                return;
+            }
+            var host = fieldAt(node);
+            if (!host || host.blockIndex !== dragLink.blockIndex || host.fieldIndex === dragLink.fieldIndex) {
+                return;
+            }
+            var fields = config.blocks[host.blockIndex].fields;
+            var hostField = fields[host.fieldIndex];
+            if (!hostField || (hostField.type !== 'checkbox' && hostField.type !== 'radio')) {
+                return;
+            }
+            if (itemInside(fields, host.fieldIndex, dragLink.fieldIndex)) {
+                dragLink.dropReject = 'cycle';
+                return;
+            }
+            var slot = amongSlotAt(node, clientY);
+            if (!slot.before && !trim(slot.option)) {
+                return;
+            }
+            var gap = el('div', 'sdf-among-gap');
+            gap.style.top = slot.y + 'px';
+            node.appendChild(gap);
+            dragLink.drop = {
+                blockIndex: host.blockIndex,
+                hostIndex: host.fieldIndex,
+                before: slot.before,
+                option: slot.option
+            };
         }
 
         function onQuestionDown(e) {
@@ -4016,6 +4236,29 @@
                         }
                     }
                     selectedField = {blockIndex: nestBlock, index: nestField};
+                    refresh();
+                }
+                return;
+            }
+            if (role === 'link-among') {
+                return;
+            }
+            if (role === 'unlink-among') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var amongNode = e.target;
+                while (amongNode && amongNode !== app && !(amongNode.getAttribute && amongNode.getAttribute('data-field-index') != null)) {
+                    amongNode = amongNode.parentNode;
+                }
+                if (!amongNode) {
+                    return;
+                }
+                var amongBlock = parseInt(amongNode.getAttribute('data-block-index'), 10) || 0;
+                var amongField = parseInt(amongNode.getAttribute('data-field-index'), 10) || 0;
+                if (config.blocks[amongBlock] && config.blocks[amongBlock].fields[amongField]) {
+                    config.blocks[amongBlock].fields[amongField].among = null;
+                    selectedField = {blockIndex: amongBlock, index: amongField};
                     refresh();
                 }
                 return;

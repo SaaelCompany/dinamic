@@ -342,6 +342,30 @@
     box-shadow: 0 0 0 2px #6554c0;
 }
 
+.sdf-port-in {
+    right: auto;
+    left: -22px;
+    top: 50%;
+    background: #6554c0;
+    box-shadow: 0 0 0 2px #6554c0;
+}
+
+.sdf-edge-among {
+    stroke: #6554c0;
+    stroke-dasharray: 5 4;
+}
+
+.sdf-among-gap {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: 0;
+    margin-top: -1px;
+    border-top: 2px solid #6554c0;
+    pointer-events: none;
+    z-index: 4;
+}
+
 .sdf-port-insert {
     position: static;
     right: auto;
