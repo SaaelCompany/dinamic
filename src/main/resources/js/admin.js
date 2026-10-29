@@ -155,11 +155,24 @@
                     defaults: stringList(src.defaults),
                     when: when,
                     after: copyAfter(src.after),
-                    among: copyAmong(src.among)
+                    among: copyAmong(src.among),
+                    x: canvasCoord(src.x),
+                    y: canvasCoord(src.y)
                 });
             }
             liftNests(fields);
             return fields;
+        }
+
+        function canvasCoord(value) {
+            if (value == null || value === '') {
+                return null;
+            }
+            var number = Number(value);
+            if (!isFinite(number)) {
+                return null;
+            }
+            return Math.round(number);
         }
 
         function copyAmong(src) {
@@ -562,6 +575,12 @@
                     if (home && (home.type === 'checkbox' || home.type === 'radio') && (among.before || contains(home.options || [], among.option))) {
                         field.among = among.before ? {fieldId: among.fieldId, before: true} : {fieldId: among.fieldId, option: among.option};
                     }
+                }
+                var posX = canvasCoord(src.x);
+                var posY = canvasCoord(src.y);
+                if (posX != null && posY != null) {
+                    field.x = posX;
+                    field.y = posY;
                 }
                 out.push(field);
             }
@@ -1795,10 +1814,12 @@
                     var index = indexes[row];
                     var field = block.fields[index];
                     var bands = bandsOf(block, field);
+                    var placedX = canvasCoord(field.x);
+                    var placedY = canvasCoord(field.y);
                     var item = {
                         index: index,
-                        x: 40 + col * (NODE_W + 88),
-                        y: y,
+                        x: placedX == null ? 40 + col * (NODE_W + 88) : placedX,
+                        y: placedY == null ? y : placedY,
                         h: nodeBoxHeight(block, field),
                         ports: []
                     };
@@ -1831,16 +1852,6 @@
             function leftOf(at) {
                 return {x: laid[at].x, y: laid[at].y + laid[at].h / 2};
             }
-            function amongPoint(item, childId) {
-                var ports = item.ports || [];
-                var n;
-                for (n = 0; n < ports.length; n++) {
-                    if (childId && ports[n].amongId === childId) {
-                        return {x: item.x + NODE_W, y: item.y + ports[n].y};
-                    }
-                }
-                return {x: item.x + NODE_W, y: item.y + item.h / 2};
-            }
             function portPoint(item, option, nestId) {
                 var ports = item.ports || [];
                 var n;
@@ -1864,10 +1875,6 @@
                     stroke = '#6554c0';
                     cls = 'sdf-edge sdf-edge-nest';
                     role = 'unlink-nest';
-                } else if (kind === 'among') {
-                    stroke = '#6554c0';
-                    cls = 'sdf-edge sdf-edge-among';
-                    role = 'unlink-among';
                 }
                 var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 hit.setAttribute('d', d);
@@ -1880,11 +1887,6 @@
                 if (kind === 'nest') {
                     hit.setAttribute('data-nest-index', String(nestIndex));
                 }
-                if (kind === 'among') {
-                    var hint = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                    hint.appendChild(document.createTextNode(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.amongUnlink')));
-                    hit.appendChild(hint);
-                }
                 hit.setAttribute('class', 'sdf-edge-hit');
                 svg.appendChild(hit);
                 var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1892,9 +1894,6 @@
                 path.setAttribute('fill', 'none');
                 path.setAttribute('stroke', stroke);
                 path.setAttribute('stroke-width', '1.5');
-                if (kind === 'among') {
-                    path.setAttribute('stroke-dasharray', '5 4');
-                }
                 path.setAttribute('class', cls);
                 svg.appendChild(path);
             }
@@ -1904,7 +1903,6 @@
                 }
                 bindLine(i, block.fields[i].after, true);
                 bindLine(i, block.fields[i].when, false);
-                bindAmong(i);
             }
             return svg;
 
@@ -1937,33 +1935,6 @@
                     }
                     line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[fieldIndex]), fieldIndex);
                 }
-            }
-
-            function bindAmong(childIndex) {
-                var child = block.fields[childIndex];
-                var among = child && child.among;
-                if (!among || !among.fieldId || indexAt[childIndex] == null) {
-                    return;
-                }
-                var hostIndex = -1;
-                var p;
-                for (p = 0; p < childIndex; p++) {
-                    if (block.fields[p].id === among.fieldId) {
-                        hostIndex = p;
-                    }
-                }
-                if (hostIndex < 0 || indexAt[hostIndex] == null) {
-                    return;
-                }
-                var host = block.fields[hostIndex];
-                if (!host || (host.type !== 'checkbox' && host.type !== 'radio')) {
-                    return;
-                }
-                if (!among.before && (!trim(among.option) || !contains(host.options || [], trim(among.option)))) {
-                    return;
-                }
-                var childItem = laid[indexAt[childIndex]];
-                line(amongPoint(laid[indexAt[hostIndex]], child.id), {x: childItem.x, y: childItem.y + childItem.h / 2}, childIndex, 'among');
             }
 
             function bindNest(hostIndex) {
@@ -2331,16 +2302,12 @@
             card.appendChild(renderWhen(block, field, index));
             var buttons = el('div', 'buttons-container');
             var row = el('div', 'buttons');
-            var step = fieldStep(block.fields, index);
             row.appendChild(button('add-child', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addChild'), false));
-            row.appendChild(button('up', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.up'), !step.up));
-            row.appendChild(button('down', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.down'), !step.down));
             if (field.when && field.when.fieldId) {
                 row.appendChild(button('unlink-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.unlink'), false));
             }
             row.appendChild(button('remove', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'), false));
             buttons.appendChild(row);
-            buttons.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.moveHint')));
             card.appendChild(buttons);
             return card;
         }
@@ -3683,6 +3650,11 @@
             }
             var boardBox = board.getBoundingClientRect();
             var portBox = e.target.getBoundingClientRect();
+            var sourceNode = nodeElOf(e.target);
+            var accent = '#1d7afc';
+            if (sourceNode && sourceNode.style.getPropertyValue('--sdf-accent')) {
+                accent = sourceNode.style.getPropertyValue('--sdf-accent');
+            }
             dragLink = {
                 kind: role === 'link-among' ? 'among' : 'when',
                 blockIndex: source.blockIndex,
@@ -3691,6 +3663,8 @@
                 moved: false,
                 drop: null,
                 dropReject: '',
+                overNode: false,
+                color: accent,
                 board: board,
                 x0: e.clientX,
                 y0: e.clientY,
@@ -3709,13 +3683,10 @@
                 dragLink.moved = true;
             }
             var boardBox = dragLink.board.getBoundingClientRect();
-            if (dragLink.kind === 'among') {
-                paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top, '#6554c0', true);
-                if (dragLink.moved) {
-                    markAmongDrop(e.clientX, e.clientY);
-                }
-            } else {
-                paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top);
+            var color = dragLink.kind === 'among' ? dragLink.color : '#4c9aff';
+            paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top, color, false);
+            if (dragLink.kind === 'among' && dragLink.moved) {
+                markAmongDrop(e.clientX, e.clientY);
             }
         }
 
@@ -3728,17 +3699,26 @@
             var info = dragLink;
             dragLink = null;
             clearRubber(info.board);
-            clearAmongGaps();
+            clearLinkMarks();
             if (!info.moved) {
                 return;
             }
             ignoreLinkClickUntil = new Date().getTime() + 400;
             if (info.kind === 'among') {
-                if (info.drop) {
+                if (info.drop && info.drop.mode === 'when') {
+                    connectFields(info.blockIndex, info.drop.hostIndex, info.drop.option, info.fieldIndex);
+                } else if (info.drop && info.drop.mode === 'among') {
                     placeAmongLink(info.blockIndex, info.fieldIndex, info.drop.hostIndex, info.drop.before, info.drop.option);
                 } else if (info.dropReject === 'cycle') {
                     showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
                     refresh();
+                } else if (!info.overNode) {
+                    var freed = config.blocks[info.blockIndex] && config.blocks[info.blockIndex].fields[info.fieldIndex];
+                    if (freed && freed.among) {
+                        freed.among = null;
+                        selectedField = {blockIndex: info.blockIndex, index: info.fieldIndex};
+                        refresh();
+                    }
                 }
                 return;
             }
@@ -3797,60 +3777,150 @@
             }
         }
 
-        function amongSlotAt(node, clientY) {
-            var rows = node.querySelectorAll('.sdf-port-row');
-            var box = node.getBoundingClientRect();
-            var before = true;
-            var option = '';
-            var gapTop = node.querySelector('.sdf-node-when') ? 62 : 40;
+        function clearLinkMarks() {
+            clearAmongGaps();
+            var hot = app.getElementsByClassName('sdf-row-hot');
+            var copy = [];
             var i;
-            for (i = 0; i < rows.length; i++) {
-                var rect = rows[i].getBoundingClientRect();
-                if (clientY < rect.top + rect.height / 2) {
-                    gapTop = rect.top - box.top;
+            for (i = 0; i < hot.length; i++) {
+                copy.push(hot[i]);
+            }
+            for (i = 0; i < copy.length; i++) {
+                copy[i].className = copy[i].className.replace(' sdf-row-hot', '');
+            }
+        }
+
+        function bodyRows(node) {
+            var body = null;
+            var kids = node.children;
+            var rows = [];
+            var i;
+            for (i = 0; i < kids.length; i++) {
+                if (hasClass(kids[i], 'sdf-node-body')) {
+                    body = kids[i];
+                }
+            }
+            if (!body) {
+                return rows;
+            }
+            for (i = 0; i < body.children.length; i++) {
+                var child = body.children[i];
+                if (hasClass(child, 'sdf-port-row') || hasClass(child, 'sdf-node-among') || hasClass(child, 'sdf-port-empty')) {
+                    rows.push(child);
+                }
+            }
+            return rows;
+        }
+
+        function optionOfRow(row) {
+            if (!row || !hasClass(row, 'sdf-port-row') || !row.querySelector) {
+                return '';
+            }
+            var port = row.querySelector('[data-role="link-from"]');
+            if (!port) {
+                return '';
+            }
+            return port.getAttribute('data-option') || '';
+        }
+
+        function amongAtGap(rows, index) {
+            var option = '';
+            var before = true;
+            var j;
+            for (j = index - 1; j >= 0; j--) {
+                var text = optionOfRow(rows[j]);
+                if (text) {
+                    option = text;
+                    before = false;
                     break;
                 }
-                before = false;
-                var port = rows[i].querySelector('[data-role="link-from"]');
-                option = port ? (port.getAttribute('data-option') || '') : option;
-                gapTop = rect.bottom - box.top;
             }
-            return {before: before, option: before ? '' : option, y: gapTop};
+            return {before: before, option: option};
+        }
+
+        function linkHitAt(node, clientY) {
+            var rows = bodyRows(node);
+            var box = node.getBoundingClientRect();
+            var edge = 8;
+            var i;
+            if (!rows.length) {
+                return {mode: 'among', before: true, option: '', y: 40};
+            }
+            for (i = 0; i < rows.length; i++) {
+                var rect = rows[i].getBoundingClientRect();
+                if (clientY < rect.top + edge) {
+                    var gap = amongAtGap(rows, i);
+                    gap.mode = 'among';
+                    gap.y = rect.top - box.top;
+                    return gap;
+                }
+                if (clientY <= rect.bottom - edge) {
+                    if (hasClass(rows[i], 'sdf-port-row')) {
+                        return {mode: 'when', option: optionOfRow(rows[i]), row: rows[i], y: 0};
+                    }
+                    var inside = amongAtGap(rows, i);
+                    inside.mode = 'among';
+                    inside.y = rect.top - box.top;
+                    return inside;
+                }
+            }
+            var last = rows[rows.length - 1].getBoundingClientRect();
+            var after = amongAtGap(rows, rows.length);
+            after.mode = 'among';
+            after.y = last.bottom - box.top;
+            return after;
         }
 
         function markAmongDrop(clientX, clientY) {
-            clearAmongGaps();
+            clearLinkMarks();
             dragLink.drop = null;
             dragLink.dropReject = '';
+            dragLink.overNode = false;
             var node = nodeElOf(document.elementFromPoint(clientX, clientY));
             if (!node) {
                 return;
             }
+            dragLink.overNode = true;
             var host = fieldAt(node);
             if (!host || host.blockIndex !== dragLink.blockIndex || host.fieldIndex === dragLink.fieldIndex) {
                 return;
             }
             var fields = config.blocks[host.blockIndex].fields;
             var hostField = fields[host.fieldIndex];
-            if (!hostField || (hostField.type !== 'checkbox' && hostField.type !== 'radio')) {
+            if (!hostField) {
                 return;
             }
             if (itemInside(fields, host.fieldIndex, dragLink.fieldIndex)) {
                 dragLink.dropReject = 'cycle';
                 return;
             }
-            var slot = amongSlotAt(node, clientY);
-            if (!slot.before && !trim(slot.option)) {
+            var hit = linkHitAt(node, clientY);
+            if (hit.mode === 'when') {
+                if (hit.row && hit.row.className.indexOf('sdf-row-hot') < 0) {
+                    hit.row.className += ' sdf-row-hot';
+                }
+                dragLink.drop = {
+                    mode: 'when',
+                    hostIndex: host.fieldIndex,
+                    option: hit.option || '',
+                    before: false
+                };
+                return;
+            }
+            if (hostField.type !== 'checkbox' && hostField.type !== 'radio') {
+                return;
+            }
+            if (!hit.before && !trim(hit.option)) {
                 return;
             }
             var gap = el('div', 'sdf-among-gap');
-            gap.style.top = slot.y + 'px';
+            gap.style.top = hit.y + 'px';
             node.appendChild(gap);
             dragLink.drop = {
-                blockIndex: host.blockIndex,
+                mode: 'among',
                 hostIndex: host.fieldIndex,
-                before: slot.before,
-                option: slot.option
+                before: hit.before,
+                option: hit.option
             };
         }
 
@@ -3863,14 +3933,20 @@
                 return;
             }
             var source = fieldAt(e.target);
-            if (!source) {
+            var node = nodeElOf(e.target);
+            if (!source || !node) {
                 return;
             }
+            var board = node.parentNode;
             dragMove = {
                 blockIndex: source.blockIndex,
                 fieldIndex: source.fieldIndex,
+                node: node,
+                board: board,
                 x0: e.clientX,
                 y0: e.clientY,
+                originX: parseFloat(node.style.left) || 0,
+                originY: parseFloat(node.style.top) || 0,
                 moved: false
             };
             document.addEventListener('mousemove', onQuestionMove);
@@ -3881,24 +3957,26 @@
             if (!dragMove) {
                 return;
             }
-            if (Math.abs(e.clientX - dragMove.x0) + Math.abs(e.clientY - dragMove.y0) > 6) {
+            if (!dragMove.moved && Math.abs(e.clientX - dragMove.x0) + Math.abs(e.clientY - dragMove.y0) > 6) {
                 dragMove.moved = true;
+                ensureCanvasPositions(config.blocks[dragMove.blockIndex]);
             }
-            clearDropMarks();
             if (!dragMove.moved) {
                 return;
             }
-            var under = document.elementFromPoint(e.clientX, e.clientY);
-            var target = fieldAt(under);
-            if (target && target.blockIndex === dragMove.blockIndex && target.fieldIndex !== dragMove.fieldIndex) {
-                var mark = under;
-                while (mark && mark !== app && !hasClass(mark, 'sdf-node')) {
-                    mark = mark.parentNode;
-                }
-                if (mark && mark.className.indexOf('sdf-node-drop') < 0) {
-                    mark.className += ' sdf-node-drop';
-                }
+            var x = dragMove.originX + (e.clientX - dragMove.x0);
+            var y = dragMove.originY + (e.clientY - dragMove.y0);
+            if (x < 28) {
+                x = 28;
             }
+            if (y < 8) {
+                y = 8;
+            }
+            dragMove.node.style.left = x + 'px';
+            dragMove.node.style.top = y + 'px';
+            dragMove.x = x;
+            dragMove.y = y;
+            growBoard(dragMove.board, x, y, dragMove.node.offsetHeight || 80);
         }
 
         function onQuestionUp(e) {
@@ -3909,14 +3987,69 @@
             }
             var info = dragMove;
             dragMove = null;
-            clearDropMarks();
             if (!info.moved) {
                 return;
             }
             ignorePickUntil = new Date().getTime() + 400;
-            var target = fieldAt(document.elementFromPoint(e.clientX, e.clientY));
-            if (target && target.blockIndex === info.blockIndex && target.fieldIndex !== info.fieldIndex) {
-                moveNodeTo(info.blockIndex, info.fieldIndex, target.fieldIndex);
+            var field = config.blocks[info.blockIndex] && config.blocks[info.blockIndex].fields[info.fieldIndex];
+            if (!field) {
+                return;
+            }
+            field.x = Math.round(info.x);
+            field.y = Math.round(info.y);
+            selectedField = {blockIndex: info.blockIndex, index: info.fieldIndex};
+            refresh();
+        }
+
+        function ensureCanvasPositions(block) {
+            if (!block) {
+                return;
+            }
+            var laid = layoutNodes(block, 0);
+            var i;
+            for (i = 0; i < laid.length; i++) {
+                var field = block.fields[laid[i].index];
+                if (canvasCoord(field.x) == null || canvasCoord(field.y) == null) {
+                    field.x = laid[i].x;
+                    field.y = laid[i].y;
+                }
+            }
+        }
+
+        function parkNewField(block, field) {
+            var bottom = 8;
+            var any = false;
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var other = block.fields[i];
+                if (other === field || canvasCoord(other.x) == null || canvasCoord(other.y) == null) {
+                    continue;
+                }
+                any = true;
+                var y = other.y + nodeBoxHeight(block, other) + 16;
+                if (y > bottom) {
+                    bottom = y;
+                }
+            }
+            if (any) {
+                field.x = 40;
+                field.y = bottom;
+            }
+        }
+
+        function growBoard(board, x, y, height) {
+            if (!board) {
+                return;
+            }
+            var needX = x + NODE_W + 40;
+            var needY = y + height + 16;
+            var width = parseFloat(board.style.width) || 0;
+            var boardHeight = parseFloat(board.style.height) || 0;
+            if (needX > width) {
+                board.style.width = needX + 'px';
+            }
+            if (needY > boardHeight) {
+                board.style.height = needY + 'px';
             }
         }
 
@@ -4243,26 +4376,6 @@
             if (role === 'link-among') {
                 return;
             }
-            if (role === 'unlink-among') {
-                if (e.preventDefault) {
-                    e.preventDefault();
-                }
-                var amongNode = e.target;
-                while (amongNode && amongNode !== app && !(amongNode.getAttribute && amongNode.getAttribute('data-field-index') != null)) {
-                    amongNode = amongNode.parentNode;
-                }
-                if (!amongNode) {
-                    return;
-                }
-                var amongBlock = parseInt(amongNode.getAttribute('data-block-index'), 10) || 0;
-                var amongField = parseInt(amongNode.getAttribute('data-field-index'), 10) || 0;
-                if (config.blocks[amongBlock] && config.blocks[amongBlock].fields[amongField]) {
-                    config.blocks[amongBlock].fields[amongField].among = null;
-                    selectedField = {blockIndex: amongBlock, index: amongField};
-                    refresh();
-                }
-                return;
-            }
             if (role === 'unlink' || role === 'unlink-field') {
                 if (e.preventDefault) {
                     e.preventDefault();
@@ -4374,10 +4487,6 @@
                 addField(loc.blockIndex, loc.fieldIndex);
             } else if (role === 'remove') {
                 removeField(loc.blockIndex, loc.fieldIndex);
-            } else if (role === 'up') {
-                moveField(loc.blockIndex, loc.fieldIndex, -1);
-            } else if (role === 'down') {
-                moveField(loc.blockIndex, loc.fieldIndex, 1);
             } else if (role === 'add-option') {
                 var field = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
                 alignNests(field);
@@ -5197,6 +5306,7 @@
             }
             pendingLink = null;
             block.fields.splice(insertAt, 0, field);
+            parkNewField(block, field);
             selectedField = {blockIndex: blockIndex, index: insertAt};
             refresh();
             focusField(blockIndex, insertAt);
