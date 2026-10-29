@@ -98,6 +98,33 @@ form.aui .sdf-under > .field-group.sdf-field > label,
     position: static;
 }
 
+form.aui .sdf-choices > .sdf-under,
+form.aui .checkbox > .sdf-choices > .sdf-under,
+form.aui .radio > .sdf-choices > .sdf-under {
+    margin-left: 0;
+    width: auto;
+}
+
+form.aui .sdf-choices > .sdf-under .checkbox,
+form.aui .sdf-choices > .sdf-under .radio,
+.sdf-choices > .sdf-under .checkbox,
+.sdf-choices > .sdf-under .radio {
+    position: relative;
+    margin-left: 0;
+    padding-left: 20px;
+}
+
+form.aui .sdf-choices > .sdf-under .checkbox > input.checkbox,
+form.aui .sdf-choices > .sdf-under .radio > input.radio,
+.sdf-choices > .sdf-under .checkbox > input.checkbox,
+.sdf-choices > .sdf-under .radio > input.radio {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    margin: 0;
+    float: none;
+}
+
 .sdf-answer-group {
     font-weight: 600;
     margin: 12px 0 6px;

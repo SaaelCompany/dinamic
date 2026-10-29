@@ -58,6 +58,10 @@ public class FormField {
     private FieldAfter after;
     /** {@code null} — the question stays in the block order. Otherwise it is drawn between the rows of that field. */
     private FieldAmong among;
+    /** Canvas coordinates of the question node. Null keeps the automatic column layout. */
+    private Integer x;
+    /** Canvas coordinates of the question node. Null keeps the automatic column layout. */
+    private Integer y;
 
     public String getId() {
         return id;
@@ -194,6 +198,22 @@ public class FormField {
 
     public void setAmong(FieldAmong among) {
         this.among = among;
+    }
+
+    public Integer getX() {
+        return x;
+    }
+
+    public void setX(Integer x) {
+        this.x = x;
+    }
+
+    public Integer getY() {
+        return y;
+    }
+
+    public void setY(Integer y) {
+        this.y = y;
     }
 
     @JsonIgnore

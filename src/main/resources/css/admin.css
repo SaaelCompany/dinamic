@@ -128,6 +128,7 @@
 
 .sdf-node {
     position: absolute;
+    cursor: grab;
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -233,6 +234,11 @@
     align-items: center;
     gap: 4px;
     height: 32px;
+}
+
+.sdf-port-row.sdf-row-hot {
+    background: #deebff;
+    border-radius: 3px;
 }
 
 .sdf-port-text {
@@ -346,13 +352,6 @@
     right: auto;
     left: -22px;
     top: 50%;
-    background: #6554c0;
-    box-shadow: 0 0 0 2px #6554c0;
-}
-
-.sdf-edge-among {
-    stroke: #6554c0;
-    stroke-dasharray: 5 4;
 }
 
 .sdf-among-gap {

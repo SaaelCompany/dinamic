@@ -307,6 +307,7 @@
         placeBetween(root, cfg.fields);
         placeNests(root);
         placeAmong(root, cfg.fields);
+        alignAmongChoices(root);
     }
 
     function amongSlot(fieldId, option) {
@@ -345,6 +346,184 @@
             }
             if (node.parentNode !== slot) {
                 slot.appendChild(node);
+            }
+        }
+    }
+
+    function alignAmongChoices(section) {
+        if (!section || !section.querySelectorAll || !window.getComputedStyle) {
+            return;
+        }
+        var slots = section.querySelectorAll('.sdf-choices > [data-sdf-among]');
+        var i;
+        for (i = 0; i < slots.length; i++) {
+            alignAmongSlot(slots[i]);
+        }
+    }
+
+    function alignAmongSlot(slot) {
+        var choices = slot.parentNode;
+        if (!choices) {
+            return;
+        }
+        clearAmongAlign(slot);
+        var hostInput = hostChoiceInput(choices);
+        var hostCaption = hostChoiceCaption(choices);
+        var hostLeft = null;
+        var captionLeft = null;
+        if (hostInput && hostInput.getBoundingClientRect().width >= 1) {
+            hostLeft = hostInput.getBoundingClientRect().left;
+        }
+        if (hostCaption && hostCaption.getBoundingClientRect().width >= 1) {
+            captionLeft = contentLeft(hostCaption);
+        }
+        var fields = slot.children;
+        var i;
+        for (i = 0; i < fields.length; i++) {
+            var field = fields[i];
+            if (!field.getAttribute || !field.getAttribute('data-sdf-field')) {
+                continue;
+            }
+            if (field.getAttribute('data-sdf-shown') === '0') {
+                continue;
+            }
+            alignNestedField(field, hostLeft, captionLeft);
+        }
+    }
+
+    function clearAmongAlign(slot) {
+        var fields = slot.children;
+        var i;
+        var k;
+        for (i = 0; i < fields.length; i++) {
+            var field = fields[i];
+            if (!field.style || !field.getAttribute || !field.getAttribute('data-sdf-field')) {
+                continue;
+            }
+            field.style.paddingLeft = '';
+            var kids = field.children;
+            for (k = 0; k < kids.length; k++) {
+                if (hasClass(kids[k], 'field-label') || hasClass(kids[k], 'sdf-label')) {
+                    kids[k].style.paddingLeft = '';
+                }
+                if (!hasClass(kids[k], 'sdf-choices')) {
+                    continue;
+                }
+                var rows = kids[k].children;
+                var r;
+                for (r = 0; r < rows.length; r++) {
+                    if (hasClass(rows[r], 'radio') || hasClass(rows[r], 'checkbox')) {
+                        rows[r].style.marginLeft = '';
+                    }
+                }
+            }
+        }
+    }
+
+    function hostChoiceInput(choices) {
+        var kids = choices.children;
+        var i;
+        for (i = 0; i < kids.length; i++) {
+            if (hasClass(kids[i], 'sdf-under')) {
+                continue;
+            }
+            var input = rowChoiceInput(kids[i]);
+            if (input && input.getBoundingClientRect().width >= 1) {
+                return input;
+            }
+        }
+        return null;
+    }
+
+    function hostChoiceCaption(choices) {
+        var kids = choices.children;
+        var i;
+        for (i = 0; i < kids.length; i++) {
+            if (hasClass(kids[i], 'sdf-under')) {
+                continue;
+            }
+            var labels = kids[i].getElementsByTagName('label');
+            var n;
+            for (n = 0; n < labels.length; n++) {
+                var current = labels[n];
+                var nested = false;
+                while (current && current !== kids[i]) {
+                    if (current.getAttribute && current.getAttribute('data-sdf-field')) {
+                        nested = true;
+                        break;
+                    }
+                    current = current.parentNode;
+                }
+                if (!nested && labels[n].getBoundingClientRect().width >= 1) {
+                    return labels[n];
+                }
+            }
+        }
+        return null;
+    }
+
+    function questionLabel(field) {
+        var kids = field.children;
+        var i;
+        for (i = 0; i < kids.length; i++) {
+            if (hasClass(kids[i], 'field-label') || hasClass(kids[i], 'sdf-label')) {
+                return kids[i];
+            }
+        }
+        return null;
+    }
+
+    function alignNestedField(field, hostLeft, captionLeft) {
+        var type = field.getAttribute('data-sdf-type') || '';
+        var label = questionLabel(field);
+        var i;
+        if (type === 'checkbox' || type === 'radio') {
+            var list = null;
+            var kids = field.children;
+            for (i = 0; i < kids.length; i++) {
+                if (hasClass(kids[i], 'sdf-choices')) {
+                    list = kids[i];
+                }
+            }
+            if (list && hostLeft != null) {
+                var rows = list.children;
+                for (i = 0; i < rows.length; i++) {
+                    if (!hasClass(rows[i], 'radio') && !hasClass(rows[i], 'checkbox')) {
+                        continue;
+                    }
+                    var input = rowChoiceInput(rows[i]);
+                    if (!input || input.getBoundingClientRect().width < 1) {
+                        continue;
+                    }
+                    var delta = input.getBoundingClientRect().left - hostLeft;
+                    if (Math.abs(delta) >= 1) {
+                        var current = parseFloat(window.getComputedStyle(rows[i]).marginLeft) || 0;
+                        rows[i].style.marginLeft = String(Math.round(current - delta)) + 'px';
+                    }
+                }
+            }
+            if (label && captionLeft != null && trim(label.textContent || label.innerText || '')) {
+                var shift = contentLeft(label) - captionLeft;
+                if (Math.abs(shift) >= 1) {
+                    var pad = parseFloat(window.getComputedStyle(label).paddingLeft) || 0;
+                    var next = Math.round(pad - shift);
+                    if (next < 0) {
+                        next = 0;
+                    }
+                    label.style.paddingLeft = next + 'px';
+                }
+            }
+            return;
+        }
+        if (label && captionLeft != null && trim(label.textContent || label.innerText || '')) {
+            var fieldShift = contentLeft(label) - captionLeft;
+            if (Math.abs(fieldShift) >= 1) {
+                var fieldPad = parseFloat(window.getComputedStyle(field).paddingLeft) || 0;
+                var fieldNext = Math.round(fieldPad - fieldShift);
+                if (fieldNext < 0) {
+                    fieldNext = 0;
+                }
+                field.style.paddingLeft = fieldNext + 'px';
             }
         }
     }

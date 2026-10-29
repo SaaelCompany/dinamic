@@ -253,6 +253,20 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void canvasPositionRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
+                + "\"id\":\"field1\",\"label\":\"Врач\",\"type\":\"text\",\"x\":120,\"y\":48}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        FormField field = loaded.getBlocks().get(0).getFields().get(0);
+        assertEquals(Integer.valueOf(120), field.getX());
+        assertEquals(Integer.valueOf(48), field.getY());
+        String stored = mapper.writeValueAsString(loaded);
+        assertTrue(stored, stored.contains("\"x\":120"));
+        assertTrue(stored, stored.contains("\"y\":48"));
+    }
+
+    @Test
     public void nodeColorRoundTrips() throws Exception {
         String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":[{"
                 + "\"id\":\"field1\",\"label\":\"Врач\",\"type\":\"text\",\"color\":\"#ff8b00\"}]}]}";
