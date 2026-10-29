@@ -262,6 +262,38 @@
     line-height: 32px;
 }
 
+.sdf-node-among {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 3px;
+    background: #f3f0ff;
+    box-sizing: border-box;
+}
+
+.sdf-node-among-mark {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #6554c0;
+}
+
+.sdf-node-among-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #403294;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 32px;
+}
+
 .sdf-port,
 .sdf-port-add,
 .sdf-node-del {

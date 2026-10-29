@@ -76,6 +76,20 @@ form.aui .sdf-choices > .sdf-under > .field-group.sdf-field,
     padding-left: 20px;
 }
 
+form.aui .sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="checkbox"],
+form.aui .sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="radio"],
+.sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="checkbox"],
+.sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="radio"] {
+    padding-left: 0;
+}
+
+form.aui .sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="checkbox"] > label,
+form.aui .sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="radio"] > label,
+.sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="checkbox"] > label,
+.sdf-choices > .sdf-under > .field-group.sdf-field[data-sdf-type="radio"] > label {
+    padding-left: 20px;
+}
+
 form.aui .sdf-under > .field-group.sdf-field > label,
 .sdf-under > .field-group.sdf-field > label {
     float: none;

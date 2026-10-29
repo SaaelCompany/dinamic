@@ -1667,6 +1667,35 @@
             return null;
         }
 
+        function fieldCaption(field) {
+            var options;
+            var i;
+            if (!field) {
+                return '';
+            }
+            if (trim(field.label)) {
+                return trim(field.label);
+            }
+            options = field.options || [];
+            for (i = 0; i < options.length; i++) {
+                if (trim(options[i])) {
+                    return trim(options[i]);
+                }
+            }
+            return field.id || '';
+        }
+
+        function amongMarker(block, index) {
+            var child = block.fields[index];
+            return {
+                index: -1,
+                option: '',
+                nest: '',
+                among: true,
+                text: AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField') + ': ' + fieldCaption(child)
+            };
+        }
+
         function listedRows(block, field) {
             var rows = [];
             if (field.type !== 'checkbox' && field.type !== 'radio') {
@@ -1675,6 +1704,10 @@
             var options = field.options || [];
             var nests = field.nests || [];
             var i;
+            var before = placedChildren(block.fields, field.id, true, '');
+            for (i = 0; i < before.length; i++) {
+                rows.push(amongMarker(block, before[i]));
+            }
             for (i = 0; i < options.length; i++) {
                 var nest = trim(nests[i] || '');
                 if (nest) {
@@ -1685,7 +1718,13 @@
                         text: AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.rowField') + ': ' + nestedTitle(block, nest)
                     });
                 } else if (trim(options[i])) {
-                    rows.push({index: i, option: trim(options[i]), nest: '', text: trim(options[i])});
+                    var option = trim(options[i]);
+                    rows.push({index: i, option: option, nest: '', text: option});
+                    var after = placedChildren(block.fields, field.id, false, option);
+                    var a;
+                    for (a = 0; a < after.length; a++) {
+                        rows.push(amongMarker(block, after[a]));
+                    }
                 }
             }
             return rows;
@@ -1713,6 +1752,7 @@
                     index: rows[i].index,
                     option: rows[i].option,
                     nest: rows[i].nest,
+                    among: rows[i].among ? true : false,
                     text: rows[i].text,
                     portY: y + NODE_ROW / 2
                 });
@@ -1937,6 +1977,10 @@
                 var o;
                 for (o = 0; o < bands.bands.length; o++) {
                     var band = bands.bands[o];
+                    if (band.among) {
+                        body.appendChild(amongRow(band.text));
+                        continue;
+                    }
                     if (isChoice(field.type) && !band.option && !band.nest) {
                         continue;
                     }
@@ -1949,6 +1993,14 @@
             }
             node.appendChild(body);
             return node;
+        }
+
+        function amongRow(text) {
+            var row = el('div', 'sdf-node-among');
+            row.setAttribute('title', text);
+            row.appendChild(el('span', 'sdf-node-among-mark'));
+            row.appendChild(el('span', 'sdf-node-among-text', text));
+            return row;
         }
 
         function nestIndexOf(field, nestId) {
