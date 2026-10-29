@@ -377,6 +377,7 @@
         if (hostCaption && hostCaption.getBoundingClientRect().width >= 1) {
             captionLeft = contentLeft(hostCaption);
         }
+        var hostPad = hostInput ? hostChoicePad(hostInput) : null;
         var fields = slot.children;
         var i;
         for (i = 0; i < fields.length; i++) {
@@ -387,7 +388,7 @@
             if (field.getAttribute('data-sdf-shown') === '0') {
                 continue;
             }
-            alignNestedField(field, hostLeft, captionLeft);
+            alignNestedField(field, hostLeft, captionLeft, hostPad);
         }
     }
 
@@ -414,10 +415,22 @@
                 for (r = 0; r < rows.length; r++) {
                     if (hasClass(rows[r], 'radio') || hasClass(rows[r], 'checkbox')) {
                         rows[r].style.marginLeft = '';
+                        rows[r].style.paddingLeft = '';
                     }
                 }
             }
         }
+    }
+
+    function hostChoicePad(hostInput) {
+        var node = hostInput ? hostInput.parentNode : null;
+        while (node && node !== document.body) {
+            if (hasClass(node, 'checkbox') || hasClass(node, 'radio')) {
+                return parseFloat(window.getComputedStyle(node).paddingLeft) || 0;
+            }
+            node = node.parentNode;
+        }
+        return null;
     }
 
     function hostChoiceInput(choices) {
@@ -473,7 +486,7 @@
         return null;
     }
 
-    function alignNestedField(field, hostLeft, captionLeft) {
+    function alignNestedField(field, hostLeft, captionLeft, hostPad) {
         var type = field.getAttribute('data-sdf-type') || '';
         var label = questionLabel(field);
         var i;
@@ -490,6 +503,12 @@
                 for (i = 0; i < rows.length; i++) {
                     if (!hasClass(rows[i], 'radio') && !hasClass(rows[i], 'checkbox')) {
                         continue;
+                    }
+                    if (hostPad != null) {
+                        var rowPad = parseFloat(window.getComputedStyle(rows[i]).paddingLeft) || 0;
+                        if (Math.abs(rowPad - hostPad) >= 1) {
+                            rows[i].style.paddingLeft = hostPad + 'px';
+                        }
                     }
                     var input = rowChoiceInput(rows[i]);
                     if (!input || input.getBoundingClientRect().width < 1) {

@@ -727,6 +727,7 @@
             ensureType();
             var pageX = window.pageXOffset || document.documentElement.scrollLeft || 0;
             var pageY = window.pageYOffset || document.documentElement.scrollTop || 0;
+            var focusSnap = snapshotFocus();
             var canvasScroll = [];
             var oldCanvases = host.querySelectorAll('.sdf-canvas');
             var c;
@@ -739,6 +740,16 @@
                     block: owner ? owner.getAttribute('data-block-index') : '',
                     top: oldCanvases[c].scrollTop,
                     left: oldCanvases[c].scrollLeft
+                });
+            }
+            var floatScroll = [];
+            var oldFloats = host.querySelectorAll('.sdf-float');
+            var f;
+            for (f = 0; f < oldFloats.length; f++) {
+                floatScroll.push({
+                    block: oldFloats[f].getAttribute('data-block-index'),
+                    field: oldFloats[f].getAttribute('data-field-index'),
+                    top: oldFloats[f].scrollTop
                 });
             }
             while (host.firstChild) {
@@ -782,6 +793,18 @@
                 window.scrollTo(pageX, pageY);
             }
             placeFloats();
+            var freshFloats = host.querySelectorAll('.sdf-float');
+            for (f = 0; f < freshFloats.length; f++) {
+                var floatBlock = freshFloats[f].getAttribute('data-block-index');
+                var floatField = freshFloats[f].getAttribute('data-field-index');
+                var fs;
+                for (fs = 0; fs < floatScroll.length; fs++) {
+                    if (floatScroll[fs].block === floatBlock && floatScroll[fs].field === floatField) {
+                        freshFloats[f].scrollTop = floatScroll[fs].top;
+                    }
+                }
+            }
+            restoreFocus(focusSnap);
             syncProject();
             renderTypeNav();
             renderPreview();
@@ -3673,6 +3696,7 @@
             };
             document.addEventListener('mousemove', onPortMove);
             document.addEventListener('mouseup', onPortUp);
+            document.addEventListener('selectstart', preventDragSelect);
         }
 
         function onPortMove(e) {
@@ -3680,6 +3704,9 @@
                 return;
             }
             if (Math.abs(e.clientX - dragLink.x0) + Math.abs(e.clientY - dragLink.y0) > 4) {
+                if (!dragLink.moved) {
+                    clearDragSelection();
+                }
                 dragLink.moved = true;
             }
             var boardBox = dragLink.board.getBoundingClientRect();
@@ -3693,6 +3720,8 @@
         function onPortUp(e) {
             document.removeEventListener('mousemove', onPortMove);
             document.removeEventListener('mouseup', onPortUp);
+            document.removeEventListener('selectstart', preventDragSelect);
+            clearDragSelection();
             if (!dragLink) {
                 return;
             }
@@ -3951,6 +3980,22 @@
             };
             document.addEventListener('mousemove', onQuestionMove);
             document.addEventListener('mouseup', onQuestionUp);
+            document.addEventListener('selectstart', preventDragSelect);
+        }
+
+        function preventDragSelect(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+        }
+
+        function clearDragSelection() {
+            if (window.getSelection && window.getSelection()) {
+                var selection = window.getSelection();
+                if (selection.removeAllRanges) {
+                    selection.removeAllRanges();
+                }
+            }
         }
 
         function onQuestionMove(e) {
@@ -3960,6 +4005,7 @@
             if (!dragMove.moved && Math.abs(e.clientX - dragMove.x0) + Math.abs(e.clientY - dragMove.y0) > 6) {
                 dragMove.moved = true;
                 ensureCanvasPositions(config.blocks[dragMove.blockIndex]);
+                clearDragSelection();
             }
             if (!dragMove.moved) {
                 return;
@@ -3982,6 +4028,8 @@
         function onQuestionUp(e) {
             document.removeEventListener('mousemove', onQuestionMove);
             document.removeEventListener('mouseup', onQuestionUp);
+            document.removeEventListener('selectstart', preventDragSelect);
+            clearDragSelection();
             if (!dragMove) {
                 return;
             }
@@ -3997,7 +4045,6 @@
             }
             field.x = Math.round(info.x);
             field.y = Math.round(info.y);
-            selectedField = {blockIndex: info.blockIndex, index: info.fieldIndex};
             refresh();
         }
 
@@ -5208,21 +5255,86 @@
         }
 
         function focusLater(node, start, end) {
-            function apply() {
+            function captureScroll() {
+                var tops = [];
+                var current = node ? node.parentNode : null;
+                while (current && current !== document) {
+                    if (current.scrollHeight > current.clientHeight + 1 || current.scrollWidth > current.clientWidth + 1) {
+                        tops.push({
+                            node: current,
+                            top: current.scrollTop,
+                            left: current.scrollLeft
+                        });
+                    }
+                    current = current.parentNode;
+                }
+                return {
+                    tops: tops,
+                    pageX: window.pageXOffset || document.documentElement.scrollLeft || 0,
+                    pageY: window.pageYOffset || document.documentElement.scrollTop || 0
+                };
+            }
+            function restoreScroll(saved) {
+                if (!saved) {
+                    return;
+                }
+                var i;
+                for (i = 0; i < saved.tops.length; i++) {
+                    if (!saved.tops[i].node || !document.documentElement.contains(saved.tops[i].node)) {
+                        continue;
+                    }
+                    saved.tops[i].node.scrollTop = saved.tops[i].top;
+                    saved.tops[i].node.scrollLeft = saved.tops[i].left;
+                }
+                if (window.scrollTo) {
+                    window.scrollTo(saved.pageX, saved.pageY);
+                }
+            }
+            function nudgeIntoView() {
+                var current = node.parentNode;
+                while (current && current !== document.body && current !== document.documentElement) {
+                    if (current.scrollHeight > current.clientHeight + 1) {
+                        var nodeBox = node.getBoundingClientRect();
+                        var box = current.getBoundingClientRect();
+                        if (nodeBox.top < box.top + 4) {
+                            current.scrollTop -= box.top + 4 - nodeBox.top;
+                        } else if (nodeBox.bottom > box.bottom - 4) {
+                            current.scrollTop += nodeBox.bottom - (box.bottom - 4);
+                        }
+                    }
+                    current = current.parentNode;
+                }
+            }
+            function apply(saved) {
                 if (!node || !node.focus || !document.documentElement || !document.documentElement.contains(node)) {
                     return;
                 }
-                node.focus();
+                try {
+                    node.focus({preventScroll: true});
+                } catch (err) {
+                    node.focus();
+                }
                 if (start != null && node.setSelectionRange) {
                     try {
                         node.setSelectionRange(start, end);
-                    } catch (err) {
+                    } catch (err2) {
                         // some input types reject a range
                     }
                 }
+                restoreScroll(saved);
+                nudgeIntoView();
             }
-            apply();
-            setTimeout(apply, 0);
+            var saved = captureScroll();
+            apply(saved);
+            setTimeout(function () {
+                apply(saved);
+            }, 0);
+            setTimeout(function () {
+                restoreScroll(saved);
+                if (node && document.documentElement && document.documentElement.contains(node)) {
+                    nudgeIntoView();
+                }
+            }, 50);
         }
 
         function focusField(blockIndex, fieldIndex) {
