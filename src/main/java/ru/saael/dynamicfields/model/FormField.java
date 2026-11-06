@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One question drawn on the customer portal. Saving the form also creates a Jira text field
- * ({@link #jiraFieldId}) so automation can pick it by the question name.
+ * One question drawn on the customer portal. Saving the form also creates a Jira field of the same
+ * kind ({@link #jiraFieldId}) so automation can pick it by the question name.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)

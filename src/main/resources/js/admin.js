@@ -5896,6 +5896,10 @@
             if (control === 'select') {
                 return 'select';
             }
+            if (control === 'textarea' || control === 'number' || control === 'date'
+                    || control === 'datetime' || control === 'url') {
+                return control;
+            }
             return 'text';
         }
 
@@ -6367,6 +6371,10 @@
             if (field.type === 'select' || field.type === 'multiselect') {
                 return 'select';
             }
+            if (field.type === 'textarea' || field.type === 'number' || field.type === 'date'
+                    || field.type === 'time' || field.type === 'datetime' || field.type === 'url') {
+                return field.type;
+            }
             return 'text';
         }
 
@@ -6410,10 +6418,18 @@
                     select.appendChild(option);
                 }
                 wrap.appendChild(select);
+            } else if (control === 'textarea') {
+                wrap.setAttribute('data-sdf-type', 'textarea');
+                var area = document.createElement('textarea');
+                area.className = 'sdf-input';
+                area.setAttribute('rows', '3');
+                wrap.appendChild(area);
             } else {
-                wrap.setAttribute('data-sdf-type', 'text');
+                var kind = control === 'number' || control === 'date' || control === 'time'
+                    || control === 'datetime' || control === 'url' ? control : 'text';
+                wrap.setAttribute('data-sdf-type', kind);
                 var text = document.createElement('input');
-                text.type = 'text';
+                text.type = kind === 'datetime' ? 'datetime-local' : kind;
                 text.className = 'sdf-input';
                 wrap.appendChild(text);
             }

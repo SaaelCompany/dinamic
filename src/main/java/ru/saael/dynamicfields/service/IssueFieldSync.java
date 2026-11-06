@@ -32,8 +32,10 @@ import ru.saael.dynamicfields.model.RulesConfig;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,19 +43,35 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Turns each portal question into a Jira text field named after the question,
+ * Turns each portal question into a Jira field of the same kind, named after the question,
  * copies the customer's answer into that field, and deletes the Jira field
  * when the question is removed from the saved form.
+ * A field that already existed in Jira is never created again and never deleted.
  */
 @Named
 public class IssueFieldSync {
 
     private static final Logger log = LoggerFactory.getLogger(IssueFieldSync.class);
 
-    static final String TYPE_KEY = "com.atlassian.jira.plugin.system.customfieldtypes:textarea";
-    static final String SEARCHER_KEY = "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher";
-    static final String CHECKBOX_TYPE = "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes";
-    static final String CHECKBOX_SEARCHER = "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher";
+    private static final String SYSTEM = "com.atlassian.jira.plugin.system.customfieldtypes:";
+
+    static final String TEXT_TYPE = SYSTEM + "textfield";
+    static final String TYPE_KEY = SYSTEM + "textarea";
+    static final String DATE_TYPE = SYSTEM + "datepicker";
+    static final String DATETIME_TYPE = SYSTEM + "datetime";
+    static final String NUMBER_TYPE = SYSTEM + "float";
+    static final String URL_TYPE = SYSTEM + "url";
+    static final String SELECT_TYPE = SYSTEM + "select";
+    static final String RADIO_TYPE = SYSTEM + "radiobuttons";
+    static final String MULTI_TYPE = SYSTEM + "multiselect";
+    static final String CHECKBOX_TYPE = SYSTEM + "multicheckboxes";
+
+    static final String SEARCHER_KEY = SYSTEM + "textsearcher";
+    static final String DATE_SEARCHER = SYSTEM + "daterange";
+    static final String DATETIME_SEARCHER = SYSTEM + "datetimerange";
+    static final String NUMBER_SEARCHER = SYSTEM + "exactnumber";
+    static final String URL_SEARCHER = SYSTEM + "exacttextsearcher";
+    static final String CHECKBOX_SEARCHER = SYSTEM + "multiselectsearcher";
 
     private final CustomFieldManager customFieldManager;
     private final OptionsManager optionsManager;
@@ -165,8 +183,7 @@ public class IssueFieldSync {
         if (field.getCustomFieldType() == null || field.getCustomFieldType().getKey() == null) {
             return false;
         }
-        String key = field.getCustomFieldType().getKey();
-        return TYPE_KEY.equals(key) || CHECKBOX_TYPE.equals(key);
+        return pluginType(field.getCustomFieldType().getKey());
     }
 
     private static String deleteError(CustomField field, String message) {
@@ -263,17 +280,23 @@ public class IssueFieldSync {
                 }
                 List<String> selected = values == null ? null : values.get(field.getId());
                 try {
-                    if (checks(field.getType()) && choiceField(customField)) {
-                        if (sameChoices(customField, issue, selected)) {
+                    if (options(field.getType()) && optionField(customField)) {
+                        if (multiField(customField)) {
+                            if (sameChoices(customField, issue, selected)) {
+                                continue;
+                            }
+                            updateChoices(customField, issue, selected);
+                        } else if (sameSingle(customField, issue, selected)) {
                             continue;
+                        } else {
+                            updateSingle(customField, issue, selected);
                         }
-                        updateChoices(customField, issue, selected);
                     } else {
-                        String next = text(selected);
-                        if (same(customField, issue, next)) {
+                        Object next = scalar(customField, selected);
+                        if (sameObject(customField, issue, next)) {
                             continue;
                         }
-                        update(customField, issue, next);
+                        updateObject(customField, issue, next);
                     }
                     changed = true;
                 } catch (RuntimeException e) {
@@ -310,7 +333,7 @@ public class IssueFieldSync {
         if (current != null && !sameType(current, wanted)) {
             try {
                 customFieldManager.removeCustomField(current);
-                log.info("Removed {} so \"{}\" can be stored as checkboxes", current.getId(), display(field));
+                log.info("Removed {} so \"{}\" can be stored as {}", current.getId(), display(field), wanted);
                 current = null;
                 customFieldManager.refresh();
             } catch (RemoveException e) {
@@ -363,7 +386,7 @@ public class IssueFieldSync {
             log.info("Renamed Jira field {} to {}", current.getId(), name);
         }
         field.setJiraFieldId(current.getId());
-        if (checks(field.getType()) && sameType(current, CHECKBOX_TYPE)) {
+        if (options(field.getType()) && optionField(current)) {
             syncOptions(current, field.getOptions());
         }
     }
@@ -402,20 +425,89 @@ public class IssueFieldSync {
         return FormField.CHECKBOX.equals(questionType) || FormField.MULTISELECT.equals(questionType);
     }
 
+    static boolean options(String questionType) {
+        return checks(questionType) || FormField.SELECT.equals(questionType) || FormField.RADIO.equals(questionType);
+    }
+
+    /**
+     * Jira custom field type for a question. Time has no field of its own in Jira, so it is a text field.
+     * An unknown type stays a text area, which is what older versions of this plugin created.
+     */
     static String fieldTypeKey(String questionType) {
-        return checks(questionType) ? CHECKBOX_TYPE : TYPE_KEY;
+        if (FormField.TEXT.equals(questionType) || FormField.TIME.equals(questionType)) {
+            return TEXT_TYPE;
+        }
+        if (FormField.DATE.equals(questionType)) {
+            return DATE_TYPE;
+        }
+        if (FormField.DATETIME.equals(questionType)) {
+            return DATETIME_TYPE;
+        }
+        if (FormField.NUMBER.equals(questionType)) {
+            return NUMBER_TYPE;
+        }
+        if (FormField.URL.equals(questionType)) {
+            return URL_TYPE;
+        }
+        if (FormField.SELECT.equals(questionType)) {
+            return SELECT_TYPE;
+        }
+        if (FormField.RADIO.equals(questionType)) {
+            return RADIO_TYPE;
+        }
+        if (FormField.MULTISELECT.equals(questionType)) {
+            return MULTI_TYPE;
+        }
+        if (FormField.CHECKBOX.equals(questionType)) {
+            return CHECKBOX_TYPE;
+        }
+        return TYPE_KEY;
     }
 
     static String searcherKeyFor(String questionType) {
-        return checks(questionType) ? CHECKBOX_SEARCHER : SEARCHER_KEY;
+        String type = fieldTypeKey(questionType);
+        if (DATE_TYPE.equals(type)) {
+            return DATE_SEARCHER;
+        }
+        if (DATETIME_TYPE.equals(type)) {
+            return DATETIME_SEARCHER;
+        }
+        if (NUMBER_TYPE.equals(type)) {
+            return NUMBER_SEARCHER;
+        }
+        if (URL_TYPE.equals(type)) {
+            return URL_SEARCHER;
+        }
+        if (SELECT_TYPE.equals(type) || RADIO_TYPE.equals(type) || MULTI_TYPE.equals(type) || CHECKBOX_TYPE.equals(type)) {
+            return CHECKBOX_SEARCHER;
+        }
+        return SEARCHER_KEY;
+    }
+
+    /**
+     * Types this plugin creates. A Jira field is removed only when its description is an {@code sdf:}
+     * marker and its type is one of these. Any other field, including one placed on the canvas as an
+     * existing field, stays.
+     */
+    static boolean pluginType(String typeKey) {
+        return TEXT_TYPE.equals(typeKey) || TYPE_KEY.equals(typeKey)
+                || DATE_TYPE.equals(typeKey) || DATETIME_TYPE.equals(typeKey)
+                || NUMBER_TYPE.equals(typeKey) || URL_TYPE.equals(typeKey)
+                || SELECT_TYPE.equals(typeKey) || RADIO_TYPE.equals(typeKey)
+                || MULTI_TYPE.equals(typeKey) || CHECKBOX_TYPE.equals(typeKey);
     }
 
     private static boolean sameType(CustomField field, String typeKey) {
         return field != null && field.getCustomFieldType() != null && typeKey.equals(field.getCustomFieldType().getKey());
     }
 
-    private static boolean choiceField(CustomField field) {
-        return sameType(field, CHECKBOX_TYPE);
+    private static boolean optionField(CustomField field) {
+        return sameType(field, SELECT_TYPE) || sameType(field, RADIO_TYPE)
+                || sameType(field, MULTI_TYPE) || sameType(field, CHECKBOX_TYPE);
+    }
+
+    private static boolean multiField(CustomField field) {
+        return sameType(field, MULTI_TYPE) || sameType(field, CHECKBOX_TYPE);
     }
 
     private void syncOptions(CustomField field, List<String> wanted) {
@@ -481,6 +573,41 @@ public class IssueFieldSync {
         field.getCustomFieldType().updateValue(field, issue, selected);
     }
 
+    private void updateSingle(CustomField field, Issue issue, List<String> values) {
+        FieldConfig config = field.getRelevantConfig(issue);
+        if (config == null) {
+            config = onlyConfig(field);
+        }
+        if (config == null) {
+            return;
+        }
+        Options options = optionsManager.getOptions(config);
+        if (options == null) {
+            return;
+        }
+        Option selected = null;
+        String wanted = firstValue(values);
+        if (!wanted.isEmpty()) {
+            selected = options.getOptionForValue(wanted, null);
+            if (selected == null) {
+                throw new IllegalArgumentException(wanted);
+            }
+        }
+        field.getCustomFieldType().updateValue(field, issue, selected);
+    }
+
+    private boolean sameSingle(CustomField field, Issue issue, List<String> values) {
+        String wanted = firstValue(values);
+        Object current = field.getValue(issue);
+        String have = "";
+        if (current instanceof Option) {
+            have = ((Option) current).getValue() == null ? "" : ((Option) current).getValue();
+        } else if (current != null) {
+            have = String.valueOf(current).trim();
+        }
+        return have.equals(wanted);
+    }
+
     private boolean sameChoices(CustomField field, Issue issue, List<String> values) {
         Set<String> wanted = new HashSet<String>();
         if (values != null) {
@@ -541,14 +668,104 @@ public class IssueFieldSync {
     }
 
     @SuppressWarnings("unchecked")
-    private static void update(CustomField customField, Issue issue, String value) {
+    private static void updateObject(CustomField customField, Issue issue, Object value) {
         CustomFieldType type = customField.getCustomFieldType();
         type.updateValue(customField, issue, value);
     }
 
-    private static boolean same(CustomField customField, Issue issue, String next) {
+    /**
+     * Value stored in Jira for a text, number, date, date-time, link, or time question.
+     * A date field receives a {@link Date}, a number field a {@link Double}, and the rest a string.
+     * Time is a string because Jira has no time custom field.
+     */
+    static Object scalar(CustomField customField, List<String> values) {
+        String actual = customField == null || customField.getCustomFieldType() == null
+                ? "" : customField.getCustomFieldType().getKey();
+        if (DATE_TYPE.equals(actual)) {
+            return parseDate(firstValue(values));
+        }
+        if (DATETIME_TYPE.equals(actual)) {
+            return parseDateTime(firstValue(values));
+        }
+        if (NUMBER_TYPE.equals(actual)) {
+            return parseNumber(firstValue(values));
+        }
+        return text(values);
+    }
+
+    static Date parseDate(String raw) {
+        String text = raw == null ? "" : raw.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (text.length() >= 10 && text.charAt(4) == '-' && text.charAt(7) == '-') {
+            return at(text.substring(0, 10), 0, 0, 0);
+        }
+        throw new IllegalArgumentException(text);
+    }
+
+    static Date parseDateTime(String raw) {
+        String text = raw == null ? "" : raw.trim().replace(' ', 'T');
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (text.length() >= 16 && text.charAt(4) == '-' && text.charAt(7) == '-' && text.charAt(10) == 'T') {
+            int hour = Integer.parseInt(text.substring(11, 13));
+            int minute = Integer.parseInt(text.substring(14, 16));
+            int second = 0;
+            if (text.length() >= 19 && text.charAt(16) == ':') {
+                second = Integer.parseInt(text.substring(17, 19));
+            }
+            return at(text.substring(0, 10), hour, minute, second);
+        }
+        throw new IllegalArgumentException(text);
+    }
+
+    static Double parseNumber(String raw) {
+        String text = raw == null ? "" : raw.trim().replace(',', '.');
+        if (text.isEmpty()) {
+            return null;
+        }
+        return Double.valueOf(text);
+    }
+
+    private static Date at(String day, int hour, int minute, int second) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setLenient(false);
+        calendar.set(Calendar.YEAR, Integer.parseInt(day.substring(0, 4)));
+        calendar.set(Calendar.MONTH, Integer.parseInt(day.substring(5, 7)) - 1);
+        calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(day.substring(8, 10)));
+        calendar.set(Calendar.HOUR_OF_DAY, hour);
+        calendar.set(Calendar.MINUTE, minute);
+        calendar.set(Calendar.SECOND, second);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTime();
+    }
+
+    private static boolean sameObject(CustomField customField, Issue issue, Object next) {
         Object current = customField.getValue(issue);
-        return textOf(current).equals(next == null ? "" : next);
+        if (next instanceof Date && current instanceof Date) {
+            return ((Date) next).getTime() == ((Date) current).getTime();
+        }
+        if (next instanceof Number && current instanceof Number) {
+            return Double.compare(((Number) next).doubleValue(), ((Number) current).doubleValue()) == 0;
+        }
+        if (next == null) {
+            return current == null || textOf(current).isEmpty();
+        }
+        return textOf(current).equals(textOf(next));
+    }
+
+    private static String firstValue(List<String> values) {
+        if (values == null) {
+            return "";
+        }
+        for (int i = 0; i < values.size(); i++) {
+            if (values.get(i) != null && values.get(i).trim().length() > 0) {
+                return values.get(i).trim();
+            }
+        }
+        return "";
     }
 
     private static String text(List<String> values) {

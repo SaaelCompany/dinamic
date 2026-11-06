@@ -7,9 +7,14 @@ package ru.saael.dynamicfields.service;
 public final class ProjectFieldKinds {
 
     public static final String TEXT = "text";
+    public static final String TEXTAREA = "textarea";
     public static final String SELECT = "select";
     public static final String CHECKBOXES = "checkboxes";
     public static final String RADIO = "radio";
+    public static final String DATE = "date";
+    public static final String DATETIME = "datetime";
+    public static final String NUMBER = "number";
+    public static final String URL = "url";
 
     private ProjectFieldKinds() {
     }
@@ -30,6 +35,21 @@ public final class ProjectFieldKinds {
         }
         if (key.endsWith(":cascadingselect") || key.endsWith(":select")) {
             return SELECT;
+        }
+        if (key.endsWith(":datepicker")) {
+            return DATE;
+        }
+        if (key.endsWith(":datetime")) {
+            return DATETIME;
+        }
+        if (key.endsWith(":float")) {
+            return NUMBER;
+        }
+        if (key.endsWith(":url")) {
+            return URL;
+        }
+        if (key.endsWith(":textarea")) {
+            return TEXTAREA;
         }
         return TEXT;
     }
