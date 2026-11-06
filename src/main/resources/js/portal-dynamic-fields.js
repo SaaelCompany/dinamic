@@ -133,11 +133,26 @@
         if (!when || !when.fieldId) {
             return true;
         }
+        return conditionsHold(when, visible, values);
+    }
+
+    function conditionsHold(when, visible, values) {
+        var also = when.also || [];
+        var i;
+        if (when.join === 'or') {
+            if (conditionMatches(when, visible, values)) {
+                return true;
+            }
+            for (i = 0; i < also.length; i++) {
+                if (also[i] && also[i].fieldId && conditionMatches(also[i], visible, values)) {
+                    return true;
+                }
+            }
+            return false;
+        }
         if (!conditionMatches(when, visible, values)) {
             return false;
         }
-        var also = when.also || [];
-        var i;
         for (i = 0; i < also.length; i++) {
             if (also[i] && also[i].fieldId && !conditionMatches(also[i], visible, values)) {
                 return false;

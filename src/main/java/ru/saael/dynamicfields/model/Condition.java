@@ -20,7 +20,9 @@ import java.util.List;
  *   <li>non-empty {@code values} - matches when at least one of the current values of the field equals one of the
  *       listed values. Both option ids ("10101") and option labels ("Открытый") are accepted;</li>
  *   <li>{@code negate} inverts the result;</li>
- *   <li>{@code also} lists extra conditions that must hold at the same time (logical and).</li>
+ *   <li>{@code also} lists extra conditions combined with this one;</li>
+ *   <li>{@code join} is {@code "or"} when any of the conditions is enough, and empty or {@code "and"}
+ *       when every condition must hold.</li>
  * </ul>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -34,8 +36,10 @@ public class Condition {
     private String fieldName;
     private List<String> values = new ArrayList<String>();
     private boolean negate;
-    /** Extra conditions that must hold together with this one. Empty means no extra condition. */
+    /** Extra conditions combined with this one. Empty means no extra condition. */
     private List<Condition> also;
+    /** {@code "or"} when any condition is enough. Empty and {@code "and"} require every condition. */
+    private String join;
 
     public String getFieldId() {
         return fieldId;
@@ -87,5 +91,17 @@ public class Condition {
             return;
         }
         this.also = also;
+    }
+
+    public String getJoin() {
+        return join;
+    }
+
+    public void setJoin(String join) {
+        if (join == null || join.trim().isEmpty() || "and".equals(join.trim())) {
+            this.join = null;
+            return;
+        }
+        this.join = "or".equals(join.trim()) ? "or" : join.trim();
     }
 }
