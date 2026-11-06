@@ -132,6 +132,7 @@ public class IssueFieldSync {
             return;
         }
         Set<String> kept = keptMarkers(config);
+        Set<String> existingIds = existingFieldIds(config);
         List<CustomField> existing = customFieldManager.getCustomFieldObjects();
         if (existing == null || existing.isEmpty()) {
             return;
@@ -139,7 +140,10 @@ public class IssueFieldSync {
         List<CustomField> snapshot = new ArrayList<CustomField>(existing);
         for (int i = 0; i < snapshot.size(); i++) {
             CustomField candidate = snapshot.get(i);
-            if (candidate == null || !ownedByPlugin(candidate) || !orphan(candidate.getDescription(), kept)) {
+            if (candidate == null || existingIds.contains(candidate.getId())) {
+                continue;
+            }
+            if (!ownedByPlugin(candidate) || !orphan(candidate.getDescription(), kept)) {
                 continue;
             }
             try {
@@ -192,6 +196,34 @@ public class IssueFieldSync {
             }
         }
         return kept;
+    }
+
+    /**
+     * Jira fields placed on the canvas as existing fields. Removing the node must not delete them.
+     * Only a field this plugin created, marked {@code sdf:blockId:fieldId}, can be removed.
+     */
+    static Set<String> existingFieldIds(RulesConfig config) {
+        Set<String> ids = new HashSet<String>();
+        if (config == null || config.getBlocks() == null) {
+            return ids;
+        }
+        for (int b = 0; b < config.getBlocks().size(); b++) {
+            FormBlock block = config.getBlocks().get(b);
+            if (block == null || block.getFields() == null) {
+                continue;
+            }
+            for (int i = 0; i < block.getFields().size(); i++) {
+                FormField field = block.getFields().get(i);
+                if (field == null || field.getPortalFieldId() == null) {
+                    continue;
+                }
+                String id = field.getPortalFieldId().trim();
+                if (!id.isEmpty()) {
+                    ids.add(id);
+                }
+            }
+        }
+        return ids;
     }
 
     /**

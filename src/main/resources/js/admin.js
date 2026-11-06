@@ -2231,7 +2231,9 @@
             remove.type = 'button';
             remove.className = 'sdf-node-del';
             remove.setAttribute('data-role', 'remove');
-            remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeRemove'));
+            remove.setAttribute('title', AJS.I18n.getText(field.portalFieldId
+                ? 'ru.saael.dynamicfields.admin.builder.existingRemove'
+                : 'ru.saael.dynamicfields.admin.builder.nodeRemove'));
             remove.appendChild(document.createTextNode('\u00d7'));
             head.appendChild(remove);
             node.appendChild(head);
