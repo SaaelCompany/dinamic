@@ -64,6 +64,16 @@
         <link linkId="dynamic-fields-admin-link">/plugins/servlet/dynamic-fields/admin</link>
     </web-item>
 
+    <web-resource key="agent-form-resources" name="Dynamic fields - create and edit issue">
+        <dependency>com.atlassian.auiplugin:ajs</dependency>
+        <transformation extension="js">
+            <transformer key="jsI18n"/>
+        </transformation>
+        <resource type="download" name="agent-form.js" location="/js/agent-form.js"/>
+        <resource type="download" name="agent-form.css" location="/css/agent-form.css"/>
+        <context>atl.general</context>
+    </web-resource>
+
     <web-resource key="admin-resources" name="Dynamic fields - admin page resources">
         <dependency>com.atlassian.auiplugin:ajs</dependency>
         <dependency>com.atlassian.auiplugin:aui-flag</dependency>

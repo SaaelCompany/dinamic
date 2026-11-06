@@ -245,6 +245,7 @@
                 values: values,
                 negate: !!src.negate,
                 _mode: values.length ? 'selected' : 'any',
+                join: src.join === 'or' ? 'or' : 'and',
                 also: []
             };
             var rawAlso = src.also || [];
@@ -328,6 +329,9 @@
                         keptAlso.push(also[a]);
                     }
                     field.when.also = keptAlso;
+                    if (field.when.join !== 'or') {
+                        field.when.join = 'and';
+                    }
                 }
                 field.after = keptAfter(fields, field, seen);
                 seen[field.id] = true;
@@ -472,6 +476,9 @@
             }
             if (extra.length) {
                 out.also = extra;
+                if (when.join === 'or') {
+                    out.join = 'or';
+                }
             }
             return out;
         }
@@ -1888,16 +1895,18 @@
                 }
                 return {x: item.x + NODE_W, y: item.y + item.h / 2};
             }
-            function line(from, to, fieldIndex, kind, nestIndex) {
+            function line(from, to, fieldIndex, kind, nestIndex, alsoIndex, strokeColor) {
                 var mid = (from.x + to.x) / 2;
                 var d = 'M ' + from.x + ' ' + from.y + ' C ' + mid + ' ' + from.y + ', ' + mid + ' ' + to.y + ', ' + to.x + ' ' + to.y;
-                var stroke = '#4c9aff';
+                var stroke = strokeColor || '#4c9aff';
                 var cls = 'sdf-edge';
                 var role = 'unlink';
                 if (kind === 'nest') {
                     stroke = '#6554c0';
                     cls = 'sdf-edge sdf-edge-nest';
                     role = 'unlink-nest';
+                } else if (stroke === '#ff8b00') {
+                    cls = 'sdf-edge sdf-edge-or';
                 }
                 var hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 hit.setAttribute('d', d);
@@ -1909,6 +1918,12 @@
                 hit.setAttribute('data-field-index', String(fieldIndex));
                 if (kind === 'nest') {
                     hit.setAttribute('data-nest-index', String(nestIndex));
+                }
+                if (kind === 'also' && alsoIndex != null && alsoIndex >= 0) {
+                    hit.setAttribute('data-also', String(alsoIndex));
+                    hit.setAttribute('data-kind', 'also');
+                } else if (kind === 'after' || kind === 'when') {
+                    hit.setAttribute('data-kind', kind);
                 }
                 hit.setAttribute('class', 'sdf-edge-hit');
                 svg.appendChild(hit);
@@ -1924,12 +1939,17 @@
                 if (indexAt[i] == null) {
                     continue;
                 }
-                bindLine(i, block.fields[i].after, true);
-                bindLine(i, block.fields[i].when, false);
+                bindLine(i, block.fields[i].after, true, -1);
+                bindLine(i, block.fields[i].when, false, -1);
+                var extras = block.fields[i].when && block.fields[i].when.also ? block.fields[i].when.also : [];
+                var extra;
+                for (extra = 0; extra < extras.length; extra++) {
+                    bindLine(i, extras[extra], false, extra);
+                }
             }
             return svg;
 
-            function bindLine(fieldIndex, binding, placement) {
+            function bindLine(fieldIndex, binding, placement, alsoIndex) {
                 if (!binding || !binding.fieldId || (!placement && binding.source === 'portal')) {
                     return;
                 }
@@ -1944,8 +1964,10 @@
                     return;
                 }
                 var values = placement ? [binding.option] : (binding.values || []);
+                var kind = placement ? 'after' : (alsoIndex >= 0 ? 'also' : 'when');
+                var stroke = (!placement && block.fields[fieldIndex].when && block.fields[fieldIndex].when.join === 'or') ? '#ff8b00' : '#4c9aff';
                 if (!placement && (!values.length || binding._mode === 'any')) {
-                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[fieldIndex]), fieldIndex);
+                    line({x: laid[parentAt].x + NODE_W, y: laid[parentAt].y + laid[parentAt].h / 2}, leftOf(indexAt[fieldIndex]), fieldIndex, kind, null, alsoIndex, stroke);
                     return;
                 }
                 var v;
@@ -1956,7 +1978,7 @@
                     if (placement && block.fields[fieldIndex].when && block.fields[fieldIndex].when.fieldId === binding.fieldId && contains(block.fields[fieldIndex].when.values, values[v])) {
                         continue;
                     }
-                    line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[fieldIndex]), fieldIndex);
+                    line(portPoint(laid[parentAt], values[v]), leftOf(indexAt[fieldIndex]), fieldIndex, kind, null, alsoIndex, stroke);
                 }
             }
 
@@ -2150,7 +2172,10 @@
                     parts.push(whenPhrase(block, also[i]));
                 }
             }
-            return parts.join(' ' + AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and') + ' ');
+            var word = when.join === 'or'
+                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.or')
+                : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and');
+            return parts.join(' ' + word + ' ');
         }
 
         function whenPhrase(block, when) {
@@ -2932,6 +2957,9 @@
             if (field.when && field.when.fieldId) {
                 var also = field.when.also || [];
                 var a;
+                if (also.length) {
+                    box.appendChild(renderJoin(field));
+                }
                 for (a = 0; a < also.length; a++) {
                     box.appendChild(renderAlso(block, field, index, a));
                 }
@@ -2940,11 +2968,34 @@
             return box;
         }
 
+        function renderJoin(field) {
+            var row = el('div', 'sdf-join');
+            row.appendChild(el('span', 'sdf-also-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.join')));
+            row.appendChild(joinButton('and', field.when.join !== 'or'));
+            row.appendChild(joinButton('or', field.when.join === 'or'));
+            return row;
+        }
+
+        function joinButton(join, on) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'sdf-join-btn' + (on ? ' sdf-join-on' : '');
+            button.setAttribute('data-role', 'when-join');
+            button.setAttribute('data-join', join);
+            button.appendChild(document.createTextNode(AJS.I18n.getText(
+                join === 'or' ? 'ru.saael.dynamicfields.admin.builder.or' : 'ru.saael.dynamicfields.admin.builder.and'
+            )));
+            return button;
+        }
+
         function renderAlso(block, field, index, alsoIndex) {
             var when = field.when.also[alsoIndex];
             var box = el('div', 'field-group sdf-also');
             var head = el('div', 'sdf-also-head');
-            head.appendChild(el('span', 'sdf-also-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and')));
+            var word = field.when.join === 'or'
+                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.or')
+                : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and');
+            head.appendChild(el('span', 'sdf-also-label', word));
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-option-del';
@@ -3617,8 +3668,6 @@
                 return;
             }
             var sourceId = fields[fromIndex].id;
-            var parent = fields[fromIndex];
-            var placeVisible = !!(option && parent && (parent.type === 'checkbox' || parent.type === 'radio'));
             var keptAlso = fields[toIndex].when && fields[toIndex].when.also ? fields[toIndex].when.also : [];
             if (toIndex < fromIndex) {
                 var end = subtreeEnd(fields, toIndex);
@@ -3631,28 +3680,62 @@
                 }
                 toIndex = insertAt;
             }
-            if (placeVisible) {
-                fields[toIndex].after = {fieldId: sourceId, option: option};
-                var linked = fields[toIndex].when;
-                var linkedValues = linked && linked.values ? linked.values : [];
-                if (linked && linked.source !== 'portal' && linked.fieldId === sourceId && !(linked.also && linked.also.length) && linkedValues.length === 1 && linkedValues[0] === option) {
-                    fields[toIndex].when = null;
-                }
-            } else {
-                fields[toIndex].when = {
-                    fieldId: sourceId,
-                    values: option ? [option] : [],
-                    negate: false,
-                    _mode: option ? 'selected' : 'any',
-                    source: ''
-                };
-                if (keptAlso.length) {
-                    fields[toIndex].when.also = keptAlso;
-                }
-            }
+            addCondition(fields[toIndex], sourceId, option, keptAlso);
             pendingLink = null;
             selectedField = {blockIndex: blockIndex, index: toIndex};
             refresh();
+        }
+
+        function conditionPiece(sourceId, option) {
+            return {
+                fieldId: sourceId,
+                values: option ? [option] : [],
+                negate: false,
+                _mode: option ? 'selected' : 'any',
+                source: '',
+                join: 'and',
+                also: []
+            };
+        }
+
+        function mergeCondition(target, option) {
+            if (!option) {
+                target._mode = 'any';
+                target.values = [];
+                return;
+            }
+            target._mode = 'selected';
+            var values = target.values || [];
+            if (!contains(values, option)) {
+                values.push(option);
+            }
+            target.values = values;
+        }
+
+        function addCondition(field, sourceId, option, keptAlso) {
+            if (!field.when || !field.when.fieldId) {
+                field.when = conditionPiece(sourceId, option);
+                if (keptAlso && keptAlso.length) {
+                    field.when.also = keptAlso;
+                }
+                return;
+            }
+            if (field.when.source !== 'portal' && field.when.fieldId === sourceId) {
+                mergeCondition(field.when, option);
+                return;
+            }
+            var also = field.when.also || [];
+            var i;
+            for (i = 0; i < also.length; i++) {
+                if (also[i] && also[i].source !== 'portal' && also[i].fieldId === sourceId) {
+                    mergeCondition(also[i], option);
+                    field.when.also = also;
+                    return;
+                }
+            }
+            also.push(conditionPiece(sourceId, option));
+            field.when.also = also;
+            field.when.join = 'or';
         }
 
         function onPortDown(e) {
@@ -4437,8 +4520,30 @@
                 var linkBlock = parseInt(linked.getAttribute('data-block-index'), 10) || 0;
                 var linkField = parseInt(linked.getAttribute('data-field-index'), 10) || 0;
                 if (config.blocks[linkBlock] && config.blocks[linkBlock].fields[linkField]) {
-                    config.blocks[linkBlock].fields[linkField].when = null;
-                    config.blocks[linkBlock].fields[linkField].after = null;
+                    var linkedField = config.blocks[linkBlock].fields[linkField];
+                    var linkKind = linked.getAttribute('data-kind');
+                    var linkAlso = linked.getAttribute('data-also');
+                    if (linkKind === 'after') {
+                        linkedField.after = null;
+                    } else if (linkKind === 'also' && linkAlso != null && linkedField.when && linkedField.when.also) {
+                        linkedField.when.also.splice(parseInt(linkAlso, 10), 1);
+                        if (!linkedField.when.also.length) {
+                            linkedField.when.also = [];
+                            if (linkedField.when.join === 'or') {
+                                linkedField.when.join = 'and';
+                            }
+                        }
+                    } else if (linkedField.when && linkedField.when.also && linkedField.when.also.length) {
+                        var promoted = linkedField.when.also.shift();
+                        promoted.also = linkedField.when.also;
+                        promoted.join = linkedField.when.join === 'or' && promoted.also.length ? 'or' : 'and';
+                        linkedField.when = promoted;
+                    } else {
+                        linkedField.when = null;
+                        if (linkKind !== 'when') {
+                            linkedField.after = null;
+                        }
+                    }
                     selectedField = {blockIndex: linkBlock, index: linkField};
                     refresh();
                 }
@@ -4513,6 +4618,12 @@
                 return;
             } else if (role === 'add-from-answer') {
                 addField(loc.blockIndex, loc.fieldIndex, optionOf(e.target));
+            } else if (role === 'when-join') {
+                var joinHost = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
+                if (joinHost && joinHost.when) {
+                    joinHost.when.join = e.target.getAttribute('data-join') === 'or' ? 'or' : 'and';
+                    refresh();
+                }
             } else if (role === 'add-also') {
                 var host = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
                 if (!host || !host.when) {
@@ -5680,6 +5791,7 @@
             form.addEventListener('input', function () {
                 applyPreviewVisibility(form);
             });
+            form.addEventListener('mousedown', onPreviewDown);
         }
 
         function buildPreview(cfg) {
@@ -5821,7 +5933,15 @@
         function buildField(field, blockId) {
             var wrap = el('div', 'sdf-field');
             wrap.setAttribute('data-sdf-field', field.id);
+            wrap.setAttribute('data-sdf-owner', blockId);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
+            var grip = document.createElement('button');
+            grip.type = 'button';
+            grip.className = 'sdf-drag';
+            grip.setAttribute('data-role', 'preview-drag');
+            grip.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewDrag'));
+            grip.appendChild(document.createTextNode('\u2630'));
+            wrap.appendChild(grip);
             if (field.required) {
                 wrap.setAttribute('data-sdf-required', '1');
             }
@@ -5922,6 +6042,263 @@
                 return trim(field.blankLabel);
             }
             return AJS.I18n.getText('ru.saael.dynamicfields.portal.blank');
+        }
+
+        var previewDrag = null;
+
+        function onPreviewDown(e) {
+            if (e.button || roleOf(e.target) !== 'preview-drag') {
+                return;
+            }
+            var fieldNode = previewFieldOf(e.target);
+            if (!fieldNode || fieldNode.getAttribute('data-sdf-external') === '1') {
+                return;
+            }
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            previewDrag = {
+                node: fieldNode,
+                blockId: fieldNode.getAttribute('data-sdf-owner'),
+                fieldId: fieldNode.getAttribute('data-sdf-field'),
+                moved: false
+            };
+            document.addEventListener('mousemove', onPreviewMove);
+            document.addEventListener('mouseup', onPreviewUp);
+            document.addEventListener('selectstart', preventPreviewSelect);
+        }
+
+        function preventPreviewSelect(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+        }
+
+        function onPreviewMove(e) {
+            if (!previewDrag) {
+                return;
+            }
+            previewDrag.moved = true;
+            if (window.getSelection && window.getSelection()) {
+                var selection = window.getSelection();
+                if (selection.removeAllRanges) {
+                    selection.removeAllRanges();
+                }
+            }
+            markPreviewDrop(e.clientX, e.clientY);
+        }
+
+        function onPreviewUp(e) {
+            document.removeEventListener('mousemove', onPreviewMove);
+            document.removeEventListener('mouseup', onPreviewUp);
+            document.removeEventListener('selectstart', preventPreviewSelect);
+            if (!previewDrag) {
+                return;
+            }
+            var info = previewDrag;
+            previewDrag = null;
+            var drop = info.moved ? info.drop : null;
+            clearPreviewMarks();
+            if (!drop) {
+                return;
+            }
+            applyPreviewDrop(info, drop);
+        }
+
+        function previewFieldOf(node) {
+            var current = node;
+            while (current && current !== preview) {
+                if (current.getAttribute && current.getAttribute('data-sdf-field') && current.getAttribute('data-sdf-external') !== '1') {
+                    return current;
+                }
+                current = current.parentNode;
+            }
+            return null;
+        }
+
+        function clearPreviewMarks() {
+            var hot = preview.querySelectorAll('.sdf-preview-hot');
+            var i;
+            for (i = 0; i < hot.length; i++) {
+                hot[i].className = hot[i].className.replace(' sdf-preview-hot', '');
+            }
+            var line = document.getElementById('sdf-preview-line');
+            if (line && line.parentNode) {
+                line.parentNode.removeChild(line);
+            }
+        }
+
+        function previewLine(before, node) {
+            var line = document.getElementById('sdf-preview-line');
+            if (!line) {
+                line = document.createElement('div');
+                line.id = 'sdf-preview-line';
+                line.className = 'sdf-preview-line';
+            }
+            if (before) {
+                node.parentNode.insertBefore(line, node);
+            } else if (node.nextSibling) {
+                node.parentNode.insertBefore(line, node.nextSibling);
+            } else {
+                node.parentNode.appendChild(line);
+            }
+        }
+
+        function markPreviewDrop(x, y) {
+            clearPreviewMarks();
+            var drop = previewDropAt(x, y, previewDrag);
+            previewDrag.drop = drop;
+            if (!drop) {
+                return;
+            }
+            if (drop.mode === 'among' && drop.row) {
+                drop.row.className += ' sdf-preview-hot';
+                return;
+            }
+            if (drop.node) {
+                previewLine(drop.before, drop.node);
+            }
+        }
+
+        function previewDropAt(x, y, info) {
+            if (!info) {
+                return null;
+            }
+            var under = document.elementFromPoint(x, y);
+            if (!under) {
+                return null;
+            }
+            var row = under;
+            while (row && row !== preview) {
+                if (row.className && String(row.className).indexOf('sdf-option') >= 0) {
+                    break;
+                }
+                row = row.parentNode;
+            }
+            var host = previewFieldOf(row || under);
+            if (row && row !== preview && host && host.getAttribute('data-sdf-field') !== info.fieldId) {
+                var hostType = host.getAttribute('data-sdf-type');
+                if (hostType === 'checkbox' || hostType === 'radio') {
+                    var optionNode = row.getElementsByTagName('input')[0];
+                    var option = optionNode ? optionNode.value : '';
+                    if (trim(option)) {
+                        return {mode: 'among', hostId: host.getAttribute('data-sdf-field'), option: option, before: false, row: row};
+                    }
+                }
+            }
+            var target = previewFieldOf(under);
+            if (!target || target.getAttribute('data-sdf-field') === info.fieldId) {
+                return null;
+            }
+            var box = target.getBoundingClientRect();
+            return {
+                mode: 'order',
+                fieldId: target.getAttribute('data-sdf-field'),
+                before: y < box.top + box.height / 2,
+                node: target
+            };
+        }
+
+        function applyPreviewDrop(info, drop) {
+            var block = blockById(info.blockId);
+            var blockIndex = -1;
+            var i;
+            for (i = 0; i < config.blocks.length; i++) {
+                if (config.blocks[i] === block) {
+                    blockIndex = i;
+                }
+            }
+            if (!block || blockIndex < 0) {
+                return;
+            }
+            var from = fieldIndexById(block, info.fieldId);
+            if (from < 0) {
+                return;
+            }
+            if (drop.mode === 'among') {
+                var hostIndex = fieldIndexById(block, drop.hostId);
+                if (hostIndex < 0) {
+                    return;
+                }
+                placeAmongLink(blockIndex, from, hostIndex, false, drop.option);
+                return;
+            }
+            var target = fieldIndexById(block, drop.fieldId);
+            if (target < 0) {
+                return;
+            }
+            var to = drop.before ? target : target + 1;
+            movePreviewField(blockIndex, from, to);
+        }
+
+        function fieldIndexById(block, id) {
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                if (block.fields[i].id === id) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function movePreviewField(blockIndex, from, to) {
+            var fields = config.blocks[blockIndex].fields;
+            if (from < 0 || to < 0 || from >= fields.length) {
+                return;
+            }
+            var field = fields.splice(from, 1)[0];
+            if (to > from) {
+                to--;
+            }
+            if (to < 0) {
+                to = 0;
+            }
+            if (to > fields.length) {
+                to = fields.length;
+            }
+            if (to === from) {
+                fields.splice(from, 0, field);
+                return;
+            }
+            var keptAmong = field.among;
+            field.among = null;
+            fields.splice(to, 0, field);
+            if (!previewOrderOk(fields)) {
+                field.among = keptAmong;
+                fields.splice(to, 1);
+                fields.splice(from, 0, field);
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewBlocked')]);
+                return;
+            }
+            refresh();
+        }
+
+        function previewOrderOk(fields) {
+            var at = {};
+            var i;
+            for (i = 0; i < fields.length; i++) {
+                at[fields[i].id] = i;
+            }
+            for (i = 0; i < fields.length; i++) {
+                var field = fields[i];
+                if (field.among && field.among.fieldId && !(at[field.among.fieldId] < i)) {
+                    return false;
+                }
+                if (field.after && field.after.fieldId && !(at[field.after.fieldId] < i)) {
+                    return false;
+                }
+                if (field.when && field.when.source !== 'portal' && field.when.fieldId && !(at[field.when.fieldId] < i)) {
+                    return false;
+                }
+                var also = field.when && field.when.also ? field.when.also : [];
+                var a;
+                for (a = 0; a < also.length; a++) {
+                    if (also[a] && also[a].source !== 'portal' && also[a].fieldId && !(at[also[a].fieldId] < i)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         function readPreview(root) {
@@ -6274,13 +6651,30 @@
             if (!when || !when.fieldId) {
                 return true;
             }
-            if (!previewMatches(when, visible, values)) {
-                return false;
-            }
+            return conditionsHold(when, function (item) {
+                return previewMatches(item, visible, values);
+            });
+        }
+
+        function conditionsHold(when, matches) {
             var also = when.also || [];
             var i;
+            if (when.join === 'or') {
+                if (matches(when)) {
+                    return true;
+                }
+                for (i = 0; i < also.length; i++) {
+                    if (also[i] && also[i].fieldId && matches(also[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (!matches(when)) {
+                return false;
+            }
             for (i = 0; i < also.length; i++) {
-                if (also[i] && also[i].fieldId && !previewMatches(also[i], visible, values)) {
+                if (also[i] && also[i].fieldId && !matches(also[i])) {
                     return false;
                 }
             }

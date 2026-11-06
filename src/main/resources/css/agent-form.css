@@ -1,0 +1,52 @@
+.field-group .sdf-agent-marker {
+    display: none !important;
+}
+
+.field-group .sdf-agent-native {
+    display: none !important;
+}
+
+.field-group.sdf-agent-off {
+    display: none !important;
+}
+
+.field-group.sdf-agent-among {
+    margin-left: 24px;
+}
+
+.sdf-agent {
+    max-width: 500px;
+}
+
+.sdf-agent .text,
+.sdf-agent .select,
+.sdf-agent .textarea {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 500px;
+}
+
+.sdf-agent .textarea {
+    min-height: 0;
+    height: auto;
+}
+
+.sdf-agent .checkbox,
+.sdf-agent .radio {
+    display: block;
+    position: relative;
+    margin: 4px 0;
+    padding-left: 20px;
+}
+
+.sdf-agent .checkbox > input.checkbox,
+.sdf-agent .radio > input.radio {
+    position: absolute;
+    left: 0;
+    margin: 2px 0 0;
+}
+
+.sdf-agent .sdf-agent-help {
+    margin-top: 4px;
+    color: #6b778c;
+}

@@ -296,6 +296,22 @@ public class RulesValidatorTest {
     }
 
     @Test
+    public void orJoinRoundTrips() throws Exception {
+        String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
+                + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
+                + "{\"id\":\"branch\",\"label\":\"Филиал\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
+                + "{\"id\":\"extra\",\"label\":\"Уточнение\",\"type\":\"text\",\"when\":{"
+                + "\"fieldId\":\"flags\",\"values\":[\"А\"],\"join\":\"or\","
+                + "\"also\":[{\"fieldId\":\"branch\",\"values\":[\"Б\"]}]}}]}]}";
+        ObjectMapper mapper = new ObjectMapper();
+        RulesConfig loaded = mapper.readValue(json, RulesConfig.class);
+        Condition when = loaded.getBlocks().get(0).getFields().get(2).getWhen();
+        assertEquals("or", when.getJoin());
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+        assertTrue(mapper.writeValueAsString(loaded).contains("\"join\":\"or\""));
+    }
+
+    @Test
     public void visibleQuestionBetweenRowsRoundTrips() throws Exception {
         String json = "{\"version\":3,\"blocks\":[{\"id\":\"main\",\"title\":\"Test\",\"fields\":["
                 + "{\"id\":\"flags\",\"label\":\"Доступы\",\"type\":\"checkbox\",\"options\":[\"А\",\"Б\"]},"
