@@ -97,6 +97,27 @@ public class IssueFieldSyncTest {
     }
 
     @Test
+    public void existingJiraFieldIsNotDeletedWithTheCanvasNode() {
+        RulesConfig config = new RulesConfig();
+        FormBlock block = new FormBlock();
+        block.setId("main");
+        FormField node = new FormField();
+        node.setId("field1");
+        node.setPortalFieldId("customfield_10100");
+        block.getFields().add(node);
+        config.getBlocks().add(block);
+
+        Set<String> ids = IssueFieldSync.existingFieldIds(config);
+        assertTrue(ids.contains("customfield_10100"));
+        assertFalse(IssueFieldSync.orphan("Организации", IssueFieldSync.keptMarkers(config)));
+        assertFalse(IssueFieldSync.orphan("customfield_10100", IssueFieldSync.keptMarkers(config)));
+
+        node.setPortalFieldId(null);
+        assertTrue(IssueFieldSync.existingFieldIds(config).isEmpty());
+        assertTrue(IssueFieldSync.existingFieldIds(null).isEmpty());
+    }
+
+    @Test
     public void checkboxQuestionBecomesACheckboxField() {
         assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
                 IssueFieldSync.fieldTypeKey("checkbox"));
