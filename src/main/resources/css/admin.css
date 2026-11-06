@@ -620,7 +620,10 @@
 .sdf-menu {
     position: fixed;
     z-index: 80;
-    min-width: 180px;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 360px;
+    overflow: auto;
     padding: 4px;
     background: #fff;
     border: 1px solid #dfe1e6;
@@ -637,10 +640,50 @@
     background: transparent;
     text-align: left;
     font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sdf-menu .aui-button:hover {
     background: #f4f5f7;
+}
+
+.sdf-menu-label {
+    margin: 6px 0 0;
+    padding: 6px 10px 2px;
+    border-top: 1px solid #ebecf0;
+    color: #6b778c;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.sdf-menu-filter {
+    display: block;
+    width: 100%;
+    height: 28px;
+    margin: 4px 0;
+    padding: 0 8px;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    box-sizing: border-box;
+    font-size: 13px;
+}
+
+.sdf-menu-note {
+    padding: 6px 10px 8px;
+    color: #6b778c;
+    font-size: 12px;
+}
+
+.sdf-menu-on {
+    color: #0052cc;
+}
+
+.sdf-node-external {
+    box-shadow: 0 0 0 1px rgba(9, 30, 66, 0.08);
 }
 
 .sdf-also {

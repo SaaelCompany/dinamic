@@ -30,6 +30,11 @@ public class FormField {
     private String id;
     /** Jira custom field id, for example {@code customfield_10100}. Empty until the form is saved. */
     private String jiraFieldId;
+    /**
+     * Set when this node stands for a field that already exists in Jira.
+     * The question is not created again and is not drawn a second time on the portal.
+     */
+    private String portalFieldId;
     /** Name of the Jira text field used by automation. Empty means the question label, then the id. */
     private String issueName;
     private String label;
@@ -77,6 +82,14 @@ public class FormField {
 
     public void setJiraFieldId(String jiraFieldId) {
         this.jiraFieldId = jiraFieldId;
+    }
+
+    public String getPortalFieldId() {
+        return portalFieldId;
+    }
+
+    public void setPortalFieldId(String portalFieldId) {
+        this.portalFieldId = portalFieldId;
     }
 
     public String getIssueName() {

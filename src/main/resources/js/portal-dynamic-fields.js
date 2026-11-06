@@ -1580,6 +1580,9 @@
         }
         var visible = visibility(cfg.fields, {});
         for (var i = 0; i < cfg.fields.length; i++) {
+            if (cfg.fields[i].portalFieldId) {
+                continue;
+            }
             var node = buildField(cfg.fields[i], cfg.id);
             node.setAttribute('data-sdf-home', cfg.id || 'block');
             var show = !!visible[cfg.fields[i].id];
