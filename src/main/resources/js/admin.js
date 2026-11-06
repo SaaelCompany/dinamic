@@ -2034,6 +2034,7 @@
             }
             head.appendChild(title);
             head.appendChild(el('span', 'sdf-node-kind', typeName(field.type)));
+            head.appendChild(rankInput(block, laid.index));
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-node-del';
@@ -2061,7 +2062,7 @@
                 for (o = 0; o < bands.bands.length; o++) {
                     var band = bands.bands[o];
                     if (band.among) {
-                        body.appendChild(amongRow(band.text));
+                        body.appendChild(amongRow(block, band.amongId, band.text));
                         continue;
                     }
                     if (isChoice(field.type) && !band.option && !band.nest) {
@@ -2078,12 +2079,62 @@
             return node;
         }
 
-        function amongRow(text) {
+        function amongRow(block, childId, text) {
             var row = el('div', 'sdf-node-among');
             row.setAttribute('title', text);
             row.appendChild(el('span', 'sdf-node-among-mark'));
             row.appendChild(el('span', 'sdf-node-among-text', text));
+            var childIndex = -1;
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                if (block.fields[i].id === childId) {
+                    childIndex = i;
+                }
+            }
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'sdf-among-del';
+            remove.setAttribute('data-role', 'clear-among');
+            remove.setAttribute('data-among-index', String(childIndex));
+            remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.clearAmong'));
+            remove.appendChild(document.createTextNode('\u00d7'));
+            row.appendChild(remove);
             return row;
+        }
+
+        function rankInput(block, fieldIndex) {
+            var field = block.fields[fieldIndex];
+            var input = document.createElement('input');
+            input.type = 'number';
+            input.min = '1';
+            input.step = '1';
+            input.className = 'sdf-node-rank';
+            input.setAttribute('data-role', 'priority');
+            if (field && field.among && field.among.fieldId) {
+                input.disabled = true;
+                input.value = '';
+                input.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.priorityLocked'));
+            } else {
+                input.value = String(formRank(block, fieldIndex));
+                input.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.priority'));
+            }
+            return input;
+        }
+
+        function formRank(block, fieldIndex) {
+            var rank = 0;
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                var field = block.fields[i];
+                if (field.among && field.among.fieldId) {
+                    continue;
+                }
+                rank++;
+                if (i === fieldIndex) {
+                    return rank;
+                }
+            }
+            return rank;
         }
 
         function nestIndexOf(field, nestId) {
@@ -4107,11 +4158,49 @@
             if (y < 8) {
                 y = 8;
             }
+            var moving = config.blocks[dragMove.blockIndex] && config.blocks[dragMove.blockIndex].fields[dragMove.fieldIndex];
+            if (moving) {
+                moving.x = Math.round(x);
+                moving.y = Math.round(y);
+                x = moving.x;
+                y = moving.y;
+            }
             dragMove.node.style.left = x + 'px';
             dragMove.node.style.top = y + 'px';
             dragMove.x = x;
             dragMove.y = y;
-            growBoard(dragMove.board, x, y, dragMove.node.offsetHeight || 80);
+            repaintEdges(dragMove.board, dragMove.blockIndex);
+        }
+
+        function repaintEdges(board, blockIndex) {
+            var block = config.blocks[blockIndex];
+            if (!board || !block) {
+                return;
+            }
+            var laid = layoutNodes(block, blockIndex);
+            var maxX = 200;
+            var maxY = 80;
+            var i;
+            for (i = 0; i < laid.length; i++) {
+                if (laid[i].x + NODE_W + 40 > maxX) {
+                    maxX = laid[i].x + NODE_W + 40;
+                }
+                if (laid[i].y + laid[i].h + 16 > maxY) {
+                    maxY = laid[i].y + laid[i].h + 16;
+                }
+            }
+            if (maxY < 200) {
+                maxY = 200;
+            }
+            board.style.width = maxX + 'px';
+            board.style.height = maxY + 'px';
+            var svg = edgeSvg(block, blockIndex, laid, maxX, maxY);
+            var old = board.querySelector('.sdf-edges');
+            if (old) {
+                board.replaceChild(svg, old);
+            } else {
+                board.insertBefore(svg, board.firstChild);
+            }
         }
 
         function onQuestionUp(e) {
@@ -4640,6 +4729,8 @@
                 }
                 host.when.also.push({fieldId: '', values: [], negate: false, _mode: 'any', source: '', also: []});
                 refresh();
+            } else if (role === 'clear-among') {
+                clearAmong(loc.blockIndex, parseInt(e.target.getAttribute('data-among-index'), 10));
             } else if (role === 'remove-also') {
                 var alsoIndex = parseInt(e.target.getAttribute('data-also'), 10);
                 var alsoHost = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
@@ -4788,6 +4879,10 @@
                 block.clearOnHide = e.target.checked;
                 sync();
                 renderPreview();
+                return;
+            }
+            if (role === 'priority' && loc.fieldIndex >= 0) {
+                applyPriority(loc.blockIndex, loc.fieldIndex, e.target.value);
                 return;
             }
             if (role === 'block-type') {
@@ -5797,7 +5892,6 @@
             form.addEventListener('input', function () {
                 applyPreviewVisibility(form);
             });
-            form.addEventListener('mousedown', onPreviewDown);
         }
 
         function buildPreview(cfg) {
@@ -5941,13 +6035,6 @@
             wrap.setAttribute('data-sdf-field', field.id);
             wrap.setAttribute('data-sdf-owner', blockId);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
-            var grip = document.createElement('button');
-            grip.type = 'button';
-            grip.className = 'sdf-drag';
-            grip.setAttribute('data-role', 'preview-drag');
-            grip.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewDrag'));
-            grip.appendChild(document.createTextNode('\u2630'));
-            wrap.appendChild(grip);
             if (field.required) {
                 wrap.setAttribute('data-sdf-required', '1');
             }
@@ -6050,234 +6137,97 @@
             return AJS.I18n.getText('ru.saael.dynamicfields.portal.blank');
         }
 
-        var previewDrag = null;
-
-        function onPreviewDown(e) {
-            if (e.button || roleOf(e.target) !== 'preview-drag') {
+        function clearAmong(blockIndex, childIndex) {
+            var fields = config.blocks[blockIndex] && config.blocks[blockIndex].fields;
+            var child = fields && fields[childIndex];
+            if (!child || !child.among || !child.among.fieldId) {
                 return;
             }
-            var fieldNode = previewFieldOf(e.target);
-            if (!fieldNode || fieldNode.getAttribute('data-sdf-external') === '1') {
+            child.among = null;
+            refresh();
+        }
+
+        function applyPriority(blockIndex, fieldIndex, raw) {
+            var block = config.blocks[blockIndex];
+            var fields = block && block.fields;
+            var field = fields && fields[fieldIndex];
+            if (!field || (field.among && field.among.fieldId)) {
                 return;
             }
-            if (e.preventDefault) {
-                e.preventDefault();
-            }
-            previewDrag = {
-                node: fieldNode,
-                blockId: fieldNode.getAttribute('data-sdf-owner'),
-                fieldId: fieldNode.getAttribute('data-sdf-field'),
-                moved: false
-            };
-            document.addEventListener('mousemove', onPreviewMove);
-            document.addEventListener('mouseup', onPreviewUp);
-            document.addEventListener('selectstart', preventPreviewSelect);
-        }
-
-        function preventPreviewSelect(e) {
-            if (e.preventDefault) {
-                e.preventDefault();
-            }
-        }
-
-        function onPreviewMove(e) {
-            if (!previewDrag) {
+            var wanted = parseInt(raw, 10);
+            if (isNaN(wanted) || wanted < 1) {
+                refresh();
                 return;
             }
-            previewDrag.moved = true;
-            if (window.getSelection && window.getSelection()) {
-                var selection = window.getSelection();
-                if (selection.removeAllRanges) {
-                    selection.removeAllRanges();
-                }
-            }
-            markPreviewDrop(e.clientX, e.clientY);
-        }
-
-        function onPreviewUp(e) {
-            document.removeEventListener('mousemove', onPreviewMove);
-            document.removeEventListener('mouseup', onPreviewUp);
-            document.removeEventListener('selectstart', preventPreviewSelect);
-            if (!previewDrag) {
-                return;
-            }
-            var info = previewDrag;
-            previewDrag = null;
-            var drop = info.moved ? info.drop : null;
-            clearPreviewMarks();
-            if (!drop) {
-                return;
-            }
-            applyPreviewDrop(info, drop);
-        }
-
-        function previewFieldOf(node) {
-            var current = node;
-            while (current && current !== preview) {
-                if (current.getAttribute && current.getAttribute('data-sdf-field') && current.getAttribute('data-sdf-external') !== '1') {
-                    return current;
-                }
-                current = current.parentNode;
-            }
-            return null;
-        }
-
-        function clearPreviewMarks() {
-            var hot = preview.querySelectorAll('.sdf-preview-hot');
+            var tops = [];
             var i;
-            for (i = 0; i < hot.length; i++) {
-                hot[i].className = hot[i].className.replace(' sdf-preview-hot', '');
-            }
-            var line = document.getElementById('sdf-preview-line');
-            if (line && line.parentNode) {
-                line.parentNode.removeChild(line);
-            }
-        }
-
-        function previewLine(before, node) {
-            var line = document.getElementById('sdf-preview-line');
-            if (!line) {
-                line = document.createElement('div');
-                line.id = 'sdf-preview-line';
-                line.className = 'sdf-preview-line';
-            }
-            if (before) {
-                node.parentNode.insertBefore(line, node);
-            } else if (node.nextSibling) {
-                node.parentNode.insertBefore(line, node.nextSibling);
-            } else {
-                node.parentNode.appendChild(line);
-            }
-        }
-
-        function markPreviewDrop(x, y) {
-            clearPreviewMarks();
-            var drop = previewDropAt(x, y, previewDrag);
-            previewDrag.drop = drop;
-            if (!drop) {
-                return;
-            }
-            if (drop.mode === 'among' && drop.row) {
-                drop.row.className += ' sdf-preview-hot';
-                return;
-            }
-            if (drop.node) {
-                previewLine(drop.before, drop.node);
-            }
-        }
-
-        function previewDropAt(x, y, info) {
-            if (!info) {
-                return null;
-            }
-            var under = document.elementFromPoint(x, y);
-            if (!under) {
-                return null;
-            }
-            var row = under;
-            while (row && row !== preview) {
-                if (row.className && String(row.className).indexOf('sdf-option') >= 0) {
-                    break;
+            for (i = 0; i < fields.length; i++) {
+                if (!(fields[i].among && fields[i].among.fieldId)) {
+                    tops.push(fields[i]);
                 }
-                row = row.parentNode;
             }
-            var host = previewFieldOf(row || under);
-            if (row && row !== preview && host && host.getAttribute('data-sdf-field') !== info.fieldId) {
-                var hostType = host.getAttribute('data-sdf-type');
-                if (hostType === 'checkbox' || hostType === 'radio') {
-                    var optionNode = row.getElementsByTagName('input')[0];
-                    var option = optionNode ? optionNode.value : '';
-                    if (trim(option)) {
-                        return {mode: 'among', hostId: host.getAttribute('data-sdf-field'), option: option, before: false, row: row};
+            if (wanted > tops.length) {
+                wanted = tops.length;
+            }
+            var current = -1;
+            for (i = 0; i < tops.length; i++) {
+                if (tops[i] === field) {
+                    current = i;
+                }
+            }
+            if (current < 0 || wanted - 1 === current) {
+                return;
+            }
+            var nextTops = [];
+            for (i = 0; i < tops.length; i++) {
+                if (tops[i] !== field) {
+                    nextTops.push(tops[i]);
+                }
+            }
+            nextTops.splice(wanted - 1, 0, field);
+            var seen = {};
+            var order = [];
+            for (i = 0; i < nextTops.length; i++) {
+                pushWithChildren(fields, nextTops[i], order, seen);
+            }
+            for (i = 0; i < fields.length; i++) {
+                if (!seen[fields[i].id]) {
+                    order.push(fields[i]);
+                    seen[fields[i].id] = true;
+                }
+            }
+            if (!previewOrderOk(order)) {
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewBlocked')]);
+                refresh();
+                return;
+            }
+            block.fields = order;
+            if (selectedField.blockIndex === blockIndex) {
+                var n;
+                for (n = 0; n < order.length; n++) {
+                    if (order[n] === field) {
+                        selectedField = {blockIndex: blockIndex, index: n};
                     }
                 }
             }
-            var target = previewFieldOf(under);
-            if (!target || target.getAttribute('data-sdf-field') === info.fieldId) {
-                return null;
-            }
-            var box = target.getBoundingClientRect();
-            return {
-                mode: 'order',
-                fieldId: target.getAttribute('data-sdf-field'),
-                before: y < box.top + box.height / 2,
-                node: target
-            };
-        }
-
-        function applyPreviewDrop(info, drop) {
-            var block = blockById(info.blockId);
-            var blockIndex = -1;
-            var i;
-            for (i = 0; i < config.blocks.length; i++) {
-                if (config.blocks[i] === block) {
-                    blockIndex = i;
-                }
-            }
-            if (!block || blockIndex < 0) {
-                return;
-            }
-            var from = fieldIndexById(block, info.fieldId);
-            if (from < 0) {
-                return;
-            }
-            if (drop.mode === 'among') {
-                var hostIndex = fieldIndexById(block, drop.hostId);
-                if (hostIndex < 0) {
-                    return;
-                }
-                placeAmongLink(blockIndex, from, hostIndex, false, drop.option);
-                return;
-            }
-            var target = fieldIndexById(block, drop.fieldId);
-            if (target < 0) {
-                return;
-            }
-            var to = drop.before ? target : target + 1;
-            movePreviewField(blockIndex, from, to);
-        }
-
-        function fieldIndexById(block, id) {
-            var i;
-            for (i = 0; i < block.fields.length; i++) {
-                if (block.fields[i].id === id) {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        function movePreviewField(blockIndex, from, to) {
-            var fields = config.blocks[blockIndex].fields;
-            if (from < 0 || to < 0 || from >= fields.length) {
-                return;
-            }
-            var field = fields.splice(from, 1)[0];
-            if (to > from) {
-                to--;
-            }
-            if (to < 0) {
-                to = 0;
-            }
-            if (to > fields.length) {
-                to = fields.length;
-            }
-            if (to === from) {
-                fields.splice(from, 0, field);
-                return;
-            }
-            var keptAmong = field.among;
-            field.among = null;
-            fields.splice(to, 0, field);
-            if (!previewOrderOk(fields)) {
-                field.among = keptAmong;
-                fields.splice(to, 1);
-                fields.splice(from, 0, field);
-                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.previewBlocked')]);
-                return;
-            }
             refresh();
         }
+
+        function pushWithChildren(fields, field, order, seen) {
+            if (!field || !field.id || seen[field.id]) {
+                return;
+            }
+            seen[field.id] = true;
+            order.push(field);
+            var i;
+            for (i = 0; i < fields.length; i++) {
+                var child = fields[i];
+                if (child.among && child.among.fieldId === field.id) {
+                    pushWithChildren(fields, child, order, seen);
+                }
+            }
+        }
+
 
         function previewOrderOk(fields) {
             var at = {};

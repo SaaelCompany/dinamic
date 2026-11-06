@@ -186,11 +186,44 @@
 .sdf-node-head {
     position: relative;
     height: 40px;
-    padding: 3px 28px 3px 12px;
+    padding: 3px 74px 3px 12px;
     border-radius: 8px 8px 0 0;
     box-sizing: border-box;
     color: #fff;
     cursor: grab;
+}
+
+.sdf-node-rank {
+    position: absolute;
+    top: 8px;
+    right: 32px;
+    width: 36px !important;
+    max-width: 36px;
+    height: 24px;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 3px;
+    background: #fff;
+    color: #172b4d;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 24px;
+    text-align: center;
+    box-sizing: border-box;
+    -moz-appearance: textfield;
+}
+
+.sdf-node-rank::-webkit-outer-spin-button,
+.sdf-node-rank::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.sdf-node-rank:disabled {
+    background: rgba(255, 255, 255, 0.35);
+    color: #fff;
+    cursor: not-allowed;
 }
 
 .sdf-node-drop {
@@ -294,6 +327,25 @@
     height: 8px;
     border-radius: 2px;
     background: #6554c0;
+}
+
+.sdf-among-del {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: #6554c0;
+    font-size: 14px;
+    line-height: 16px;
+    cursor: pointer;
+}
+
+.sdf-among-del:hover {
+    background: #eae6ff;
 }
 
 .sdf-node-among-text {
@@ -993,7 +1045,7 @@ form.aui.sdf-card .buttons-container {
     background: #fff;
     border: 1px solid #dfe1e6;
     border-radius: 3px;
-    padding: 12px 12px 12px 28px;
+    padding: 12px;
     margin: 0 0 8px;
 }
 
@@ -1005,46 +1057,7 @@ form.aui.sdf-card .buttons-container {
 }
 
 .sdf-preview .sdf-field {
-    position: relative;
     margin: 0 0 12px;
-}
-
-.sdf-preview .sdf-drag {
-    position: absolute;
-    left: -18px;
-    top: 1px;
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: #6b778c;
-    font-size: 14px;
-    line-height: 16px;
-    cursor: grab;
-    z-index: 1;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-}
-
-.sdf-preview .sdf-option input {
-    margin: 0 6px 0 0;
-    vertical-align: -2px;
-}
-
-.sdf-preview .sdf-preview-line {
-    height: 2px;
-    margin: 2px 0 2px 18px;
-    background: #1d7afc;
-    border-radius: 1px;
-}
-
-.sdf-preview .sdf-preview-hot {
-    background: #deebff;
-    border-radius: 3px;
 }
 
 .sdf-join {
