@@ -6,13 +6,17 @@ import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class IssueFieldSyncTest {
 
@@ -119,20 +123,66 @@ public class IssueFieldSyncTest {
 
     @Test
     public void checkboxQuestionBecomesACheckboxField() {
-        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
-                IssueFieldSync.fieldTypeKey("checkbox"));
-        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes",
-                IssueFieldSync.fieldTypeKey("multiselect"));
+        assertEquals(IssueFieldSync.CHECKBOX_TYPE, IssueFieldSync.fieldTypeKey("checkbox"));
+        assertEquals(IssueFieldSync.MULTI_TYPE, IssueFieldSync.fieldTypeKey("multiselect"));
+        assertEquals(IssueFieldSync.CHECKBOX_SEARCHER, IssueFieldSync.searcherKeyFor("checkbox"));
         assertTrue(IssueFieldSync.checks("checkbox"));
+        assertTrue(IssueFieldSync.pluginType(IssueFieldSync.CHECKBOX_TYPE));
     }
 
     @Test
-    public void textQuestionStaysATextArea() {
-        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:textarea",
-                IssueFieldSync.fieldTypeKey("text"));
-        assertEquals("com.atlassian.jira.plugin.system.customfieldtypes:textarea",
-                IssueFieldSync.fieldTypeKey("select"));
+    public void eachQuestionBecomesTheMatchingJiraField() {
+        assertEquals(IssueFieldSync.TEXT_TYPE, IssueFieldSync.fieldTypeKey("text"));
+        assertEquals(IssueFieldSync.TEXT_TYPE, IssueFieldSync.fieldTypeKey("time"));
+        assertEquals(IssueFieldSync.TYPE_KEY, IssueFieldSync.fieldTypeKey("textarea"));
+        assertEquals(IssueFieldSync.DATE_TYPE, IssueFieldSync.fieldTypeKey("date"));
+        assertEquals(IssueFieldSync.DATETIME_TYPE, IssueFieldSync.fieldTypeKey("datetime"));
+        assertEquals(IssueFieldSync.NUMBER_TYPE, IssueFieldSync.fieldTypeKey("number"));
+        assertEquals(IssueFieldSync.URL_TYPE, IssueFieldSync.fieldTypeKey("url"));
+        assertEquals(IssueFieldSync.SELECT_TYPE, IssueFieldSync.fieldTypeKey("select"));
+        assertEquals(IssueFieldSync.RADIO_TYPE, IssueFieldSync.fieldTypeKey("radio"));
+        assertEquals(IssueFieldSync.DATE_SEARCHER, IssueFieldSync.searcherKeyFor("date"));
+        assertEquals(IssueFieldSync.DATETIME_SEARCHER, IssueFieldSync.searcherKeyFor("datetime"));
+        assertEquals(IssueFieldSync.NUMBER_SEARCHER, IssueFieldSync.searcherKeyFor("number"));
+        assertEquals(IssueFieldSync.URL_SEARCHER, IssueFieldSync.searcherKeyFor("url"));
+        assertEquals(IssueFieldSync.CHECKBOX_SEARCHER, IssueFieldSync.searcherKeyFor("select"));
+        assertEquals(IssueFieldSync.SEARCHER_KEY, IssueFieldSync.searcherKeyFor("time"));
+        assertEquals(IssueFieldSync.TYPE_KEY, IssueFieldSync.fieldTypeKey("unknown"));
         assertFalse(IssueFieldSync.checks("radio"));
+        assertTrue(IssueFieldSync.options("select"));
+        assertTrue(IssueFieldSync.pluginType(IssueFieldSync.DATE_TYPE));
+        assertTrue(IssueFieldSync.pluginType(IssueFieldSync.DATETIME_TYPE));
+        assertTrue(IssueFieldSync.pluginType(IssueFieldSync.SELECT_TYPE));
+        assertTrue(IssueFieldSync.pluginType(IssueFieldSync.TYPE_KEY));
+        assertFalse(IssueFieldSync.pluginType("com.atlassian.jira.plugin.system.customfieldtypes:userpicker"));
+        assertFalse(IssueFieldSync.pluginType("ru.saael.jira.portal-dynamic-fields:portal-form"));
+        assertFalse(IssueFieldSync.pluginType(null));
+    }
+
+    @Test
+    public void dateNumberAndTimeValuesKeepTheirShape() {
+        Date date = IssueFieldSync.parseDate("2026-11-06");
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(date);
+        assertEquals(2026, calendar.get(Calendar.YEAR));
+        assertEquals(Calendar.NOVEMBER, calendar.get(Calendar.MONTH));
+        assertEquals(6, calendar.get(Calendar.DAY_OF_MONTH));
+        assertEquals(0, calendar.get(Calendar.HOUR_OF_DAY));
+
+        Date stamp = IssueFieldSync.parseDateTime("2026-11-06T18:30");
+        calendar.setTime(stamp);
+        assertEquals(18, calendar.get(Calendar.HOUR_OF_DAY));
+        assertEquals(30, calendar.get(Calendar.MINUTE));
+        assertNull(IssueFieldSync.parseDate("  "));
+        assertNull(IssueFieldSync.parseDateTime(""));
+        assertEquals(Double.valueOf(3.5), IssueFieldSync.parseNumber("3,5"));
+        assertNull(IssueFieldSync.parseNumber("  "));
+        try {
+            IssueFieldSync.parseDate("06.11.2026");
+            fail("a date must be yyyy-MM-dd");
+        } catch (IllegalArgumentException expected) {
+            assertEquals("06.11.2026", expected.getMessage());
+        }
     }
 
     @Test

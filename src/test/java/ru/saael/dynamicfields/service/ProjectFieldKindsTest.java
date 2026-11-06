@@ -34,6 +34,16 @@ public class ProjectFieldKindsTest {
     public void textFieldsHaveNoChoices() {
         assertEquals(ProjectFieldKinds.TEXT, ProjectFieldKinds.control(
                 "com.atlassian.jira.plugin.system.customfieldtypes:textfield"));
+        assertEquals(ProjectFieldKinds.TEXTAREA, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:textarea"));
+        assertEquals(ProjectFieldKinds.DATE, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:datepicker"));
+        assertEquals(ProjectFieldKinds.DATETIME, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:datetime"));
+        assertEquals(ProjectFieldKinds.NUMBER, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:float"));
+        assertEquals(ProjectFieldKinds.URL, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:url"));
         assertEquals(ProjectFieldKinds.TEXT, ProjectFieldKinds.control(null));
     }
 }
