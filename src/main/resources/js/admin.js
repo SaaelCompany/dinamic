@@ -153,6 +153,7 @@
                     required: !!src.required,
                     color: normalizeColor(src.color),
                     defaults: stringList(src.defaults),
+                    portalFieldId: src.portalFieldId ? String(src.portalFieldId) : '',
                     when: when,
                     after: copyAfter(src.after),
                     among: copyAmong(src.among),
@@ -541,6 +542,9 @@
                 }
                 if (src.jiraFieldId) {
                     field.jiraFieldId = src.jiraFieldId;
+                }
+                if (src.portalFieldId) {
+                    field.portalFieldId = String(src.portalFieldId);
                 }
                 var issueName = trim(src.issueName || '');
                 var automaticName = trim(src.label) || src.id || '';
@@ -943,12 +947,48 @@
 
         function openMenu(x, y, blockIndex) {
             closeMenu();
+            menuAt = {blockIndex: blockIndex, x: x, y: y};
             var menu = el('div', 'sdf-menu');
             menu.style.left = x + 'px';
             menu.style.top = y + 'px';
             var item = button('context-add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false);
             item.setAttribute('data-block-index', String(blockIndex));
             menu.appendChild(item);
+            menu.appendChild(el('div', 'sdf-menu-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFields')));
+            var filter = document.createElement('input');
+            filter.type = 'text';
+            filter.className = 'sdf-menu-filter';
+            filter.setAttribute('data-role', 'context-field-filter');
+            filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFilter'));
+            menu.appendChild(filter);
+            var block = config.blocks[blockIndex];
+            var list = projectFields;
+            if (list === null) {
+                menu.appendChild(el('div', 'sdf-menu-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingLoading')));
+            } else if (!list.length) {
+                menu.appendChild(el('div', 'sdf-menu-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingEmpty')));
+            } else {
+                var i;
+                for (i = 0; i < list.length; i++) {
+                    var source = list[i];
+                    var caption = source.name || source.id;
+                    if (source.project) {
+                        caption += ' \u2014 ' + source.project;
+                    }
+                    var choice = button('context-add-existing', caption, false);
+                    choice.setAttribute('data-block-index', String(blockIndex));
+                    choice.setAttribute('data-portal-id', source.id);
+                    choice.setAttribute('data-search', (source.name + ' ' + source.id + ' ' + (source.project || '')).toLowerCase());
+                    choice.setAttribute('title', caption);
+                    if (fieldByPortalId(block, source.id) >= 0) {
+                        choice.className += ' sdf-menu-on';
+                    }
+                    menu.appendChild(choice);
+                }
+                var none = el('div', 'sdf-menu-note sdf-menu-none', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingNone'));
+                none.style.display = 'none';
+                menu.appendChild(none);
+            }
             app.appendChild(menu);
             var box = menu.getBoundingClientRect();
             if (box.right > window.innerWidth - 8) {
@@ -957,9 +997,43 @@
             if (box.bottom > window.innerHeight - 8) {
                 menu.style.top = Math.max(8, window.innerHeight - box.height - 8) + 'px';
             }
+            if (filter.focus) {
+                filter.focus();
+            }
+        }
+
+        var menuAt = null;
+
+        function filterContextMenu(query) {
+            var menu = app.querySelector('.sdf-menu');
+            if (!menu) {
+                return;
+            }
+            var needle = trim(query).toLowerCase();
+            var items = menu.querySelectorAll('[data-role="context-add-existing"]');
+            var shown = 0;
+            var i;
+            for (i = 0; i < items.length; i++) {
+                var name = items[i].getAttribute('data-search') || '';
+                var hide = needle && name.indexOf(needle) < 0;
+                items[i].style.display = hide ? 'none' : '';
+                if (!hide) {
+                    shown++;
+                }
+            }
+            var note = menu.querySelector('.sdf-menu-none');
+            if (note) {
+                note.style.display = shown ? 'none' : '';
+            }
         }
 
         function onContextMenu(e) {
+            if (insideMenu(e.target)) {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                return;
+            }
             if (insideFloat(e.target) || !insideCanvas(e.target)) {
                 return;
             }
@@ -1950,13 +2024,13 @@
             return svg;
 
             function bindLine(fieldIndex, binding, placement, alsoIndex) {
-                if (!binding || !binding.fieldId || (!placement && binding.source === 'portal')) {
+                if (!binding || !binding.fieldId) {
                     return;
                 }
                 var parentAt = -1;
                 var p;
                 for (p = 0; p < fieldIndex; p++) {
-                    if (block.fields[p].id === binding.fieldId) {
+                    if (block.fields[p].id === binding.fieldId || (binding.source === 'portal' && block.fields[p].portalFieldId === binding.fieldId)) {
                         parentAt = indexAt[p];
                     }
                 }
@@ -2012,7 +2086,7 @@
         function nodeButton(block, blockIndex, laid) {
             var field = block.fields[laid.index];
             var color = nodeColor(field, laid.index);
-            var node = el('div', 'sdf-node');
+            var node = el('div', 'sdf-node' + (field.portalFieldId ? ' sdf-node-external' : ''));
             node.style.left = laid.x + 'px';
             node.style.top = laid.y + 'px';
             node.style.width = NODE_W + 'px';
@@ -2033,7 +2107,9 @@
                 title.appendChild(el('span', 'sdf-node-req', ' *'));
             }
             head.appendChild(title);
-            head.appendChild(el('span', 'sdf-node-kind', typeName(field.type)));
+            head.appendChild(el('span', 'sdf-node-kind', field.portalFieldId
+                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingNode')
+                : typeName(field.type)));
             head.appendChild(rankInput(block, laid.index));
             var remove = document.createElement('button');
             remove.type = 'button';
@@ -2110,7 +2186,11 @@
             input.step = '1';
             input.className = 'sdf-node-rank';
             input.setAttribute('data-role', 'priority');
-            if (field && field.among && field.among.fieldId) {
+            if (field && field.portalFieldId) {
+                input.disabled = true;
+                input.value = '';
+                input.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.priorityExternal'));
+            } else if (field && field.among && field.among.fieldId) {
                 input.disabled = true;
                 input.value = '';
                 input.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.priorityLocked'));
@@ -2126,7 +2206,7 @@
             var i;
             for (i = 0; i < block.fields.length; i++) {
                 var field = block.fields[i];
-                if (field.among && field.among.fieldId) {
+                if ((field.among && field.among.fieldId) || field.portalFieldId) {
                     continue;
                 }
                 rank++;
@@ -3529,6 +3609,11 @@
             if (!host || !child || hostIndex === childIndex) {
                 return;
             }
+            if (host.portalFieldId || child.portalFieldId) {
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingAmong')]);
+                refresh();
+                return;
+            }
             if (host.type !== 'checkbox' && host.type !== 'radio') {
                 return;
             }
@@ -3719,12 +3804,19 @@
             if (!fields[fromIndex] || !fields[toIndex] || fromIndex === toIndex) {
                 return;
             }
+            if (fields[toIndex].portalFieldId) {
+                pendingLink = null;
+                showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeExternalTarget')]);
+                return;
+            }
             if (isUnder(fields, fromIndex, fields[toIndex].id)) {
                 pendingLink = null;
                 showMessage('error', [AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.nodeCycle')]);
                 return;
             }
-            var sourceId = fields[fromIndex].id;
+            var source = fields[fromIndex];
+            var sourceId = source.portalFieldId || source.id;
+            var portal = !!source.portalFieldId;
             var keptAlso = fields[toIndex].when && fields[toIndex].when.also ? fields[toIndex].when.also : [];
             if (toIndex < fromIndex) {
                 var end = subtreeEnd(fields, toIndex);
@@ -3737,22 +3829,26 @@
                 }
                 toIndex = insertAt;
             }
-            addCondition(fields[toIndex], sourceId, option, keptAlso);
+            addCondition(fields[toIndex], sourceId, option, keptAlso, portal, source.label);
             pendingLink = null;
             selectedField = {blockIndex: blockIndex, index: toIndex};
             refresh();
         }
 
-        function conditionPiece(sourceId, option) {
-            return {
+        function conditionPiece(sourceId, option, portal, fieldName) {
+            var piece = {
                 fieldId: sourceId,
                 values: option ? [option] : [],
                 negate: false,
                 _mode: option ? 'selected' : 'any',
-                source: '',
+                source: portal ? 'portal' : '',
                 join: 'and',
                 also: []
             };
+            if (portal && trim(fieldName)) {
+                piece.fieldName = trim(fieldName);
+            }
+            return piece;
         }
 
         function mergeCondition(target, option) {
@@ -3769,30 +3865,37 @@
             target.values = values;
         }
 
-        function addCondition(field, sourceId, option, keptAlso) {
+        function addCondition(field, sourceId, option, keptAlso, portal, fieldName) {
             if (!field.when || !field.when.fieldId) {
-                field.when = conditionPiece(sourceId, option);
+                field.when = conditionPiece(sourceId, option, portal, fieldName);
                 if (keptAlso && keptAlso.length) {
                     field.when.also = keptAlso;
                 }
                 return;
             }
-            if (field.when.source !== 'portal' && field.when.fieldId === sourceId) {
+            if (sameConditionSource(field.when, sourceId, portal)) {
                 mergeCondition(field.when, option);
                 return;
             }
             var also = field.when.also || [];
             var i;
             for (i = 0; i < also.length; i++) {
-                if (also[i] && also[i].source !== 'portal' && also[i].fieldId === sourceId) {
+                if (sameConditionSource(also[i], sourceId, portal)) {
                     mergeCondition(also[i], option);
                     field.when.also = also;
                     return;
                 }
             }
-            also.push(conditionPiece(sourceId, option));
+            also.push(conditionPiece(sourceId, option, portal, fieldName));
             field.when.also = also;
             field.when.join = 'or';
+        }
+
+        function sameConditionSource(piece, sourceId, portal) {
+            if (!piece || piece.fieldId !== sourceId) {
+                return false;
+            }
+            return (piece.source === 'portal') === !!portal;
         }
 
         function onPortDown(e) {
@@ -4448,6 +4551,23 @@
                 addField(parseInt(e.target.getAttribute('data-block-index'), 10) || 0, null);
                 return;
             }
+            if (role === 'context-add-existing') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var existingButton = e.target;
+                while (existingButton && existingButton !== app && !(existingButton.getAttribute && existingButton.getAttribute('data-role') === 'context-add-existing')) {
+                    existingButton = existingButton.parentNode;
+                }
+                var existingBlock = parseInt(existingButton.getAttribute('data-block-index'), 10) || 0;
+                var portalId = existingButton.getAttribute('data-portal-id');
+                closeMenu();
+                addExistingField(existingBlock, portalId, menuAt);
+                return;
+            }
+            if (role === 'context-field-filter') {
+                return;
+            }
             if (role === 'node-color') {
                 if (e.preventDefault) {
                     e.preventDefault();
@@ -4764,6 +4884,10 @@
 
         function onInput(e) {
             var role = roleOf(e.target);
+            if (role === 'context-field-filter') {
+                filterContextMenu(e.target.value);
+                return;
+            }
             var loc = locate(e.target);
             if (loc.blockIndex < 0) {
                 return;
@@ -5610,6 +5734,94 @@
             }
         }
 
+        function fieldByPortalId(block, portalId) {
+            if (!block || !portalId) {
+                return -1;
+            }
+            var i;
+            for (i = 0; i < block.fields.length; i++) {
+                if (block.fields[i].portalFieldId === portalId) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function nodeTypeFor(control) {
+            if (control === 'checkboxes') {
+                return 'checkbox';
+            }
+            if (control === 'radio') {
+                return 'radio';
+            }
+            if (control === 'select') {
+                return 'select';
+            }
+            return 'text';
+        }
+
+        function boardPoint(blockIndex, point) {
+            var card = blockCard(blockIndex);
+            var board = card && card.querySelector('.sdf-board');
+            if (!board || !point) {
+                return {x: 40, y: 16};
+            }
+            var box = board.getBoundingClientRect();
+            var x = point.x - box.left;
+            var y = point.y - box.top;
+            if (x < 28) {
+                x = 28;
+            }
+            if (y < 8) {
+                y = 8;
+            }
+            return {x: Math.round(x), y: Math.round(y)};
+        }
+
+        function addExistingField(blockIndex, portalId, point) {
+            var block = config.blocks[blockIndex];
+            var source = projectFieldById(portalId);
+            if (!block || !source) {
+                return;
+            }
+            var at = boardPoint(blockIndex, point);
+            var existing = fieldByPortalId(block, portalId);
+            if (existing >= 0) {
+                block.fields[existing].x = at.x;
+                block.fields[existing].y = at.y;
+                selectedField = {blockIndex: blockIndex, index: existing};
+                refresh();
+                return;
+            }
+            var type = nodeTypeFor(source.control);
+            var options = [];
+            if (type === 'checkbox' || type === 'radio' || type === 'select') {
+                var values = source.values || [];
+                var i;
+                for (i = 0; i < values.length; i++) {
+                    if (trim(values[i])) {
+                        options.push(values[i]);
+                    }
+                }
+                if (!options.length) {
+                    options = [''];
+                }
+            }
+            block.fields.push({
+                id: nextId(block.fields),
+                label: source.name || source.id,
+                type: type,
+                options: options,
+                portalFieldId: source.id,
+                when: null,
+                x: at.x,
+                y: at.y
+            });
+            selectedField = {blockIndex: blockIndex, index: block.fields.length - 1};
+            refresh();
+            focusField(blockIndex, selectedField.index);
+        }
+
         function addField(blockIndex, parentIndex, option) {
             var block = config.blocks[blockIndex];
             var field = {id: nextId(block.fields), label: '', type: 'checkbox', options: [''], when: null};
@@ -5918,6 +6130,9 @@
                 var visible = visibility(block.fields, {});
                 var i;
                 for (i = 0; i < block.fields.length; i++) {
+                    if (block.fields[i].portalFieldId) {
+                        continue;
+                    }
                     var node = buildField(block.fields[i], block.id);
                     var show = !!visible[block.fields[i].id];
                     node.setAttribute('data-sdf-shown', show ? '1' : '0');
@@ -5969,7 +6184,27 @@
             }
             var i;
             for (i = 0; i < block.fields.length; i++) {
-                var when = block.fields[i].when;
+                var own = block.fields[i];
+                if (own.portalFieldId && !seen[own.portalFieldId]) {
+                    seen[own.portalFieldId] = true;
+                    var ownValues = [];
+                    var knownOwn = {};
+                    var ownOptions = own.options || [];
+                    var ov;
+                    for (ov = 0; ov < ownOptions.length; ov++) {
+                        if (trim(ownOptions[ov]) && !knownOwn[ownOptions[ov]]) {
+                            knownOwn[ownOptions[ov]] = true;
+                            ownValues.push(ownOptions[ov]);
+                        }
+                    }
+                    list.push({
+                        id: own.portalFieldId,
+                        name: trim(own.label) || own.portalFieldId,
+                        control: externalControl(own),
+                        values: ownValues
+                    });
+                }
+                var when = own.when;
                 note(when);
                 var also = when && when.also ? when.also : [];
                 var a;
@@ -5978,6 +6213,22 @@
                 }
             }
             return list;
+        }
+
+        function externalControl(field) {
+            if (!field) {
+                return 'text';
+            }
+            if (field.type === 'checkbox') {
+                return 'checkboxes';
+            }
+            if (field.type === 'radio') {
+                return 'radio';
+            }
+            if (field.type === 'select' || field.type === 'multiselect') {
+                return 'select';
+            }
+            return 'text';
         }
 
         function buildExternal(item) {
@@ -6151,7 +6402,7 @@
             var block = config.blocks[blockIndex];
             var fields = block && block.fields;
             var field = fields && fields[fieldIndex];
-            if (!field || (field.among && field.among.fieldId)) {
+            if (!field || (field.among && field.among.fieldId) || field.portalFieldId) {
                 return;
             }
             var wanted = parseInt(raw, 10);
@@ -6162,7 +6413,7 @@
             var tops = [];
             var i;
             for (i = 0; i < fields.length; i++) {
-                if (!(fields[i].among && fields[i].among.fieldId)) {
+                if (!(fields[i].among && fields[i].among.fieldId) && !fields[i].portalFieldId) {
                     tops.push(fields[i]);
                 }
             }
@@ -6187,6 +6438,11 @@
             nextTops.splice(wanted - 1, 0, field);
             var seen = {};
             var order = [];
+            for (i = 0; i < fields.length; i++) {
+                if (fields[i].portalFieldId) {
+                    pushWithChildren(fields, fields[i], order, seen);
+                }
+            }
             for (i = 0; i < nextTops.length; i++) {
                 pushWithChildren(fields, nextTops[i], order, seen);
             }

@@ -99,6 +99,9 @@ public class IssueFieldSync {
                     if (field == null || field.getId() == null || field.getId().trim().isEmpty()) {
                         continue;
                     }
+                    if (field.getPortalFieldId() != null && field.getPortalFieldId().trim().length() > 0) {
+                        continue;
+                    }
                     try {
                         bind(block.getId(), field, reserved);
                     } catch (GenericEntityException e) {
@@ -349,6 +352,9 @@ public class IssueFieldSync {
             for (int i = 0; i < block.getFields().size(); i++) {
                 FormField field = block.getFields().get(i);
                 if (field == null || field.getId() == null || field.getId().trim().isEmpty()) {
+                    continue;
+                }
+                if (field.getPortalFieldId() != null && field.getPortalFieldId().trim().length() > 0) {
                     continue;
                 }
                 CustomField customField = locate(block.getId(), field);

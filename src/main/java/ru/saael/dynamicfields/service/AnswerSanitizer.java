@@ -68,6 +68,12 @@ public final class AnswerSanitizer {
             String group = block.getTitle() == null ? "" : block.getTitle().trim();
             List<FormField> fields = block.getFields() == null ? Collections.<FormField>emptyList() : block.getFields();
             for (FormField field : fields) {
+                if (field == null || field.getId() == null) {
+                    continue;
+                }
+                if (field.getPortalFieldId() != null && field.getPortalFieldId().trim().length() > 0) {
+                    continue;
+                }
                 List<String> selected = values.get(field.getId());
                 if (selected == null || selected.isEmpty()) {
                     continue;
