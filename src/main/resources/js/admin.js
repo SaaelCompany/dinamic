@@ -973,36 +973,86 @@
         function openExistingPicker(blockIndex) {
             closeMenu();
             closePicker();
-            var picker = el('div', 'sdf-picker');
-            picker.setAttribute('data-role', 'close-picker');
+            if (selectedField.blockIndex >= 0) {
+                selectedField = {blockIndex: -1, index: -1};
+                refresh();
+            }
+            var picker = el('div', 'sdf-float sdf-picker');
             picker.setAttribute('data-block-index', String(blockIndex));
-            var dialog = el('div', 'sdf-picker-dialog');
-            dialog.setAttribute('data-role', 'picker-dialog');
-            var head = el('div', 'sdf-picker-head');
-            head.appendChild(el('strong', 'sdf-picker-title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFields')));
+            picker.style.position = 'fixed';
+            picker.style.left = '0px';
+            picker.style.top = '0px';
+            picker.style.visibility = 'hidden';
+            var head = el('div', 'sdf-float-head');
+            head.appendChild(el('strong', 'sdf-float-title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFields')));
             var close = document.createElement('button');
             close.type = 'button';
-            close.className = 'sdf-picker-close';
+            close.className = 'sdf-float-close';
             close.setAttribute('data-role', 'close-picker');
             close.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingClose'));
             close.appendChild(document.createTextNode('\u00d7'));
             head.appendChild(close);
-            dialog.appendChild(head);
-            dialog.appendChild(el('p', 'sdf-picker-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingPick')));
+            picker.appendChild(head);
+            var form = el('form', 'aui sdf-card');
+            form.onsubmit = function () {
+                return false;
+            };
             var filter = document.createElement('input');
             filter.type = 'text';
-            filter.className = 'sdf-picker-filter';
+            filter.className = 'text long-field';
             filter.setAttribute('data-role', 'context-field-filter');
-            filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFilter'));
-            dialog.appendChild(filter);
-            dialog.appendChild(el('div', 'sdf-picker-list'));
-            picker.appendChild(dialog);
+            form.appendChild(group(
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFilter'),
+                filter,
+                AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingPick')
+            ));
+            form.appendChild(el('div', 'sdf-picker-list'));
+            picker.appendChild(form);
             app.appendChild(picker);
             fillExistingList(blockIndex, '');
+            placePicker(picker, menuAt);
             document.addEventListener('keydown', onPickerKey);
             if (filter.focus) {
                 filter.focus();
             }
+        }
+
+        function placePicker(panel, anchor) {
+            if (!panel) {
+                return;
+            }
+            var viewW = window.innerWidth || document.documentElement.clientWidth || 0;
+            var viewH = window.innerHeight || document.documentElement.clientHeight || 0;
+            var width = panel.offsetWidth || 480;
+            var height = panel.offsetHeight || 320;
+            var limit = viewH - 16;
+            if (height > limit && limit > 160) {
+                panel.style.maxHeight = limit + 'px';
+                height = limit;
+            }
+            var left = anchor ? anchor.x + 12 : 24;
+            var top = anchor ? anchor.y : 24;
+            if (left + width > viewW - 8) {
+                var leftSide = (anchor ? anchor.x : left) - width - 12;
+                if (leftSide >= 8) {
+                    left = leftSide;
+                } else {
+                    left = Math.max(8, viewW - width - 8);
+                }
+            }
+            if (top + height > viewH - 8) {
+                top = Math.max(8, viewH - height - 8);
+            }
+            if (left < 8) {
+                left = 8;
+            }
+            if (top < 8) {
+                top = 8;
+            }
+            panel.style.position = 'fixed';
+            panel.style.left = Math.round(left) + 'px';
+            panel.style.top = Math.round(top) + 'px';
+            panel.style.visibility = 'visible';
         }
 
         function closePicker() {
@@ -1031,6 +1081,7 @@
             var blockIndex = parseInt(picker.getAttribute('data-block-index'), 10) || 0;
             var filter = picker.querySelector('[data-role="context-field-filter"]');
             fillExistingList(blockIndex, filter ? filter.value : '');
+            placePicker(picker, menuAt);
         }
 
         function fillExistingList(blockIndex, query) {
@@ -4598,6 +4649,7 @@
             var inMenu = insideMenu(e.target);
             if (!inMenu) {
                 closeMenu();
+                closePicker();
             }
             var role = roleOf(e.target);
             if (role === 'close-field') {
@@ -4633,9 +4685,6 @@
                     e.preventDefault();
                 }
                 closePicker();
-                return;
-            }
-            if (role === 'picker-dialog') {
                 return;
             }
             if (role === 'context-add-existing') {
