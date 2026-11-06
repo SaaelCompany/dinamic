@@ -2172,10 +2172,17 @@
                     parts.push(whenPhrase(block, also[i]));
                 }
             }
-            var word = when.join === 'or'
+            return parts.join(' ' + joinWord(when.join === 'or') + ' ');
+        }
+
+        function joinWord(or) {
+            var text = or
                 ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.or')
                 : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and');
-            return parts.join(' ' + word + ' ');
+            if (!text || text.indexOf('ru.saael.') === 0) {
+                return or ? '\u0438\u043b\u0438' : '\u0438';
+            }
+            return text;
         }
 
         function whenPhrase(block, when) {
@@ -2970,7 +2977,11 @@
 
         function renderJoin(field) {
             var row = el('div', 'sdf-join');
-            row.appendChild(el('span', 'sdf-also-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.join')));
+            var joinCaption = AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.join');
+            if (!joinCaption || joinCaption.indexOf('ru.saael.') === 0) {
+                joinCaption = '\u0421\u0432\u044f\u0437\u044c \u0443\u0441\u043b\u043e\u0432\u0438\u0439';
+            }
+            row.appendChild(el('span', 'sdf-also-label', joinCaption));
             row.appendChild(joinButton('and', field.when.join !== 'or'));
             row.appendChild(joinButton('or', field.when.join === 'or'));
             return row;
@@ -2982,9 +2993,7 @@
             button.className = 'sdf-join-btn' + (on ? ' sdf-join-on' : '');
             button.setAttribute('data-role', 'when-join');
             button.setAttribute('data-join', join);
-            button.appendChild(document.createTextNode(AJS.I18n.getText(
-                join === 'or' ? 'ru.saael.dynamicfields.admin.builder.or' : 'ru.saael.dynamicfields.admin.builder.and'
-            )));
+            button.appendChild(document.createTextNode(joinWord(join === 'or')));
             return button;
         }
 
@@ -2992,10 +3001,7 @@
             var when = field.when.also[alsoIndex];
             var box = el('div', 'field-group sdf-also');
             var head = el('div', 'sdf-also-head');
-            var word = field.when.join === 'or'
-                ? AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.or')
-                : AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.and');
-            head.appendChild(el('span', 'sdf-also-label', word));
+            head.appendChild(el('span', 'sdf-also-label', joinWord(field.when.join === 'or')));
             var remove = document.createElement('button');
             remove.type = 'button';
             remove.className = 'sdf-option-del';
