@@ -665,7 +665,7 @@
 
         function insideFloat(node) {
             while (node && node !== app) {
-                if (hasClass(node, 'sdf-float') || hasClass(node, 'sdf-menu')) {
+                if (hasClass(node, 'sdf-float') || hasClass(node, 'sdf-menu') || hasClass(node, 'sdf-picker')) {
                     return true;
                 }
                 node = node.parentNode;
@@ -675,7 +675,7 @@
 
         function insideMenu(node) {
             while (node && node !== app) {
-                if (hasClass(node, 'sdf-menu')) {
+                if (hasClass(node, 'sdf-menu') || hasClass(node, 'sdf-picker')) {
                     return true;
                 }
                 node = node.parentNode;
@@ -947,6 +947,7 @@
 
         function openMenu(x, y, blockIndex) {
             closeMenu();
+            closePicker();
             menuAt = {blockIndex: blockIndex, x: x, y: y};
             var menu = el('div', 'sdf-menu');
             menu.style.left = x + 'px';
@@ -954,41 +955,9 @@
             var item = button('context-add-field', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addField'), false);
             item.setAttribute('data-block-index', String(blockIndex));
             menu.appendChild(item);
-            menu.appendChild(el('div', 'sdf-menu-label', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFields')));
-            var filter = document.createElement('input');
-            filter.type = 'text';
-            filter.className = 'sdf-menu-filter';
-            filter.setAttribute('data-role', 'context-field-filter');
-            filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFilter'));
-            menu.appendChild(filter);
-            var block = config.blocks[blockIndex];
-            var list = projectFields;
-            if (list === null) {
-                menu.appendChild(el('div', 'sdf-menu-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingLoading')));
-            } else if (!list.length) {
-                menu.appendChild(el('div', 'sdf-menu-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingEmpty')));
-            } else {
-                var i;
-                for (i = 0; i < list.length; i++) {
-                    var source = list[i];
-                    var caption = source.name || source.id;
-                    if (source.project) {
-                        caption += ' \u2014 ' + source.project;
-                    }
-                    var choice = button('context-add-existing', caption, false);
-                    choice.setAttribute('data-block-index', String(blockIndex));
-                    choice.setAttribute('data-portal-id', source.id);
-                    choice.setAttribute('data-search', (source.name + ' ' + source.id + ' ' + (source.project || '')).toLowerCase());
-                    choice.setAttribute('title', caption);
-                    if (fieldByPortalId(block, source.id) >= 0) {
-                        choice.className += ' sdf-menu-on';
-                    }
-                    menu.appendChild(choice);
-                }
-                var none = el('div', 'sdf-menu-note sdf-menu-none', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingNone'));
-                none.style.display = 'none';
-                menu.appendChild(none);
-            }
+            var existing = button('context-open-existing', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingOpen'), false);
+            existing.setAttribute('data-block-index', String(blockIndex));
+            menu.appendChild(existing);
             app.appendChild(menu);
             var box = menu.getBoundingClientRect();
             if (box.right > window.innerWidth - 8) {
@@ -997,34 +966,128 @@
             if (box.bottom > window.innerHeight - 8) {
                 menu.style.top = Math.max(8, window.innerHeight - box.height - 8) + 'px';
             }
+        }
+
+        var menuAt = null;
+
+        function openExistingPicker(blockIndex) {
+            closeMenu();
+            closePicker();
+            var picker = el('div', 'sdf-picker');
+            picker.setAttribute('data-role', 'close-picker');
+            picker.setAttribute('data-block-index', String(blockIndex));
+            var dialog = el('div', 'sdf-picker-dialog');
+            dialog.setAttribute('data-role', 'picker-dialog');
+            var head = el('div', 'sdf-picker-head');
+            head.appendChild(el('strong', 'sdf-picker-title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFields')));
+            var close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'sdf-picker-close';
+            close.setAttribute('data-role', 'close-picker');
+            close.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingClose'));
+            close.appendChild(document.createTextNode('\u00d7'));
+            head.appendChild(close);
+            dialog.appendChild(head);
+            dialog.appendChild(el('p', 'sdf-picker-hint', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingPick')));
+            var filter = document.createElement('input');
+            filter.type = 'text';
+            filter.className = 'sdf-picker-filter';
+            filter.setAttribute('data-role', 'context-field-filter');
+            filter.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingFilter'));
+            dialog.appendChild(filter);
+            dialog.appendChild(el('div', 'sdf-picker-list'));
+            picker.appendChild(dialog);
+            app.appendChild(picker);
+            fillExistingList(blockIndex, '');
+            document.addEventListener('keydown', onPickerKey);
             if (filter.focus) {
                 filter.focus();
             }
         }
 
-        var menuAt = null;
+        function closePicker() {
+            var pickers = app.querySelectorAll('.sdf-picker');
+            var i;
+            for (i = 0; i < pickers.length; i++) {
+                if (pickers[i].parentNode) {
+                    pickers[i].parentNode.removeChild(pickers[i]);
+                }
+            }
+            document.removeEventListener('keydown', onPickerKey);
+        }
 
-        function filterContextMenu(query) {
-            var menu = app.querySelector('.sdf-menu');
-            if (!menu) {
+        function onPickerKey(e) {
+            var key = e.keyCode || e.which;
+            if (key === 27) {
+                closePicker();
+            }
+        }
+
+        function refreshExistingPicker() {
+            var picker = app.querySelector('.sdf-picker');
+            if (!picker) {
+                return;
+            }
+            var blockIndex = parseInt(picker.getAttribute('data-block-index'), 10) || 0;
+            var filter = picker.querySelector('[data-role="context-field-filter"]');
+            fillExistingList(blockIndex, filter ? filter.value : '');
+        }
+
+        function fillExistingList(blockIndex, query) {
+            var picker = app.querySelector('.sdf-picker');
+            var list = picker && picker.querySelector('.sdf-picker-list');
+            if (!list) {
+                return;
+            }
+            while (list.firstChild) {
+                list.removeChild(list.firstChild);
+            }
+            var block = config.blocks[blockIndex];
+            var fields = projectFields;
+            if (fields === null) {
+                list.appendChild(el('div', 'sdf-picker-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingLoading')));
+                return;
+            }
+            if (!fields.length) {
+                list.appendChild(el('div', 'sdf-picker-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingEmpty')));
                 return;
             }
             var needle = trim(query).toLowerCase();
-            var items = menu.querySelectorAll('[data-role="context-add-existing"]');
             var shown = 0;
             var i;
-            for (i = 0; i < items.length; i++) {
-                var name = items[i].getAttribute('data-search') || '';
-                var hide = needle && name.indexOf(needle) < 0;
-                items[i].style.display = hide ? 'none' : '';
-                if (!hide) {
-                    shown++;
+            for (i = 0; i < fields.length; i++) {
+                var source = fields[i];
+                var hay = (source.name + ' ' + source.id + ' ' + (source.project || '')).toLowerCase();
+                if (needle && hay.indexOf(needle) < 0) {
+                    continue;
                 }
+                var row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'sdf-picker-row';
+                row.setAttribute('data-role', 'context-add-existing');
+                row.setAttribute('data-block-index', String(blockIndex));
+                row.setAttribute('data-portal-id', source.id);
+                row.appendChild(el('span', 'sdf-picker-name', source.name || source.id));
+                if (source.project) {
+                    row.appendChild(el('span', 'sdf-picker-project', source.project));
+                }
+                if (fieldByPortalId(block, source.id) >= 0) {
+                    row.appendChild(el('span', 'sdf-picker-here', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingHere')));
+                }
+                list.appendChild(row);
+                shown++;
             }
-            var note = menu.querySelector('.sdf-menu-none');
-            if (note) {
-                note.style.display = shown ? 'none' : '';
+            if (!shown) {
+                list.appendChild(el('div', 'sdf-picker-note', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.existingNone')));
             }
+        }
+
+        function filterContextMenu(query) {
+            var picker = app.querySelector('.sdf-picker');
+            if (!picker) {
+                return;
+            }
+            fillExistingList(parseInt(picker.getAttribute('data-block-index'), 10) || 0, query);
         }
 
         function onContextMenu(e) {
@@ -1529,10 +1592,12 @@
                 projectFields = list;
                 projectFieldsLoading = false;
                 renderKeepingFocus();
+                refreshExistingPicker();
             }).fail(function () {
                 projectFields = [];
                 projectFieldsLoading = false;
                 renderKeepingFocus();
+                refreshExistingPicker();
             });
         }
 
@@ -4551,6 +4616,28 @@
                 addField(parseInt(e.target.getAttribute('data-block-index'), 10) || 0, null);
                 return;
             }
+            if (role === 'context-open-existing') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var opener = e.target;
+                while (opener && opener !== app && !(opener.getAttribute && opener.getAttribute('data-role') === 'context-open-existing')) {
+                    opener = opener.parentNode;
+                }
+                var openBlock = parseInt(opener.getAttribute('data-block-index'), 10) || 0;
+                openExistingPicker(openBlock);
+                return;
+            }
+            if (role === 'close-picker') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                closePicker();
+                return;
+            }
+            if (role === 'picker-dialog') {
+                return;
+            }
             if (role === 'context-add-existing') {
                 if (e.preventDefault) {
                     e.preventDefault();
@@ -4562,6 +4649,7 @@
                 var existingBlock = parseInt(existingButton.getAttribute('data-block-index'), 10) || 0;
                 var portalId = existingButton.getAttribute('data-portal-id');
                 closeMenu();
+                closePicker();
                 addExistingField(existingBlock, portalId, menuAt);
                 return;
             }
