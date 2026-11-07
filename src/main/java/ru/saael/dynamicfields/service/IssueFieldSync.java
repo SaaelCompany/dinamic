@@ -20,6 +20,8 @@ import com.atlassian.jira.issue.fields.config.FieldConfigScheme;
 import com.atlassian.jira.issue.fields.FieldManager;
 import com.atlassian.jira.issue.index.IssueIndexingService;
 import com.atlassian.jira.issue.issuetype.IssueType;
+import com.atlassian.jira.issue.priority.Priority;
+import com.atlassian.jira.ofbiz.OfBizDelegator;
 import com.atlassian.jira.user.ApplicationUser;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import org.ofbiz.core.entity.GenericEntityException;
@@ -28,6 +30,8 @@ import org.slf4j.LoggerFactory;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
 import ru.saael.dynamicfields.model.RulesConfig;
+
+import org.ofbiz.core.entity.GenericValue;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -38,6 +42,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +85,7 @@ public class IssueFieldSync {
     private final IssueManager issueManager;
     private final IssueIndexingService indexingService;
     private final EventPublisher eventPublisher;
+    private final OfBizDelegator ofBizDelegator;
 
     @Inject
     public IssueFieldSync(@ComponentImport CustomFieldManager customFieldManager,
@@ -86,13 +93,15 @@ public class IssueFieldSync {
                           @ComponentImport FieldManager fieldManager,
                           @ComponentImport IssueManager issueManager,
                           @ComponentImport IssueIndexingService indexingService,
-                          @ComponentImport EventPublisher eventPublisher) {
+                          @ComponentImport EventPublisher eventPublisher,
+                          @ComponentImport OfBizDelegator ofBizDelegator) {
         this.customFieldManager = customFieldManager;
         this.optionsManager = optionsManager;
         this.fieldManager = fieldManager;
         this.issueManager = issueManager;
         this.indexingService = indexingService;
         this.eventPublisher = eventPublisher;
+        this.ofBizDelegator = ofBizDelegator;
     }
 
     /**
@@ -280,23 +289,8 @@ public class IssueFieldSync {
                 }
                 List<String> selected = values == null ? null : values.get(field.getId());
                 try {
-                    if (options(field.getType()) && optionField(customField)) {
-                        if (multiField(customField)) {
-                            if (sameChoices(customField, issue, selected)) {
-                                continue;
-                            }
-                            updateChoices(customField, issue, selected);
-                        } else if (sameSingle(customField, issue, selected)) {
-                            continue;
-                        } else {
-                            updateSingle(customField, issue, selected);
-                        }
-                    } else {
-                        Object next = scalar(customField, selected);
-                        if (sameObject(customField, issue, next)) {
-                            continue;
-                        }
-                        updateObject(customField, issue, next);
+                    if (!writeStored(customField, field, issue, selected)) {
+                        continue;
                     }
                     changed = true;
                 } catch (RuntimeException e) {
@@ -330,21 +324,34 @@ public class IssueFieldSync {
     private void bind(String blockId, FormField field, Set<String> reserved) throws GenericEntityException {
         String wanted = fieldTypeKey(field.getType());
         CustomField current = locate(blockId, field);
-        if (current != null && !sameType(current, wanted)) {
-            try {
-                customFieldManager.removeCustomField(current);
-                log.info("Removed {} so \"{}\" can be stored as {}", current.getId(), display(field), wanted);
-                current = null;
-                customFieldManager.refresh();
-            } catch (RemoveException e) {
-                log.warn("Cannot replace {} with checkboxes: {}", current.getId(), e.getMessage());
-            }
-        }
         CustomFieldType type = customFieldManager.getCustomFieldType(wanted);
         String searcherKey = searcherKeyFor(field.getType());
         if (type == null) {
             type = customFieldManager.getCustomFieldType(TYPE_KEY);
             searcherKey = SEARCHER_KEY;
+            wanted = TYPE_KEY;
+        }
+        Map<Long, List<String>> carried = null;
+        if (current != null && !sameType(current, wanted)) {
+            if (keepStoredType(typeKey(current), wanted)) {
+                log.info("Keeping {} for \"{}\" so the stored text stays", current.getId(), display(field));
+            } else {
+                Map<Long, List<String>> snapshot = snapshotValues(current);
+                if (snapshot == null || !canMove(field.getType(), snapshot, field.getOptions())) {
+                    log.warn("Keeping {} for \"{}\" so existing answers are not lost", current.getId(), display(field));
+                } else {
+                    try {
+                        customFieldManager.removeCustomField(current);
+                        log.info("Replacing {} with {} and moving {} stored answer(s) for \"{}\"",
+                                current.getId(), wanted, Integer.valueOf(snapshot.size()), display(field));
+                        carried = snapshot;
+                        current = null;
+                        customFieldManager.refresh();
+                    } catch (RemoveException e) {
+                        log.warn("Cannot replace {}: {}", current.getId(), e.getMessage());
+                    }
+                }
+            }
         }
         CustomFieldSearcher searcher = customFieldManager.getCustomFieldSearcher(searcherKey);
         if (searcher == null && type != null) {
@@ -389,6 +396,320 @@ public class IssueFieldSync {
         if (options(field.getType()) && optionField(current)) {
             syncOptions(current, field.getOptions());
         }
+        if (carried != null) {
+            restore(current, field, carried);
+        }
+    }
+
+    /**
+     * A text question that already lives in a text or text-area field stays there.
+     * Replacing it would drop the answers already stored on requests.
+     */
+    static boolean keepStoredType(String current, String wanted) {
+        return textFamily(current) && textFamily(wanted);
+    }
+
+    static boolean textFamily(String typeKey) {
+        return TEXT_TYPE.equals(typeKey) || TYPE_KEY.equals(typeKey);
+    }
+
+    /**
+     * @return {@code false} when a stored answer cannot be written into the new field type
+     */
+    static boolean canMove(String questionType, Map<Long, List<String>> snapshot, List<String> options) {
+        if (snapshot == null) {
+            return false;
+        }
+        for (List<String> stored : snapshot.values()) {
+            if (movedValues(questionType, stored, options) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Values to write into the new field. {@code null} means at least one stored answer does not fit.
+     */
+    static List<String> movedValues(String questionType, List<String> stored, List<String> options) {
+        List<String> source = stored == null ? new ArrayList<String>() : stored;
+        if (FormField.DATE.equals(questionType)) {
+            return parses(source, true, false, false) ? source : null;
+        }
+        if (FormField.DATETIME.equals(questionType)) {
+            return parses(source, false, true, false) ? source : null;
+        }
+        if (FormField.NUMBER.equals(questionType)) {
+            return parses(source, false, false, true) ? source : null;
+        }
+        if (FormField.URL.equals(questionType)) {
+            for (int i = 0; i < source.size(); i++) {
+                String text = source.get(i) == null ? "" : source.get(i).trim();
+                if (!text.isEmpty() && !looksLikeUrl(text)) {
+                    return null;
+                }
+            }
+            return source;
+        }
+        if (options(questionType)) {
+            return optionPieces(questionType, source, options);
+        }
+        return source;
+    }
+
+    private static boolean parses(List<String> source, boolean date, boolean dateTime, boolean number) {
+        for (int i = 0; i < source.size(); i++) {
+            String text = source.get(i) == null ? "" : source.get(i).trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            try {
+                if (date) {
+                    parseDate(text);
+                } else if (dateTime) {
+                    parseDateTime(text);
+                } else if (number) {
+                    parseNumber(text);
+                }
+            } catch (RuntimeException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean looksLikeUrl(String value) {
+        String text = value.toLowerCase();
+        return text.startsWith("http://") || text.startsWith("https://") || text.startsWith("mailto:");
+    }
+
+    private static List<String> optionPieces(String questionType, List<String> stored, List<String> options) {
+        Set<String> allowed = new HashSet<String>();
+        if (options != null) {
+            for (int i = 0; i < options.size(); i++) {
+                String text = optionText(options.get(i));
+                if (!text.isEmpty()) {
+                    allowed.add(text);
+                }
+            }
+        }
+        List<String> out = new ArrayList<String>();
+        for (int i = 0; i < stored.size(); i++) {
+            String text = optionText(stored.get(i));
+            if (text.isEmpty()) {
+                continue;
+            }
+            if (allowed.contains(text)) {
+                if (!out.contains(text)) {
+                    out.add(text);
+                }
+                continue;
+            }
+            if (!checks(questionType) || text.indexOf(", ") < 0) {
+                return null;
+            }
+            String[] parts = text.split(", ");
+            for (int p = 0; p < parts.length; p++) {
+                String part = optionText(parts[p]);
+                if (part.isEmpty() || !allowed.contains(part)) {
+                    return null;
+                }
+                if (!out.contains(part)) {
+                    out.add(part);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static String optionText(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.length() > 255) {
+            text = text.substring(0, 255);
+        }
+        return text;
+    }
+
+    private Map<Long, List<String>> snapshotValues(CustomField field) {
+        if (field == null || field.getIdAsLong() == null || ofBizDelegator == null) {
+            return null;
+        }
+        try {
+            Map<String, Object> where = new HashMap<String, Object>();
+            where.put("customfield", field.getIdAsLong());
+            List<GenericValue> rows = ofBizDelegator.findByAnd("CustomFieldValue", where);
+            Set<Long> issueIds = new LinkedHashSet<Long>();
+            if (rows != null) {
+                for (int i = 0; i < rows.size(); i++) {
+                    GenericValue row = rows.get(i);
+                    Long issueId = row == null ? null : row.getLong("issue");
+                    if (issueId != null) {
+                        issueIds.add(issueId);
+                    }
+                }
+            }
+            Map<Long, List<String>> snapshot = new LinkedHashMap<Long, List<String>>();
+            for (Long issueId : issueIds) {
+                Issue issue = issueManager.getIssueObject(issueId);
+                if (issue == null) {
+                    continue;
+                }
+                List<String> texts = textsOf(field.getValue(issue));
+                if (!texts.isEmpty()) {
+                    snapshot.put(issueId, texts);
+                }
+            }
+            return snapshot;
+        } catch (RuntimeException e) {
+            log.warn("Cannot read stored answers of {}", field.getId(), e);
+            return null;
+        }
+    }
+
+    private void restore(CustomField field, FormField question, Map<Long, List<String>> snapshot) {
+        for (Map.Entry<Long, List<String>> entry : snapshot.entrySet()) {
+            Issue issue = issueManager.getIssueObject(entry.getKey());
+            if (issue == null) {
+                continue;
+            }
+            List<String> values = movedValues(question.getType(), entry.getValue(), question.getOptions());
+            if (values == null) {
+                continue;
+            }
+            try {
+                writeStored(field, question, issue, values);
+                indexingService.reIndex(issue);
+            } catch (RuntimeException e) {
+                log.warn("Cannot move an answer of {} onto {}", field.getId(), issue.getKey(), e);
+            } catch (com.atlassian.jira.issue.index.IndexException e) {
+                log.warn("Cannot reindex {} after moving {}", issue.getKey(), field.getId(), e);
+            }
+        }
+    }
+
+    /**
+     * Values of an existing Jira field that a condition on the canvas can see.
+     */
+    public Map<String, List<String>> portalAnswers(Issue issue, RulesConfig form) {
+        Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
+        if (issue == null) {
+            return values;
+        }
+        Set<String> ids = RequiredAnswers.portalIds(form);
+        for (String id : ids) {
+            values.put(id, readIssueField(issue, id));
+        }
+        return values;
+    }
+
+    private List<String> readIssueField(Issue issue, String fieldId) {
+        CustomField customField = customFieldManager.getCustomFieldObject(fieldId);
+        if (customField != null) {
+            return textsOf(customField.getValue(issue));
+        }
+        if ("priority".equals(fieldId)) {
+            Priority priority = issue.getPriority();
+            if (priority != null && priority.getName() != null) {
+                return Collections.singletonList(priority.getName());
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    static List<String> textsOf(Object value) {
+        List<String> out = new ArrayList<String>();
+        collectTexts(value, out);
+        return out;
+    }
+
+    private static void collectTexts(Object value, List<String> out) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Option) {
+            String text = ((Option) value).getValue();
+            if (text != null && text.trim().length() > 0) {
+                out.add(text.trim());
+            }
+            return;
+        }
+        if (value instanceof Collection) {
+            for (Object item : (Collection<?>) value) {
+                collectTexts(item, out);
+            }
+            return;
+        }
+        if (value instanceof Map) {
+            for (Object item : ((Map<?, ?>) value).values()) {
+                collectTexts(item, out);
+            }
+            return;
+        }
+        if (value instanceof Date) {
+            out.add(formatDate((Date) value));
+            return;
+        }
+        if (value instanceof Number) {
+            out.add(plainNumber((Number) value));
+            return;
+        }
+        String text = String.valueOf(value).trim();
+        if (!text.isEmpty()) {
+            out.add(text);
+        }
+    }
+
+    private static String formatDate(Date date) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(date);
+        String day = String.format("%04d-%02d-%02d",
+                Integer.valueOf(calendar.get(Calendar.YEAR)),
+                Integer.valueOf(calendar.get(Calendar.MONTH) + 1),
+                Integer.valueOf(calendar.get(Calendar.DAY_OF_MONTH)));
+        int hour = calendar.get(Calendar.HOUR_OF_DAY);
+        int minute = calendar.get(Calendar.MINUTE);
+        int second = calendar.get(Calendar.SECOND);
+        if (hour == 0 && minute == 0 && second == 0) {
+            return day;
+        }
+        return day + String.format("T%02d:%02d", Integer.valueOf(hour), Integer.valueOf(minute));
+    }
+
+    private static String plainNumber(Number number) {
+        double value = number.doubleValue();
+        if (!Double.isInfinite(value) && value == Math.rint(value)) {
+            return String.valueOf(number.longValue());
+        }
+        return String.valueOf(value);
+    }
+
+    private boolean writeStored(CustomField customField, FormField field, Issue issue, List<String> selected) {
+        if (options(field.getType()) && optionField(customField)) {
+            if (multiField(customField)) {
+                if (sameChoices(customField, issue, selected)) {
+                    return false;
+                }
+                updateChoices(customField, issue, selected);
+            } else if (sameSingle(customField, issue, selected)) {
+                return false;
+            } else {
+                updateSingle(customField, issue, selected);
+            }
+        } else {
+            Object next = scalar(customField, selected);
+            if (sameObject(customField, issue, next)) {
+                return false;
+            }
+            updateObject(customField, issue, next);
+        }
+        return true;
+    }
+
+    private static String typeKey(CustomField field) {
+        if (field == null || field.getCustomFieldType() == null) {
+            return "";
+        }
+        return field.getCustomFieldType().getKey() == null ? "" : field.getCustomFieldType().getKey();
     }
 
     /**
@@ -519,30 +840,63 @@ public class IssueFieldSync {
         if (options == null) {
             return;
         }
-        long sequence = 0L;
-        List<Option> existing = options.getRootOptions();
-        if (existing != null) {
-            for (int i = 0; i < existing.size(); i++) {
-                Long current = existing.get(i).getSequence();
-                if (current != null && current.longValue() >= sequence) {
-                    sequence = current.longValue() + 1L;
+        List<String> keep = new ArrayList<String>();
+        for (int i = 0; i < wanted.size(); i++) {
+            String value = optionText(wanted.get(i));
+            if (!value.isEmpty() && !keep.contains(value)) {
+                keep.add(value);
+            }
+        }
+        for (int i = 0; i < keep.size(); i++) {
+            String value = keep.get(i);
+            Option option = findOption(options, value);
+            if (option == null) {
+                optionsManager.createOption(config, null, Long.valueOf(i), value);
+            } else {
+                if (Boolean.TRUE.equals(option.getDisabled())) {
+                    optionsManager.enableOption(option);
+                }
+                if (option.getSequence() == null || option.getSequence().longValue() != i) {
+                    option.setSequence(Long.valueOf(i));
+                    option.store();
                 }
             }
         }
-        for (int i = 0; i < wanted.size(); i++) {
-            String value = wanted.get(i) == null ? "" : wanted.get(i).trim();
-            if (value.isEmpty()) {
-                continue;
-            }
-            if (value.length() > 255) {
-                value = value.substring(0, 255);
-            }
-            if (options.getOptionForValue(value, null) != null) {
-                continue;
-            }
-            optionsManager.createOption(config, null, Long.valueOf(sequence), value);
-            sequence++;
+        options = optionsManager.getOptions(config);
+        if (options == null) {
+            return;
         }
+        List<Option> existing = options.getRootOptions();
+        if (existing == null) {
+            return;
+        }
+        for (int i = 0; i < existing.size(); i++) {
+            Option option = existing.get(i);
+            if (option == null || option.getValue() == null) {
+                continue;
+            }
+            if (!keep.contains(option.getValue()) && !Boolean.TRUE.equals(option.getDisabled())) {
+                optionsManager.disableOption(option);
+            }
+        }
+    }
+
+    private static Option findOption(Options options, String value) {
+        Option found = options.getOptionForValue(value, null);
+        if (found != null) {
+            return found;
+        }
+        List<Option> existing = options.getRootOptions();
+        if (existing == null) {
+            return null;
+        }
+        for (int i = 0; i < existing.size(); i++) {
+            Option option = existing.get(i);
+            if (option != null && value.equals(option.getValue())) {
+                return option;
+            }
+        }
+        return null;
     }
 
     private void updateChoices(CustomField field, Issue issue, List<String> values) {

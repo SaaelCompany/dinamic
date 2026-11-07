@@ -2491,6 +2491,30 @@
             if (type === 'url') {
                 return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.url');
             }
+            if (type === 'user') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.user');
+            }
+            if (type === 'users') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.users');
+            }
+            if (type === 'group') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.group');
+            }
+            if (type === 'groups') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.groups');
+            }
+            if (type === 'version') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.version');
+            }
+            if (type === 'versions') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.versions');
+            }
+            if (type === 'labels') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.labels');
+            }
+            if (type === 'cascading') {
+                return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.cascading');
+            }
             return AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.type.text');
         }
 
@@ -5897,7 +5921,10 @@
                 return 'select';
             }
             if (control === 'textarea' || control === 'number' || control === 'date'
-                    || control === 'datetime' || control === 'url') {
+                    || control === 'datetime' || control === 'url'
+                    || control === 'user' || control === 'users' || control === 'group' || control === 'groups'
+                    || control === 'version' || control === 'versions' || control === 'labels'
+                    || control === 'cascading') {
                 return control;
             }
             return 'text';
@@ -5938,7 +5965,7 @@
             }
             var type = nodeTypeFor(source.control);
             var options = [];
-            if (type === 'checkbox' || type === 'radio' || type === 'select') {
+            if (type === 'checkbox' || type === 'radio' || type === 'select' || type === 'cascading') {
                 var values = source.values || [];
                 var i;
                 for (i = 0; i < values.length; i++) {
@@ -6371,8 +6398,14 @@
             if (field.type === 'select' || field.type === 'multiselect') {
                 return 'select';
             }
+            if (field.type === 'cascading') {
+                return 'select';
+            }
             if (field.type === 'textarea' || field.type === 'number' || field.type === 'date'
-                    || field.type === 'time' || field.type === 'datetime' || field.type === 'url') {
+                    || field.type === 'time' || field.type === 'datetime' || field.type === 'url'
+                    || field.type === 'user' || field.type === 'users' || field.type === 'group'
+                    || field.type === 'groups' || field.type === 'version' || field.type === 'versions'
+                    || field.type === 'labels') {
                 return field.type;
             }
             return 'text';

@@ -242,6 +242,9 @@ public class ProjectFields {
         if (value == null) {
             return;
         }
+        if (ProjectFieldKinds.CASCADING.equals(acc.control) && option.getParentOption() != null) {
+            return;
+        }
         value = value.trim();
         if (!value.isEmpty()) {
             acc.values.add(value);

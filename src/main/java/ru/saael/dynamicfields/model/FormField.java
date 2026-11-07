@@ -26,6 +26,15 @@ public class FormField {
     public static final String TIME = "time";
     public static final String DATETIME = "datetime";
     public static final String URL = "url";
+    /** An existing Jira user field placed on the canvas. The plugin does not create another one. */
+    public static final String USER = "user";
+    public static final String USERS = "users";
+    public static final String GROUP = "group";
+    public static final String GROUPS = "groups";
+    public static final String VERSION = "version";
+    public static final String VERSIONS = "versions";
+    public static final String LABELS = "labels";
+    public static final String CASCADING = "cascading";
 
     private String id;
     /** Jira custom field id, for example {@code customfield_10100}. Empty until the form is saved. */

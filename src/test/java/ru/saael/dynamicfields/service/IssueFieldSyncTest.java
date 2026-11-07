@@ -10,6 +10,8 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -157,6 +159,39 @@ public class IssueFieldSyncTest {
         assertFalse(IssueFieldSync.pluginType("com.atlassian.jira.plugin.system.customfieldtypes:userpicker"));
         assertFalse(IssueFieldSync.pluginType("ru.saael.jira.portal-dynamic-fields:portal-form"));
         assertFalse(IssueFieldSync.pluginType(null));
+    }
+
+    @Test
+    public void storedTextStaysWhenTheQuestionBecomesASingleLine() {
+        assertTrue(IssueFieldSync.keepStoredType(IssueFieldSync.TYPE_KEY, IssueFieldSync.TEXT_TYPE));
+        assertTrue(IssueFieldSync.keepStoredType(IssueFieldSync.TEXT_TYPE, IssueFieldSync.TYPE_KEY));
+        assertFalse(IssueFieldSync.keepStoredType(IssueFieldSync.TYPE_KEY, IssueFieldSync.DATE_TYPE));
+        assertFalse(IssueFieldSync.keepStoredType(IssueFieldSync.CHECKBOX_TYPE, IssueFieldSync.SELECT_TYPE));
+    }
+
+    @Test
+    public void dateAndListMoveOnlyWhenEveryStoredAnswerFits() {
+        assertEquals(Collections.singletonList("2026-11-06"),
+                IssueFieldSync.movedValues("date", Collections.singletonList("2026-11-06"), null));
+        assertNull(IssueFieldSync.movedValues("date", Collections.singletonList("вчера"), null));
+        assertEquals(Double.valueOf(3.5), IssueFieldSync.parseNumber(
+                IssueFieldSync.movedValues("number", Collections.singletonList("3,5"), null).get(0)));
+        assertNull(IssueFieldSync.movedValues("url", Collections.singletonList("кабинет"), null));
+        assertEquals(Collections.singletonList("https://example.test"),
+                IssueFieldSync.movedValues("url", Collections.singletonList("https://example.test"), null));
+
+        List<String> options = Arrays.asList("Врач", "Медсестра");
+        assertEquals(options, IssueFieldSync.movedValues("checkbox", Collections.singletonList("Врач, Медсестра"), options));
+        assertEquals(Collections.singletonList("Врач"),
+                IssueFieldSync.movedValues("select", Collections.singletonList("Врач"), options));
+        assertNull(IssueFieldSync.movedValues("select", Collections.singletonList("Врач, Медсестра"), options));
+        assertNull(IssueFieldSync.movedValues("select", Collections.singletonList("Архив"), options));
+
+        Map<Long, List<String>> snapshot = new java.util.LinkedHashMap<Long, List<String>>();
+        snapshot.put(Long.valueOf(1L), Collections.singletonList("2026-11-06"));
+        assertTrue(IssueFieldSync.canMove("date", snapshot, null));
+        snapshot.put(Long.valueOf(2L), Collections.singletonList("нет"));
+        assertFalse(IssueFieldSync.canMove("date", snapshot, null));
     }
 
     @Test

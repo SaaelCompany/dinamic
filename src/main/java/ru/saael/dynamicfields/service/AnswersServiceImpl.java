@@ -95,6 +95,10 @@ public class AnswersServiceImpl implements AnswersService {
         Issue issue = requireWritable(issueKey);
         RulesConfig form = rulesService.getConfig();
         Map<String, Map<String, List<String>>> clean = AnswerSanitizer.sanitize(form, blocks, legacyValues);
+        List<String> missing = RequiredAnswers.missing(form, clean, issueFieldSync.portalAnswers(issue, form));
+        if (!missing.isEmpty()) {
+            throw new AnswerRejectedException(400, RequiredAnswers.message(missing));
+        }
         List<AnswerRow> rows = AnswerSanitizer.rows(form, clean);
         AnswerDocument document = new AnswerDocument();
         document.setBlocks(clean);

@@ -15,6 +15,14 @@ public final class ProjectFieldKinds {
     public static final String DATETIME = "datetime";
     public static final String NUMBER = "number";
     public static final String URL = "url";
+    public static final String USER = "user";
+    public static final String USERS = "users";
+    public static final String GROUP = "group";
+    public static final String GROUPS = "groups";
+    public static final String VERSION = "version";
+    public static final String VERSIONS = "versions";
+    public static final String LABELS = "labels";
+    public static final String CASCADING = "cascading";
 
     private ProjectFieldKinds() {
     }
@@ -33,8 +41,32 @@ public final class ProjectFieldKinds {
         if (key.endsWith(":radiobuttons")) {
             return RADIO;
         }
-        if (key.endsWith(":cascadingselect") || key.endsWith(":select")) {
+        if (key.endsWith(":cascadingselect")) {
+            return CASCADING;
+        }
+        if (key.endsWith(":select")) {
             return SELECT;
+        }
+        if (key.endsWith(":multiuserpicker")) {
+            return USERS;
+        }
+        if (key.endsWith(":userpicker")) {
+            return USER;
+        }
+        if (key.endsWith(":multigrouppicker")) {
+            return GROUPS;
+        }
+        if (key.endsWith(":grouppicker")) {
+            return GROUP;
+        }
+        if (key.endsWith(":multiversion")) {
+            return VERSIONS;
+        }
+        if (key.endsWith(":version")) {
+            return VERSION;
+        }
+        if (key.endsWith(":labels")) {
+            return LABELS;
         }
         if (key.endsWith(":datepicker")) {
             return DATE;

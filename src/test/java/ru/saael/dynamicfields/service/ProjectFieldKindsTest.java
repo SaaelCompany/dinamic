@@ -10,7 +10,7 @@ public class ProjectFieldKindsTest {
     public void dropdownsStayDropdowns() {
         assertEquals(ProjectFieldKinds.SELECT, ProjectFieldKinds.control(
                 "com.atlassian.jira.plugin.system.customfieldtypes:select"));
-        assertEquals(ProjectFieldKinds.SELECT, ProjectFieldKinds.control(
+        assertEquals(ProjectFieldKinds.CASCADING, ProjectFieldKinds.control(
                 "com.atlassian.jira.plugin.system.customfieldtypes:cascadingselect"));
     }
 
@@ -45,5 +45,17 @@ public class ProjectFieldKindsTest {
         assertEquals(ProjectFieldKinds.URL, ProjectFieldKinds.control(
                 "com.atlassian.jira.plugin.system.customfieldtypes:url"));
         assertEquals(ProjectFieldKinds.TEXT, ProjectFieldKinds.control(null));
+        assertEquals(ProjectFieldKinds.USER, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:userpicker"));
+        assertEquals(ProjectFieldKinds.USERS, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:multiuserpicker"));
+        assertEquals(ProjectFieldKinds.GROUP, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:grouppicker"));
+        assertEquals(ProjectFieldKinds.VERSION, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:version"));
+        assertEquals(ProjectFieldKinds.VERSIONS, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:multiversion"));
+        assertEquals(ProjectFieldKinds.LABELS, ProjectFieldKinds.control(
+                "com.atlassian.jira.plugin.system.customfieldtypes:labels"));
     }
 }
