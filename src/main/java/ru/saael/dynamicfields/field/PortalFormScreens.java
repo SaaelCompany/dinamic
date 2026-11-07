@@ -6,6 +6,7 @@ import com.atlassian.jira.event.issue.field.CustomFieldCreatedEvent;
 import com.atlassian.jira.issue.CustomFieldManager;
 import com.atlassian.jira.issue.fields.CustomField;
 import com.atlassian.jira.issue.fields.screen.FieldScreen;
+import com.atlassian.jira.issue.fields.screen.FieldScreenLayoutItem;
 import com.atlassian.jira.issue.fields.screen.FieldScreenScheme;
 import com.atlassian.jira.issue.fields.screen.FieldScreenTab;
 import com.atlassian.jira.issue.fields.screen.issuetype.IssueTypeScreenScheme;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Named;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -64,16 +66,95 @@ public class PortalFormScreens {
         }
         try {
             List<Project> projects = projectManager.getProjectObjects();
+            List<String> order = new ArrayList<String>();
             for (int i = 0; i < fields.size(); i++) {
                 CustomField field = fields.get(i);
                 if (field == null || field.getDescription() == null || !field.getDescription().startsWith("sdf:")) {
                     continue;
                 }
+                order.add(field.getId());
                 place(field, projects, IssueOperations.VIEW_ISSUE_OPERATION);
                 place(field, projects, IssueOperations.EDIT_ISSUE_OPERATION);
             }
+            orderScreens(order, projects);
         } catch (RuntimeException e) {
             log.warn("Cannot put question fields on the issue screen", e);
+        }
+    }
+
+    private void orderScreens(List<String> order, List<Project> projects) {
+        if (order.isEmpty() || projects == null) {
+            return;
+        }
+        Set<Long> seen = new HashSet<Long>();
+        IssueOperation[] operations = new IssueOperation[] {
+                IssueOperations.VIEW_ISSUE_OPERATION,
+                IssueOperations.EDIT_ISSUE_OPERATION
+        };
+        for (int i = 0; i < projects.size(); i++) {
+            Project project = projects.get(i);
+            if (!isServiceDesk(project)) {
+                continue;
+            }
+            IssueTypeScreenScheme scheme = issueTypeScreenSchemeManager.getIssueTypeScreenScheme(project);
+            if (scheme == null || scheme.getEntities() == null) {
+                continue;
+            }
+            for (IssueTypeScreenSchemeEntity entity : scheme.getEntities()) {
+                FieldScreenScheme screens = entity.getFieldScreenScheme();
+                if (screens == null) {
+                    continue;
+                }
+                for (int o = 0; o < operations.length; o++) {
+                    FieldScreen screen = screens.getFieldScreen(operations[o]);
+                    if (screen == null || screen.getId() == null || !seen.add(screen.getId())) {
+                        continue;
+                    }
+                    orderScreen(screen, order);
+                }
+            }
+        }
+    }
+
+    private void orderScreen(FieldScreen screen, List<String> order) {
+        List<FieldScreenTab> tabs = screen.getTabs();
+        if (tabs == null) {
+            return;
+        }
+        for (int t = 0; t < tabs.size(); t++) {
+            FieldScreenTab tab = tabs.get(t);
+            if (tab == null || tab.getFieldScreenLayoutItems() == null) {
+                continue;
+            }
+            List<FieldScreenLayoutItem> items = tab.getFieldScreenLayoutItems();
+            List<String> current = new ArrayList<String>();
+            List<Integer> slots = new ArrayList<Integer>();
+            for (int i = 0; i < items.size(); i++) {
+                String id = items.get(i) == null ? null : items.get(i).getFieldId();
+                current.add(id);
+                if (id != null && order.contains(id)) {
+                    slots.add(Integer.valueOf(i));
+                }
+            }
+            List<String> next = ScreenOrder.arrange(current, order);
+            if (next.equals(current) || slots.isEmpty()) {
+                continue;
+            }
+            int first = slots.get(0).intValue();
+            for (int s = slots.size() - 1; s >= 0; s--) {
+                tab.removeFieldScreenLayoutItem(slots.get(s).intValue());
+            }
+            List<String> wanted = new ArrayList<String>();
+            for (int i = 0; i < order.size(); i++) {
+                if (current.contains(order.get(i)) && !wanted.contains(order.get(i))) {
+                    wanted.add(order.get(i));
+                }
+            }
+            for (int w = 0; w < wanted.size(); w++) {
+                tab.addFieldScreenLayoutItem(wanted.get(w), first + w);
+            }
+            tab.store();
+            log.info("Ordered question fields on screen {}", screen.getName());
         }
     }
 

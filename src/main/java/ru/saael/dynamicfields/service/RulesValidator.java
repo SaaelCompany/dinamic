@@ -28,7 +28,9 @@ public final class RulesValidator {
     private static final List<String> TYPES = Arrays.asList(
             FormField.CHECKBOX, FormField.RADIO, FormField.SELECT, FormField.MULTISELECT,
             FormField.TEXT, FormField.TEXTAREA, FormField.NUMBER,
-            FormField.DATE, FormField.TIME, FormField.DATETIME, FormField.URL);
+            FormField.DATE, FormField.TIME, FormField.DATETIME, FormField.URL,
+            FormField.USER, FormField.USERS, FormField.GROUP, FormField.GROUPS,
+            FormField.VERSION, FormField.VERSIONS, FormField.LABELS, FormField.CASCADING);
     private static final List<String> PLACES = Arrays.asList("end", "start", "after");
     private static final int HELP_LIMIT = 2000;
 

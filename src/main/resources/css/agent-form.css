@@ -10,6 +10,16 @@
     display: none !important;
 }
 
+.field-group[data-sdf-required="1"] > label::after,
+.field-group[data-sdf-required="1"] > .field-label::after {
+    content: " *";
+    color: #de350b;
+}
+
+.sdf-agent-error {
+    margin-top: 4px;
+}
+
 .field-group.sdf-agent-among {
     margin-left: 24px;
 }

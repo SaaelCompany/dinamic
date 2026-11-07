@@ -395,6 +395,11 @@
             group.setAttribute('data-sdf-question', item.field.id);
             group.setAttribute('data-sdf-block', item.block.id);
             group.setAttribute('data-sdf-type', item.field.type || 'text');
+            if (item.field.required) {
+                group.setAttribute('data-sdf-required', '1');
+            } else {
+                group.removeAttribute('data-sdf-required');
+            }
             if (group.querySelector('.sdf-agent')) {
                 continue;
             }
@@ -425,6 +430,7 @@
             return;
         }
         syncGroup(group);
+        clearAgentError(group);
         var form = group;
         while (form && form.tagName && form.tagName.toLowerCase() !== 'form') {
             form = form.parentNode;
@@ -634,7 +640,128 @@
         }, 60);
     }
 
+    function clearAgentError(group) {
+        if (!group || !group.querySelectorAll) {
+            return;
+        }
+        var notes = group.querySelectorAll('.sdf-agent-error');
+        var i;
+        for (i = notes.length - 1; i >= 0; i--) {
+            if (notes[i].parentNode) {
+                notes[i].parentNode.removeChild(notes[i]);
+            }
+        }
+    }
+
+    function showAgentError(group) {
+        clearAgentError(group);
+        var note = document.createElement('div');
+        note.className = 'error sdf-agent-error';
+        var text = 'Fill in this question before sending the request.';
+        if (window.AJS && AJS.I18n) {
+            text = AJS.I18n.getText('ru.saael.dynamicfields.portal.required');
+        }
+        note.appendChild(document.createTextNode(text));
+        group.appendChild(note);
+    }
+
+    function isAgentSubmit(node) {
+        if (!node || !node.tagName) {
+            return false;
+        }
+        var id = node.id || '';
+        if (id === 'issue-create-submit' || id === 'issue-edit-submit' || id === 'edit-issue-submit') {
+            return true;
+        }
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'input' && String(node.type || '').toLowerCase() === 'submit') {
+            return true;
+        }
+        if (tag === 'button' && (node.getAttribute('type') || 'submit').toLowerCase() === 'submit') {
+            return true;
+        }
+        return false;
+    }
+
+    function blockAgentRequired(form) {
+        if (!form || !configCache || !form.querySelector || !form.querySelector('[data-sdf-question]')) {
+            return false;
+        }
+        var list = questionsOf(configCache).list;
+        applyVisibility(form, list);
+        var groups = form.querySelectorAll('.field-group[data-sdf-required="1"]');
+        var missing = [];
+        var i;
+        for (i = 0; i < groups.length; i++) {
+            clearAgentError(groups[i]);
+            if (hasClass(groups[i], 'sdf-agent-off')) {
+                continue;
+            }
+            if (!widgetValues(groups[i]).length) {
+                missing.push(groups[i]);
+            }
+        }
+        if (!missing.length) {
+            return false;
+        }
+        for (i = 0; i < missing.length; i++) {
+            showAgentError(missing[i]);
+        }
+        if (missing[0].scrollIntoView) {
+            missing[0].scrollIntoView(true);
+        }
+        return true;
+    }
+
+    function onAgentSubmit(target, e) {
+        var node = target;
+        if (node && node.nodeType !== 1) {
+            node = node.parentNode;
+        }
+        var control = node;
+        while (control && control !== document) {
+            if (isAgentSubmit(control)) {
+                break;
+            }
+            control = control.parentNode;
+        }
+        if (!control || control === document) {
+            return;
+        }
+        var form = control;
+        while (form && form !== document) {
+            if (form.tagName && form.tagName.toLowerCase() === 'form') {
+                break;
+            }
+            form = form.parentNode;
+        }
+        if (!form || form === document) {
+            return;
+        }
+        if (blockAgentRequired(form) && e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+        }
+    }
+
     function boot() {
+        document.addEventListener('click', function (e) {
+            onAgentSubmit(e.target, e);
+        }, true);
+        document.addEventListener('submit', function (e) {
+            if (blockAgentRequired(e.target) && e) {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                if (e.stopPropagation) {
+                    e.stopPropagation();
+                }
+            }
+        }, true);
         schedule();
         if (window.AJS && AJS.$) {
             AJS.$(document).bind('dialogContentReady', function () {
