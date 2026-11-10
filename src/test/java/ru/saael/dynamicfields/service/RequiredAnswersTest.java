@@ -5,6 +5,7 @@ import ru.saael.dynamicfields.model.Condition;
 import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
+import ru.saael.dynamicfields.model.FormLink;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.util.Arrays;
@@ -73,6 +74,33 @@ public class RequiredAnswersTest {
         portal.put("customfield_10100", Collections.singletonList("Медсестра"));
         assertTrue(RequiredAnswers.missing(form, answers("main", "kind", Collections.<String>emptyList()), portal).isEmpty());
         assertTrue(RequiredAnswers.portalIds(form).contains("customfield_10100"));
+    }
+
+    @Test
+    public void configuredLinksAreShownNotAnswered() {
+        FormField docs = new FormField();
+        docs.setId("docs");
+        docs.setLabel("Документы");
+        docs.setType(FormField.URL);
+        docs.setRequired(true);
+        FormLink item = new FormLink();
+        item.setText("Инструкция");
+        item.setHref("https://example.test/guide");
+        docs.setLinks(Collections.singletonList(item));
+        assertTrue(RequiredAnswers.missing(config(docs),
+                answers("main", "docs", Collections.<String>emptyList()), null).isEmpty());
+    }
+
+    @Test
+    public void urlWithoutLinksStillNeedsAnAnswer() {
+        FormField docs = new FormField();
+        docs.setId("docs");
+        docs.setLabel("Документы");
+        docs.setType(FormField.URL);
+        docs.setRequired(true);
+        assertEquals(Collections.singletonList("Документы"),
+                RequiredAnswers.missing(config(docs),
+                        answers("main", "docs", Collections.<String>emptyList()), null));
     }
 
     private static RulesConfig form(boolean required, Condition when) {

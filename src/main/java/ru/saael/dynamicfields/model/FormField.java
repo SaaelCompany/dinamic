@@ -66,6 +66,8 @@ public class FormField {
     /** Header color on the builder canvas, {@code #rrggbb}. Empty keeps the automatic color. */
     private String color;
     private List<String> defaults = new ArrayList<String>();
+    /** Links drawn on the portal for a link question. Empty means the customer types one address. */
+    private List<FormLink> links = new ArrayList<FormLink>();
     /** {@code null} — the field is always visible. Otherwise it is visible only while the condition holds. */
     private Condition when;
     /** {@code null} — the question stays in the block order. Otherwise it is drawn after that answer and stays visible. */
@@ -236,6 +238,15 @@ public class FormField {
 
     public void setY(Integer y) {
         this.y = y;
+    }
+
+    @JsonSerialize(include = JsonSerialize.Inclusion.NON_EMPTY)
+    public List<FormLink> getLinks() {
+        return links;
+    }
+
+    public void setLinks(List<FormLink> links) {
+        this.links = links == null ? new ArrayList<FormLink>() : links;
     }
 
     @JsonIgnore

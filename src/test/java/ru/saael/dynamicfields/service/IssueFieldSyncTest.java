@@ -221,6 +221,15 @@ public class IssueFieldSyncTest {
     }
 
     @Test
+    public void bareHostBecomesHttps() {
+        assertEquals("https://example.test/guide", IssueFieldSync.normalizeUrl("example.test/guide"));
+        assertEquals("https://example.test", IssueFieldSync.normalizeUrl("https://example.test"));
+        assertEquals("mailto:a@example.test", IssueFieldSync.normalizeUrl("mailto:a@example.test"));
+        assertNull(IssueFieldSync.normalizeUrl("javascript:alert(1)"));
+        assertNull(IssueFieldSync.normalizeUrl("  "));
+    }
+
+    @Test
     public void emptyFormKeepsNoQuestionMarkers() {
         assertTrue(IssueFieldSync.keptMarkers(new RulesConfig()).isEmpty());
         assertTrue(IssueFieldSync.keptMarkers(null).isEmpty());

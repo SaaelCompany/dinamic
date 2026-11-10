@@ -5,6 +5,7 @@ import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FieldAmong;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
+import ru.saael.dynamicfields.model.FormLink;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.util.ArrayList;
@@ -130,12 +131,41 @@ public final class RulesValidator {
                     }
                 }
             }
+            checkLinks(errors, label, field);
             checkNests(errors, label, field, list);
             checkCondition(errors, label, field.getWhen(), field.getId(), earlier, "when");
             checkAfter(errors, label, field.getAfter(), field.getId(), list, i);
             checkAmong(errors, label, field, list, i);
             if (!isBlank(field.getId())) {
                 earlier.add(field.getId());
+            }
+        }
+    }
+
+    private static void checkLinks(List<String> errors, String label, FormField field) {
+        if (field == null || !FormField.URL.equals(field.getType())) {
+            return;
+        }
+        List<FormLink> links = field.getLinks();
+        if (links == null) {
+            return;
+        }
+        for (int i = 0; i < links.size(); i++) {
+            FormLink link = links.get(i);
+            if (link == null) {
+                continue;
+            }
+            String text = link.getText() == null ? "" : link.getText().trim();
+            String href = link.getHref() == null ? "" : link.getHref().trim();
+            if (text.isEmpty() && href.isEmpty()) {
+                continue;
+            }
+            if (href.isEmpty()) {
+                errors.add(label + ": a link needs an address");
+                continue;
+            }
+            if (!FormLink.acceptable(href)) {
+                errors.add(label + ": link address is not a link");
             }
         }
     }

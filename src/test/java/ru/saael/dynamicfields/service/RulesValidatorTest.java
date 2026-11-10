@@ -7,6 +7,7 @@ import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FieldAmong;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
+import ru.saael.dynamicfields.model.FormLink;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.io.InputStream;
@@ -429,6 +430,53 @@ public class RulesValidatorTest {
         assertEquals("server", saved.getFieldId());
         assertEquals("Стандартный сервер", saved.getOption());
         assertEquals(Collections.<String>emptyList(), RulesValidator.validate(loaded));
+    }
+
+    @Test
+    public void linkTextAndAddressAreStored() throws Exception {
+        FormField docs = field("docs", "Документы", FormField.URL);
+        FormLink link = new FormLink();
+        link.setText("Инструкция");
+        link.setHref("https://example.test/guide");
+        docs.setLinks(Collections.singletonList(link));
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(docs)));
+        String json = new ObjectMapper().writeValueAsString(config(docs));
+        RulesConfig loaded = new ObjectMapper().readValue(json, RulesConfig.class);
+        FormLink saved = loaded.getBlocks().get(0).getFields().get(0).getLinks().get(0);
+        assertEquals("Инструкция", saved.getText());
+        assertEquals("https://example.test/guide", saved.getHref());
+    }
+
+    @Test
+    public void linkWithoutAddressIsRejected() {
+        FormField docs = field("docs", "Документы", FormField.URL);
+        FormLink link = new FormLink();
+        link.setText("Инструкция");
+        link.setHref("  ");
+        docs.setLinks(Collections.singletonList(link));
+        List<String> errors = RulesValidator.validate(config(docs));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("address"));
+    }
+
+    @Test
+    public void scriptLinkIsRejected() {
+        FormField docs = field("docs", "Документы", FormField.URL);
+        FormLink link = new FormLink();
+        link.setHref("javascript:alert(1)");
+        docs.setLinks(Collections.singletonList(link));
+        List<String> errors = RulesValidator.validate(config(docs));
+        assertEquals(1, errors.size());
+        assertTrue(errors.get(0), errors.get(0).contains("not a link"));
+    }
+
+    @Test
+    public void bareHostIsALink() {
+        FormField docs = field("docs", "Документы", FormField.URL);
+        FormLink link = new FormLink();
+        link.setHref("example.test/guide");
+        docs.setLinks(Collections.singletonList(link));
+        assertEquals(Collections.<String>emptyList(), RulesValidator.validate(config(docs)));
     }
 
     @Test

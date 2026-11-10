@@ -214,7 +214,13 @@
         } else {
             var text = firstOwned(node, 'input');
             if (text && trim(text.value)) {
-                values.push(trim(text.value));
+                var value = trim(text.value);
+                if (type === 'url') {
+                    value = safeHref(value);
+                }
+                if (value) {
+                    values.push(value);
+                }
             }
         }
         return values;
@@ -1421,14 +1427,15 @@
         wrap.className = 'field-group sdf-field';
         wrap.setAttribute('data-sdf-field', field.id);
         wrap.setAttribute('data-sdf-type', field.type || 'text');
-        if (field.required) {
+        var linked = field.type === 'url' && linkRows(field).length;
+        if (field.required && !linked) {
             wrap.setAttribute('data-sdf-required', '1');
         }
-        if (trim(field.label) || field.required) {
+        if (trim(field.label) || (field.required && !linked)) {
             var label = document.createElement('label');
             label.className = 'field-label';
             label.appendChild(document.createTextNode(trim(field.label)));
-            if (field.required) {
+            if (field.required && !linked) {
                 var mark = document.createElement('span');
                 mark.className = 'sdf-req';
                 mark.appendChild(document.createTextNode(' *'));
@@ -1499,12 +1506,17 @@
             area.setAttribute('form', 'sdf-unattached');
             area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
             wrap.appendChild(area);
+        } else if (field.type === 'url' && appendConfiguredLinks(wrap, field)) {
+            // The question shows the configured links.
         } else {
             var text = document.createElement('input');
             text.type = portalInputKind(field.type);
             text.className = 'text full-width-field';
             text.setAttribute('form', 'sdf-unattached');
             text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
+            if (field.type === 'url') {
+                text.setAttribute('placeholder', 'https://');
+            }
             wrap.appendChild(text);
         }
         appendHelp(wrap, field);
@@ -1563,9 +1575,66 @@
             return 'datetime-local';
         }
         if (type === 'url') {
-            return 'url';
+            return 'text';
         }
         return 'text';
+    }
+
+    function safeHref(raw) {
+        var text = trim(raw);
+        if (!text) {
+            return '';
+        }
+        var lower = text.toLowerCase();
+        if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 || lower.indexOf('vbscript:') === 0) {
+            return '';
+        }
+        if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0 || lower.indexOf('mailto:') === 0) {
+            return text;
+        }
+        if (text.indexOf(' ') >= 0 || text.indexOf('\\') >= 0 || text.indexOf('<') >= 0 || text.indexOf('"') >= 0) {
+            return '';
+        }
+        if (text.indexOf('.') < 0) {
+            return '';
+        }
+        return 'https://' + text;
+    }
+
+    function linkRows(field) {
+        var out = [];
+        var links = field && field.links ? field.links : [];
+        var i;
+        for (i = 0; i < links.length; i++) {
+            var item = links[i] || {};
+            var href = safeHref(item.href);
+            if (!href) {
+                continue;
+            }
+            out.push({text: trim(item.text) || href, href: href});
+        }
+        return out;
+    }
+
+    function appendConfiguredLinks(parent, field) {
+        var rows = linkRows(field);
+        if (!rows.length) {
+            return false;
+        }
+        var list = document.createElement('div');
+        list.className = 'sdf-links';
+        var i;
+        for (i = 0; i < rows.length; i++) {
+            var link = document.createElement('a');
+            link.className = 'sdf-link';
+            link.href = rows[i].href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.appendChild(document.createTextNode(rows[i].text));
+            list.appendChild(link);
+        }
+        parent.appendChild(list);
+        return true;
     }
 
     function buildSection(cfg) {
