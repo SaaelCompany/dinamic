@@ -185,6 +185,63 @@
         return trim(node.value || '');
     }
 
+    function safeHref(raw) {
+        var text = trim(raw);
+        if (!text) {
+            return '';
+        }
+        var lower = text.toLowerCase();
+        if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 || lower.indexOf('vbscript:') === 0) {
+            return '';
+        }
+        if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0 || lower.indexOf('mailto:') === 0) {
+            return text;
+        }
+        if (text.indexOf(' ') >= 0 || text.indexOf('\\') >= 0 || text.indexOf('<') >= 0 || text.indexOf('"') >= 0) {
+            return '';
+        }
+        if (text.indexOf('.') < 0) {
+            return '';
+        }
+        return 'https://' + text;
+    }
+
+    function linkRows(field) {
+        var out = [];
+        var links = field && field.links ? field.links : [];
+        var i;
+        for (i = 0; i < links.length; i++) {
+            var item = links[i] || {};
+            var href = safeHref(item.href);
+            if (!href) {
+                continue;
+            }
+            out.push({text: trim(item.text) || href, href: href});
+        }
+        return out;
+    }
+
+    function appendAgentLinks(widget, field) {
+        var rows = linkRows(field);
+        if (!rows.length) {
+            return false;
+        }
+        var list = document.createElement('div');
+        list.className = 'sdf-links';
+        var i;
+        for (i = 0; i < rows.length; i++) {
+            var link = document.createElement('a');
+            link.className = 'sdf-link';
+            link.href = rows[i].href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.appendChild(document.createTextNode(rows[i].text));
+            list.appendChild(link);
+        }
+        widget.appendChild(list);
+        return true;
+    }
+
     function buildWidget(item, nativeNodes) {
         var field = item.field;
         var widget = document.createElement('div');
@@ -252,11 +309,16 @@
             area.rows = 3;
             area.setAttribute('form', 'sdf-unattached');
             widget.appendChild(area);
+        } else if (type === 'url' && appendAgentLinks(widget, field)) {
+            // The question shows the configured links and does not write them into the Jira URL field.
         } else {
             var text = document.createElement('input');
-            text.type = type === 'number' || type === 'date' || type === 'time' || type === 'url' ? type : 'text';
+            text.type = type === 'number' || type === 'date' || type === 'time' ? type : 'text';
             if (type === 'datetime') {
                 text.type = 'datetime-local';
+            }
+            if (type === 'url') {
+                text.setAttribute('placeholder', 'https://');
             }
             text.className = 'text long-field sdf-agent-control';
             text.setAttribute('form', 'sdf-unattached');
@@ -374,7 +436,11 @@
                 text.push(trim(values[i]));
             }
         }
-        nodes[0].value = text.join(', ');
+        var joined = text.join(', ');
+        if (group.getAttribute('data-sdf-type') === 'url' && joined) {
+            joined = safeHref(joined);
+        }
+        nodes[0].value = joined;
     }
 
     function syncGroup(group) {
@@ -395,7 +461,8 @@
             group.setAttribute('data-sdf-question', item.field.id);
             group.setAttribute('data-sdf-block', item.block.id);
             group.setAttribute('data-sdf-type', item.field.type || 'text');
-            if (item.field.required) {
+            var linked = item.field.type === 'url' && linkRows(item.field).length;
+            if (item.field.required && !linked) {
                 group.setAttribute('data-sdf-required', '1');
             } else {
                 group.removeAttribute('data-sdf-required');
@@ -410,9 +477,11 @@
             }
             var widget = buildWidget(item, nativeNodes);
             group.appendChild(widget);
-            widget.addEventListener('change', onWidget);
-            widget.addEventListener('input', onWidget);
-            syncGroup(group);
+            if (widget.querySelector('.sdf-agent-control')) {
+                widget.addEventListener('change', onWidget);
+                widget.addEventListener('input', onWidget);
+                syncGroup(group);
+            }
         }
         placeAmong(form, index.list);
         applyVisibility(form, index.list);

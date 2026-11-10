@@ -4,6 +4,7 @@ import ru.saael.dynamicfields.model.Condition;
 import ru.saael.dynamicfields.model.FieldAfter;
 import ru.saael.dynamicfields.model.FormBlock;
 import ru.saael.dynamicfields.model.FormField;
+import ru.saael.dynamicfields.model.FormLink;
 import ru.saael.dynamicfields.model.RulesConfig;
 
 import java.util.ArrayList;
@@ -58,6 +59,9 @@ public final class RequiredAnswers {
                     continue;
                 }
                 if (field.getPortalFieldId() != null && field.getPortalFieldId().trim().length() > 0) {
+                    continue;
+                }
+                if (FormField.URL.equals(field.getType()) && FormLink.hasAddress(field.getLinks())) {
                     continue;
                 }
                 if (!Boolean.TRUE.equals(visible.get(field.getId()))) {

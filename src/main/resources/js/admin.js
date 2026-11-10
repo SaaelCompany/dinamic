@@ -154,6 +154,7 @@
                     color: normalizeColor(src.color),
                     defaults: stringList(src.defaults),
                     portalFieldId: src.portalFieldId ? String(src.portalFieldId) : '',
+                    links: copyLinks(src.links),
                     when: when,
                     after: copyAfter(src.after),
                     among: copyAmong(src.among),
@@ -484,6 +485,48 @@
             return out;
         }
 
+        function copyLinks(raw) {
+            var out = [];
+            var list = raw || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                var item = list[i] || {};
+                out.push({
+                    text: item.text == null ? '' : String(item.text),
+                    href: item.href == null ? '' : String(item.href)
+                });
+            }
+            return out;
+        }
+
+        function exportLinks(raw, keepBlank) {
+            var links = [];
+            var list = raw || [];
+            var i;
+            for (i = 0; i < list.length; i++) {
+                var item = list[i] || {};
+                var hrefRaw = item.href == null ? '' : String(item.href);
+                var textRaw = item.text == null ? '' : String(item.text);
+                var href = trim(hrefRaw);
+                var text = trim(textRaw);
+                if (!href && !text) {
+                    if (keepBlank) {
+                        links.push({text: textRaw, href: hrefRaw});
+                    }
+                    continue;
+                }
+                if (!keepBlank && !href) {
+                    links.push({text: text, href: ''});
+                    continue;
+                }
+                links.push({
+                    text: keepBlank ? textRaw : text,
+                    href: keepBlank ? hrefRaw : href
+                });
+            }
+            return links;
+        }
+
         function exportFields(fields, keepBlank) {
             var out = [];
             var i;
@@ -535,6 +578,12 @@
                 }
                 if (src.required) {
                     field.required = true;
+                }
+                if (src.type === 'url') {
+                    var exportedLinks = exportLinks(src.links, keepBlank);
+                    if (exportedLinks.length) {
+                        field.links = exportedLinks;
+                    }
                 }
                 var color = normalizeColor(src.color);
                 if (color) {
@@ -696,7 +745,7 @@
         function button(role, text, disabled) {
             var node = document.createElement('button');
             node.type = 'button';
-            var primary = role === 'add-field' || role === 'add-child' || role === 'add-option' || role === 'open-type';
+            var primary = role === 'add-field' || role === 'add-child' || role === 'add-option' || role === 'add-link' || role === 'open-type';
             node.className = 'aui-button aui-button-compact' + (primary ? '' : ' aui-button-subtle');
             node.setAttribute('data-role', role);
             node.appendChild(document.createTextNode(text));
@@ -1981,6 +2030,15 @@
                 for (i = 0; i < filled.length; i++) {
                     rows.push({option: filled[i], nest: '', text: filled[i]});
                 }
+            } else if (field.type === 'url') {
+                var linkList = field.links || [];
+                for (i = 0; i < linkList.length; i++) {
+                    var caption = trim((linkList[i] && linkList[i].text) || '') || trim((linkList[i] && linkList[i].href) || '');
+                    if (!caption) {
+                        continue;
+                    }
+                    rows.push({option: '', nest: '', text: caption, link: true});
+                }
             }
             if (!rows.length) {
                 rows = [{option: '', nest: '', text: ''}];
@@ -1995,6 +2053,7 @@
                     among: rows[i].among ? true : false,
                     amongId: rows[i].amongId || '',
                     text: rows[i].text,
+                    link: rows[i].link ? true : false,
                     portY: y + NODE_ROW / 2
                 });
                 y += NODE_ROW;
@@ -2257,6 +2316,10 @@
                     var band = bands.bands[o];
                     if (band.among) {
                         body.appendChild(amongRow(block, band.amongId, band.text));
+                        continue;
+                    }
+                    if (band.link) {
+                        body.appendChild(el('div', 'sdf-node-link', band.text));
                         continue;
                     }
                     if (isChoice(field.type) && !band.option && !band.nest) {
@@ -2625,7 +2688,11 @@
             if (field.type === 'select') {
                 card.appendChild(renderBlank(field));
             }
-            card.appendChild(renderDefault(field));
+            if (field.type === 'url') {
+                card.appendChild(renderLinks(field));
+            } else {
+                card.appendChild(renderDefault(field));
+            }
             card.appendChild(group(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.fieldId'), idInput(field), AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.automationHint')));
             card.appendChild(renderWhen(block, field, index));
             var buttons = el('div', 'buttons-container');
@@ -2790,6 +2857,105 @@
             return box;
         }
 
+        function safeHref(raw) {
+            var text = trim(raw);
+            if (!text) {
+                return '';
+            }
+            var lower = text.toLowerCase();
+            if (lower.indexOf('javascript:') === 0 || lower.indexOf('data:') === 0 || lower.indexOf('vbscript:') === 0) {
+                return '';
+            }
+            if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0 || lower.indexOf('mailto:') === 0) {
+                return text;
+            }
+            if (text.indexOf(' ') >= 0 || text.indexOf('\\') >= 0 || text.indexOf('<') >= 0 || text.indexOf('"') >= 0) {
+                return '';
+            }
+            if (text.indexOf('.') < 0) {
+                return '';
+            }
+            return 'https://' + text;
+        }
+
+        function linkRows(field) {
+            var out = [];
+            var links = field && field.links ? field.links : [];
+            var i;
+            for (i = 0; i < links.length; i++) {
+                var item = links[i] || {};
+                var href = safeHref(item.href);
+                if (!href) {
+                    continue;
+                }
+                out.push({text: trim(item.text) || href, href: href});
+            }
+            return out;
+        }
+
+        function appendConfiguredLinks(parent, field) {
+            var rows = linkRows(field);
+            if (!rows.length) {
+                return false;
+            }
+            var list = document.createElement('div');
+            list.className = 'sdf-links';
+            var i;
+            for (i = 0; i < rows.length; i++) {
+                var link = document.createElement('a');
+                link.className = 'sdf-link';
+                link.href = rows[i].href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.appendChild(document.createTextNode(rows[i].text));
+                list.appendChild(link);
+            }
+            parent.appendChild(list);
+            return true;
+        }
+
+        function renderLinks(field) {
+            var box = el('div', 'field-group');
+            box.appendChild(el('label', null, AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.links')));
+            var value = el('div', 'sdf-field-value');
+            var links = field.links || [];
+            var i;
+            for (i = 0; i < links.length; i++) {
+                var row = el('div', 'sdf-link-row');
+                var text = document.createElement('input');
+                text.type = 'text';
+                text.className = 'text';
+                text.setAttribute('data-role', 'link-text');
+                text.setAttribute('data-link-index', String(i));
+                text.setAttribute('data-option-index', String(i));
+                text.setAttribute('placeholder', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.linkText'));
+                text.value = links[i].text || '';
+                var href = document.createElement('input');
+                href.type = 'text';
+                href.className = 'text';
+                href.setAttribute('data-role', 'link-href');
+                href.setAttribute('data-link-index', String(i));
+                href.setAttribute('placeholder', 'https://');
+                href.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.linkHref'));
+                href.value = links[i].href || '';
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'sdf-option-del';
+                remove.setAttribute('data-role', 'remove-link');
+                remove.setAttribute('data-link-index', String(i));
+                remove.setAttribute('title', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.remove'));
+                remove.appendChild(document.createTextNode('\u00d7'));
+                row.appendChild(text);
+                row.appendChild(href);
+                row.appendChild(remove);
+                value.appendChild(row);
+            }
+            value.appendChild(button('add-link', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.addLink'), false));
+            value.appendChild(el('div', 'description', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.linkHint')));
+            box.appendChild(value);
+            return box;
+        }
+
         function renderDefault(field) {
             var box = el('div', 'field-group');
             box.setAttribute('data-part', 'defaults');
@@ -2857,7 +3023,7 @@
                 return 'datetime-local';
             }
             if (type === 'url') {
-                return 'url';
+                return 'text';
             }
             return 'text';
         }
@@ -5032,6 +5198,21 @@
                 field.nests.push('');
                 refresh();
                 focusOption(loc.blockIndex, loc.fieldIndex, field.options.length - 1);
+            } else if (role === 'add-link') {
+                var linkField = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
+                if (!linkField.links) {
+                    linkField.links = [];
+                }
+                linkField.links.push({text: '', href: ''});
+                refresh();
+                focusLink(loc.blockIndex, loc.fieldIndex, linkField.links.length - 1);
+            } else if (role === 'remove-link') {
+                var removedLink = parseInt(e.target.getAttribute('data-link-index'), 10);
+                var linkHost = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
+                if (linkHost && linkHost.links && removedLink >= 0 && removedLink < linkHost.links.length) {
+                    linkHost.links.splice(removedLink, 1);
+                    refresh();
+                }
             } else if (role === 'remove-option') {
                 var optIndex = parseInt(e.target.getAttribute('data-option-index'), 10);
                 var target = config.blocks[loc.blockIndex].fields[loc.fieldIndex];
@@ -5111,6 +5292,20 @@
                 sync();
                 replaceCanvas(loc.blockIndex);
                 replaceDefaults(loc.blockIndex, loc.fieldIndex);
+                renderPreview();
+            } else if ((role === 'link-text' || role === 'link-href') && loc.fieldIndex >= 0) {
+                var linkIndex = parseInt(e.target.getAttribute('data-link-index'), 10);
+                var linkHost = block.fields[loc.fieldIndex];
+                if (!linkHost || !linkHost.links || isNaN(linkIndex) || linkIndex < 0 || linkIndex >= linkHost.links.length) {
+                    return;
+                }
+                if (role === 'link-text') {
+                    linkHost.links[linkIndex].text = e.target.value;
+                } else {
+                    linkHost.links[linkIndex].href = e.target.value;
+                }
+                sync();
+                replaceCanvas(loc.blockIndex);
                 renderPreview();
             } else if (role === 'blank-label' && loc.fieldIndex >= 0) {
                 block.fields[loc.fieldIndex].blankLabel = e.target.value;
@@ -5311,6 +5506,13 @@
                     field.options = [];
                     field.nests = [];
                     relaxDependents(block, field.id);
+                }
+                if (field.type === 'url') {
+                    if (!field.links || !field.links.length) {
+                        field.links = [{text: '', href: ''}];
+                    }
+                } else {
+                    field.links = [];
                 }
                 if (field.type !== 'checkbox' && field.type !== 'radio') {
                     field.nests = [];
@@ -5872,6 +6074,17 @@
             });
         }
 
+        function focusLink(blockIndex, fieldIndex, linkIndex) {
+            restoreFocus({
+                role: 'link-text',
+                blockIndex: blockIndex,
+                fieldIndex: fieldIndex,
+                optionIndex: String(linkIndex),
+                start: null,
+                end: null
+            });
+        }
+
         function addBlock() {
             config.blocks.push({
                 id: freshBlockId(config.blocks),
@@ -6100,6 +6313,21 @@
                         }
                     } else if (!fields[i].label) {
                         pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needName'));
+                    }
+                    var live = config.blocks[b].fields[i];
+                    if (live && live.type === 'url') {
+                        var liveLinks = live.links || [];
+                        var linkRow;
+                        for (linkRow = 0; linkRow < liveLinks.length; linkRow++) {
+                            var liveHref = trim((liveLinks[linkRow] && liveLinks[linkRow].href) || '');
+                            var liveText = trim((liveLinks[linkRow] && liveLinks[linkRow].text) || '');
+                            if (!liveHref && !liveText) {
+                                continue;
+                            }
+                            if (!liveHref || !safeHref(liveHref)) {
+                                pushText(AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.needLink'));
+                            }
+                        }
                     }
                     var when = config.blocks[b].fields[i].when;
                     if (selectedWithoutValues(when)) {
@@ -6474,13 +6702,14 @@
             wrap.setAttribute('data-sdf-field', field.id);
             wrap.setAttribute('data-sdf-owner', blockId);
             wrap.setAttribute('data-sdf-type', field.type || 'text');
-            if (field.required) {
+            var linked = field.type === 'url' && linkRows(field).length;
+            if (field.required && !linked) {
                 wrap.setAttribute('data-sdf-required', '1');
             }
-            if (trim(field.label) || field.required) {
+            if (trim(field.label) || (field.required && !linked)) {
                 var caption = el('div', 'sdf-label');
                 caption.appendChild(document.createTextNode(trim(field.label)));
-                if (field.required) {
+                if (field.required && !linked) {
                     caption.appendChild(el('span', 'sdf-req', ' *'));
                 }
                 wrap.appendChild(caption);
@@ -6537,11 +6766,16 @@
                 area.rows = 3;
                 area.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
                 wrap.appendChild(area);
+            } else if (field.type === 'url' && appendConfiguredLinks(wrap, field)) {
+                // The question shows the configured links.
             } else {
                 var text = document.createElement('input');
                 text.type = inputKind(field.type);
                 text.className = 'sdf-input';
                 text.value = (field.defaults && field.defaults.length) ? field.defaults[0] : '';
+                if (field.type === 'url') {
+                    text.setAttribute('placeholder', 'https://');
+                }
                 wrap.appendChild(text);
             }
             appendHelp(wrap, field);

@@ -259,6 +259,17 @@
     padding: 0 12px 6px;
 }
 
+.sdf-node-link {
+    height: 32px;
+    overflow: hidden;
+    padding: 0 8px;
+    color: #0052cc;
+    font-size: 12px;
+    line-height: 32px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .sdf-node-when {
     height: 22px;
     overflow: hidden;
@@ -577,7 +588,8 @@
     line-height: 1.4;
 }
 
-.sdf-float .sdf-option-row .text {
+.sdf-float .sdf-option-row .text,
+.sdf-float .sdf-link-row .text {
     flex: 1 1 auto;
     min-width: 0;
 }
@@ -944,6 +956,7 @@ form.aui.sdf-card .buttons-container {
 
 .sdf-card-head,
 .sdf-option-row,
+.sdf-link-row,
 .sdf-when {
     display: flex;
     align-items: center;
@@ -1007,11 +1020,24 @@ form.aui.sdf-card .buttons-container {
     line-height: 26px;
 }
 
-.sdf-option-row input[type="text"] {
+.sdf-option-row input[type="text"],
+.sdf-link-row input[type="text"] {
     flex: 1 1 auto;
     min-width: 0;
     width: auto !important;
     max-width: none !important;
+}
+
+.sdf-links {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.sdf-link {
+    color: #0052cc;
+    word-break: break-word;
 }
 
 .sdf-option-row select.sdf-row-kind {

@@ -1044,7 +1044,32 @@ public class IssueFieldSync {
         if (NUMBER_TYPE.equals(actual)) {
             return parseNumber(firstValue(values));
         }
+        if (URL_TYPE.equals(actual)) {
+            return normalizeUrl(text(values));
+        }
         return text(values);
+    }
+
+    /** A bare host becomes https://. Script and data addresses are dropped. */
+    static String normalizeUrl(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String text = raw.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        String lower = text.toLowerCase();
+        if (lower.startsWith("javascript:") || lower.startsWith("data:") || lower.startsWith("vbscript:")) {
+            return null;
+        }
+        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:")) {
+            return text;
+        }
+        if (text.indexOf(' ') >= 0 || text.indexOf('.') < 0) {
+            return text;
+        }
+        return "https://" + text;
     }
 
     static Date parseDate(String raw) {
