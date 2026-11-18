@@ -26,6 +26,9 @@
         var pendingLink = null;
         var ignoreLinkClickUntil = 0;
         var ignorePickUntil = 0;
+        var ignoreCanvasClickUntil = 0;
+        var dragPan = null;
+        var canvasZoom = {};
         var dragLink = null;
         var dragMove = null;
         var dragOption = null;
@@ -49,6 +52,8 @@
         app.addEventListener('dragend', onOptionDragEnd);
         app.addEventListener('mousedown', onPortDown);
         app.addEventListener('mousedown', onQuestionDown);
+        app.addEventListener('mousedown', onPanDown);
+        app.addEventListener('wheel', onCanvasWheel, {passive: false});
         app.addEventListener('contextmenu', onContextMenu);
         app.addEventListener('scroll', onCanvasScroll, true);
 
@@ -1884,10 +1889,12 @@
                 wrap.appendChild(el('p', 'sdf-link-banner', AJS.I18n.getText(bannerKey)));
             }
             var canvas = el('div', 'sdf-canvas');
+            var zoom = zoomFor(block);
+            canvas.setAttribute('data-zoom', String(zoom));
             var laid = layoutNodes(block, blockIndex);
             if (!laid.length) {
                 canvas.appendChild(el('p', 'sdf-block-empty', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.blockEmpty')));
-                wrap.appendChild(canvas);
+                wrap.appendChild(canvasFrame(canvas, zoom));
                 return wrap;
             }
             var maxX = 200;
@@ -1904,16 +1911,268 @@
             if (maxY < 200) {
                 maxY = 200;
             }
+            var stage = el('div', 'sdf-stage');
             var board = el('div', 'sdf-board');
-            board.style.width = maxX + 'px';
-            board.style.height = maxY + 'px';
+            stage.appendChild(board);
+            canvas.appendChild(stage);
+            paintBoardSize(board, maxX, maxY, zoom);
             board.appendChild(edgeSvg(block, blockIndex, laid, maxX, maxY));
             for (i = 0; i < laid.length; i++) {
                 board.appendChild(nodeButton(block, blockIndex, laid[i]));
             }
-            canvas.appendChild(board);
-            wrap.appendChild(canvas);
+            wrap.appendChild(canvasFrame(canvas, zoom));
             return wrap;
+        }
+
+        function canvasFrame(canvas, zoom) {
+            var frame = el('div', 'sdf-canvas-frame');
+            frame.appendChild(canvas);
+            frame.appendChild(zoomBar(zoom));
+            return frame;
+        }
+
+        function zoomFor(block) {
+            var stored = block && canvasZoom[block.id];
+            if (!stored) {
+                return 1;
+            }
+            return clampZoom(stored);
+        }
+
+        function clampZoom(zoom) {
+            if (!zoom || zoom !== zoom) {
+                return 1;
+            }
+            if (zoom < 0.4) {
+                return 0.4;
+            }
+            if (zoom > 2) {
+                return 2;
+            }
+            return Math.round(zoom * 100) / 100;
+        }
+
+        function boardZoom(board) {
+            var canvas = board;
+            while (canvas && canvas !== app && !hasClass(canvas, 'sdf-canvas')) {
+                canvas = canvas.parentNode;
+            }
+            if (!canvas || canvas === app) {
+                return 1;
+            }
+            return clampZoom(parseFloat(canvas.getAttribute('data-zoom')));
+        }
+
+        function paintBoardSize(board, maxX, maxY, zoom) {
+            if (!board) {
+                return;
+            }
+            if (zoom == null) {
+                zoom = boardZoom(board);
+            }
+            zoom = clampZoom(zoom);
+            board.style.width = maxX + 'px';
+            board.style.height = maxY + 'px';
+            board.style.transform = 'scale(' + zoom + ')';
+            var stage = board.parentNode;
+            if (stage && hasClass(stage, 'sdf-stage')) {
+                stage.style.width = Math.ceil(maxX * zoom) + 'px';
+                stage.style.height = Math.ceil(maxY * zoom) + 'px';
+            }
+        }
+
+        function zoomButton(role, text, title) {
+            var node = document.createElement('button');
+            node.type = 'button';
+            node.className = 'sdf-zoom-btn';
+            node.setAttribute('data-role', role);
+            node.setAttribute('title', title);
+            node.appendChild(document.createTextNode(text));
+            return node;
+        }
+
+        function zoomBar(zoom) {
+            var bar = el('div', 'sdf-zoom');
+            bar.appendChild(zoomButton('zoom-out', '\u2212', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.zoomOut')));
+            var label = zoomButton('zoom-reset', Math.round(zoom * 100) + '%', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.zoomReset'));
+            label.className += ' sdf-zoom-label';
+            bar.appendChild(label);
+            bar.appendChild(zoomButton('zoom-in', '+', AJS.I18n.getText('ru.saael.dynamicfields.admin.builder.zoomIn')));
+            return bar;
+        }
+
+        function canvasOf(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-canvas')) {
+                    return node;
+                }
+                node = node.parentNode;
+            }
+            return null;
+        }
+
+        function canvasNear(node) {
+            var wrap = node;
+            while (wrap && wrap !== app && !hasClass(wrap, 'sdf-canvas-wrap')) {
+                wrap = wrap.parentNode;
+            }
+            if (!wrap || wrap === app || !wrap.querySelector) {
+                return null;
+            }
+            return wrap.querySelector('.sdf-canvas');
+        }
+
+        function blockIndexOf(node) {
+            while (node && node !== app) {
+                if (hasClass(node, 'sdf-block-card') && node.getAttribute('data-block-index') != null) {
+                    return parseInt(node.getAttribute('data-block-index'), 10) || 0;
+                }
+                node = node.parentNode;
+            }
+            return -1;
+        }
+
+        function rememberZoom(canvas, zoom) {
+            var index = blockIndexOf(canvas);
+            if (index < 0 || !config.blocks[index]) {
+                return;
+            }
+            canvasZoom[config.blocks[index].id] = zoom;
+        }
+
+        function setCanvasZoom(canvas, zoom, anchorX, anchorY) {
+            var board = canvas && canvas.querySelector('.sdf-board');
+            if (!canvas || !board) {
+                return;
+            }
+            var old = boardZoom(board);
+            zoom = clampZoom(zoom);
+            var rect = canvas.getBoundingClientRect();
+            var ax = anchorX == null ? rect.left + rect.width / 2 : anchorX;
+            var ay = anchorY == null ? rect.top + rect.height / 2 : anchorY;
+            var contentX = (ax - rect.left + canvas.scrollLeft) / old;
+            var contentY = (ay - rect.top + canvas.scrollTop) / old;
+            canvas.setAttribute('data-zoom', String(zoom));
+            rememberZoom(canvas, zoom);
+            paintBoardSize(board, parseFloat(board.style.width) || 0, parseFloat(board.style.height) || 0, zoom);
+            canvas.scrollLeft = contentX * zoom - (ax - rect.left);
+            canvas.scrollTop = contentY * zoom - (ay - rect.top);
+            var label = canvas.parentNode && canvas.parentNode.querySelector('.sdf-zoom-label');
+            if (label) {
+                while (label.firstChild) {
+                    label.removeChild(label.firstChild);
+                }
+                label.appendChild(document.createTextNode(Math.round(zoom * 100) + '%'));
+            }
+            placeFloats();
+        }
+
+        function onCanvasWheel(e) {
+            var tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+                return;
+            }
+            var canvas = canvasOf(e.target);
+            if (!canvas || !canvas.querySelector('.sdf-board')) {
+                return;
+            }
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            var delta = e.deltaY || 0;
+            if (e.deltaMode === 1) {
+                delta = delta * 16;
+            }
+            if (!delta) {
+                return;
+            }
+            var old = parseFloat(canvas.getAttribute('data-zoom')) || 1;
+            setCanvasZoom(canvas, old * (delta > 0 ? 0.9 : 1.1), e.clientX, e.clientY);
+        }
+
+        function onPanDown(e) {
+            if (e.button !== 0 && e.button !== 1) {
+                return;
+            }
+            if (insideFloat(e.target) || insideMenu(e.target)) {
+                return;
+            }
+            var panRole = roleOf(e.target);
+            if (panRole === 'unlink' || panRole === 'unlink-nest' || panRole === 'link-from'
+                    || panRole === 'link-among' || panRole === 'link-nest' || panRole === 'zoom-in'
+                    || panRole === 'zoom-out' || panRole === 'zoom-reset') {
+                return;
+            }
+            if (e.button === 0 && nodeElOf(e.target)) {
+                return;
+            }
+            var canvas = canvasOf(e.target);
+            if (!canvas) {
+                return;
+            }
+            if (e.button === 1 && e.preventDefault) {
+                e.preventDefault();
+            }
+            dragPan = {
+                canvas: canvas,
+                x0: e.clientX,
+                y0: e.clientY,
+                left: canvas.scrollLeft,
+                top: canvas.scrollTop,
+                moved: false
+            };
+            document.addEventListener('mousemove', onPanMove);
+            document.addEventListener('mouseup', onPanUp);
+            document.addEventListener('selectstart', preventDragSelect);
+        }
+
+        function onPanMove(e) {
+            if (!dragPan) {
+                return;
+            }
+            var dx = e.clientX - dragPan.x0;
+            var dy = e.clientY - dragPan.y0;
+            if (!dragPan.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+                dragPan.moved = true;
+                if (dragPan.canvas.className.indexOf('sdf-canvas-panning') < 0) {
+                    dragPan.canvas.className += ' sdf-canvas-panning';
+                }
+                clearDragSelection();
+            }
+            if (!dragPan.moved) {
+                return;
+            }
+            dragPan.canvas.scrollLeft = dragPan.left - dx;
+            dragPan.canvas.scrollTop = dragPan.top - dy;
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+        }
+
+        function onPanUp() {
+            document.removeEventListener('mousemove', onPanMove);
+            document.removeEventListener('mouseup', onPanUp);
+            document.removeEventListener('selectstart', preventDragSelect);
+            if (!dragPan) {
+                return;
+            }
+            var info = dragPan;
+            dragPan = null;
+            if (info.canvas) {
+                info.canvas.className = info.canvas.className.replace(' sdf-canvas-panning', '');
+            }
+            if (info.moved) {
+                ignoreCanvasClickUntil = new Date().getTime() + 400;
+            }
+        }
+
+        function boardPoint(board, clientX, clientY) {
+            var box = board.getBoundingClientRect();
+            var zoom = boardZoom(board);
+            return {
+                x: (clientX - box.left) / zoom,
+                y: (clientY - box.top) / zoom
+            };
         }
 
         function filledOptions(field) {
@@ -4222,8 +4481,8 @@
             if (!source || !board) {
                 return;
             }
-            var boardBox = board.getBoundingClientRect();
             var portBox = e.target.getBoundingClientRect();
+            var start = boardPoint(board, portBox.left + portBox.width / 2, portBox.top + portBox.height / 2);
             var sourceNode = nodeElOf(e.target);
             var accent = '#1d7afc';
             if (sourceNode && sourceNode.style.getPropertyValue('--sdf-accent')) {
@@ -4242,8 +4501,8 @@
                 board: board,
                 x0: e.clientX,
                 y0: e.clientY,
-                x: portBox.left + portBox.width / 2 - boardBox.left,
-                y: portBox.top + portBox.height / 2 - boardBox.top
+                x: start.x,
+                y: start.y
             };
             document.addEventListener('mousemove', onPortMove);
             document.addEventListener('mouseup', onPortUp);
@@ -4260,9 +4519,9 @@
                 }
                 dragLink.moved = true;
             }
-            var boardBox = dragLink.board.getBoundingClientRect();
+            var point = boardPoint(dragLink.board, e.clientX, e.clientY);
             var color = dragLink.kind === 'among' ? dragLink.color : '#4c9aff';
-            paintRubber(dragLink.board, dragLink.x, dragLink.y, e.clientX - boardBox.left, e.clientY - boardBox.top, color, false);
+            paintRubber(dragLink.board, dragLink.x, dragLink.y, point.x, point.y, color, false);
             if (dragLink.kind === 'among' && dragLink.moved) {
                 markAmongDrop(e.clientX, e.clientY);
             }
@@ -4561,8 +4820,9 @@
             if (!dragMove.moved) {
                 return;
             }
-            var x = dragMove.originX + (e.clientX - dragMove.x0);
-            var y = dragMove.originY + (e.clientY - dragMove.y0);
+            var zoom = boardZoom(dragMove.board);
+            var x = dragMove.originX + (e.clientX - dragMove.x0) / zoom;
+            var y = dragMove.originY + (e.clientY - dragMove.y0) / zoom;
             if (x < 28) {
                 x = 28;
             }
@@ -4603,8 +4863,7 @@
             if (maxY < 200) {
                 maxY = 200;
             }
-            board.style.width = maxX + 'px';
-            board.style.height = maxY + 'px';
+            paintBoardSize(board, maxX, maxY, boardZoom(board));
             var svg = edgeSvg(block, blockIndex, laid, maxX, maxY);
             var old = board.querySelector('.sdf-edges');
             if (old) {
@@ -4912,7 +5171,28 @@
                 paintSwatches(e.target, pickedColor);
                 return;
             }
+            if (role === 'zoom-in' || role === 'zoom-out' || role === 'zoom-reset') {
+                if (e.preventDefault) {
+                    e.preventDefault();
+                }
+                var zoomCanvas = canvasNear(e.target);
+                if (!zoomCanvas) {
+                    return;
+                }
+                var zoomNow = parseFloat(zoomCanvas.getAttribute('data-zoom')) || 1;
+                var zoomNext = 1;
+                if (role === 'zoom-in') {
+                    zoomNext = zoomNow * 1.1;
+                } else if (role === 'zoom-out') {
+                    zoomNext = zoomNow / 1.1;
+                }
+                setCanvasZoom(zoomCanvas, zoomNext, null, null);
+                return;
+            }
             if (!role) {
+                if (new Date().getTime() < ignoreCanvasClickUntil) {
+                    return;
+                }
                 if (!insideFloat(e.target) && insideCanvas(e.target) && selectedField.blockIndex >= 0) {
                     selectedField = {blockIndex: -1, index: -1};
                     refresh();
